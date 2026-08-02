@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>마이티 · Mighty</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --felt-hi:#1D312A; --felt-lo:#0C1613;
+  --card:#FBFAF6; --card-line:#E6E1D4;
+  --ink:#212A38; --crimson:#C74A52;
+  --club:#254582; --dia:#E1791B;                       /* OKLab 균형 4색 (ΔE 0.14 균등) */
+  --club-p:#98B8F2; --dia-p:#F5A15E; --heart-p:#ED8B88; /* 다크 패널용 라이트 변형 */
+  --gold:#DFAF4F; --gold-dim:#8C7434;
+  --slate:#93A8B8; --mint:#7FC7A4;
+  --panel:rgba(7,13,11,.80); --panel-line:rgba(223,175,79,.18);
+  --txt:#EDEAE0; --txt-dim:#A9B4AC;
+  --card-w:clamp(46px, 8.4vw, 64px); --card-h:calc(var(--card-w)*1.42);
+  --r:12px;
+  font-size:16px;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html,body{height:100%}
+body{
+  font-family:'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  color:var(--txt); overflow:hidden; -webkit-user-select:none; user-select:none;
+  background:radial-gradient(120% 90% at 50% 38%, var(--felt-hi) 0%, var(--felt-lo) 78%);
+}
+#table{position:fixed; inset:0}
+/* 시그니처: 펠트 각인 링 */
+#rings{position:absolute; left:50%; top:44%; width:min(78vw,560px); aspect-ratio:1;
+  transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
+  background:
+    radial-gradient(circle, transparent 55%, rgba(223,175,79,.05) 55.4%, transparent 56.2%),
+    radial-gradient(circle, transparent 70%, rgba(223,175,79,.05) 70.4%, transparent 71.2%),
+    radial-gradient(circle, transparent 41%, rgba(0,0,0,.16) 41.5%, transparent 43%);
+}
+/* ---------- HUD ---------- */
+#hud{position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:14px;
+  /* 우측 여백을 넉넉히 — 임베드 우상단 컨트롤과 버튼이 겹치지 않게 */
+  padding:10px 54px 10px 16px; background:linear-gradient(rgba(5,10,8,.55), transparent); z-index:20}
+#hud .title{font-weight:700; letter-spacing:.22em; color:var(--gold); font-size:.95rem}
+#hud .stat{font-size:.8rem; color:var(--txt-dim)}
+#hud .stat b{color:var(--txt); font-variant-numeric:tabular-nums}
+#hud .spacer{flex:1}
+#log-btn{background:none; border:1px solid var(--panel-line); color:var(--txt-dim);
+  border-radius:8px; padding:5px 12px; font:inherit; font-size:.75rem; cursor:pointer}
+/* 임베드 상단 우측 컨트롤과 겹치지 않게 살짝 내린다 (레이아웃 높이는 그대로) */
+#log-btn, #set-btn{position:relative; top:18px}
+/* ---------- 좌석 ---------- */
+.seat{position:absolute; z-index:12; display:flex; flex-direction:column; align-items:center; gap:5px; width:118px}
+.seat .plate{display:flex; align-items:center; gap:7px; background:var(--panel);
+  border:1px solid var(--panel-line); border-radius:999px; padding:5px 12px 5px 7px;
+  box-shadow:0 4px 14px rgba(0,0,0,.35); transition:box-shadow .3s, border-color .3s}
+.seat.turn .plate{border-color:var(--gold); box-shadow:0 0 0 3px rgba(223,175,79,.22), 0 4px 14px rgba(0,0,0,.4)}
+.seat .avatar{width:26px; height:26px; border-radius:50%; display:grid; place-items:center;
+  background:linear-gradient(145deg,#2C4238,#17261F); font-size:.72rem; color:var(--gold); font-weight:600}
+.seat .name{font-size:.82rem; font-weight:600}
+.seat .meta{font-size:.68rem; color:var(--txt-dim); font-variant-numeric:tabular-nums}
+.seat .badges{display:flex; gap:4px; min-height:18px}
+.badge{font-size:.62rem; padding:2px 8px; border-radius:999px; font-weight:600; letter-spacing:.06em}
+.badge.decl{background:var(--gold); color:#241C05}
+.badge.friend{background:var(--mint); color:#0B2317}
+.badge.friend-secret{background:none; border:1px dashed var(--mint); color:var(--mint)}
+.badge.total{background:rgba(255,255,255,.07); color:var(--txt-dim)}
+.badge.total.minus{color:#E08A83}
+.seat .bubble{position:absolute; top:-34px; background:var(--card); color:var(--ink);
+  border-radius:10px; padding:4px 12px; font-size:.8rem; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,.4);
+  opacity:0; transform:translateY(6px); transition:opacity .25s, transform .25s; white-space:nowrap}
+.seat .bubble.show{opacity:1; transform:translateY(0)}
+.seat .backs{display:flex; margin-top:2px}
+.seat .backs .mini{width:15px; height:22px; border-radius:3px; margin-left:-7px;
+  border:1px solid rgba(223,175,79,.35)}
+#seat-1{left:12px; top:46%; transform:translateY(-50%)}
+#seat-2{left:16%; top:56px}
+#seat-3{right:16%; top:56px}
+#seat-4{right:12px; top:46%; transform:translateY(-50%)}
+#seat-0{left:50%; bottom:calc(var(--card-h) + 74px); transform:translateX(-260%)}
+@media (max-width:720px){
+  #seat-0{transform:translateX(-50%); bottom:calc(var(--card-h) + 92px)}
+  #seat-1{left:4px} #seat-4{right:4px}
+  #seat-2{left:3%; top:96px} #seat-3{right:3%; top:96px}
+  .seat{width:96px}
+  .seat .plate{padding:4px 9px 4px 5px; gap:5px}
+  .seat .avatar{width:20px; height:20px; font-size:.6rem}
+  .seat .name{font-size:.72rem}
+  .seat .meta{font-size:.6rem}
+  #trick{--sx:54px; --sy:56px; --mx:32px; --my:20px; top:46%}
+  .slot .cardface{width:calc(var(--card-w)*.9); height:calc(var(--card-h)*.9)}
+  #rings{width:min(88vw,420px); top:46%}
+  #puck{top:calc(46% - 118px); width:72px; height:72px}
+  #puck .g{font-size:1.3rem} #puck .c{font-size:.9rem}
+
+}
+/* ---------- 트릭 영역 ---------- */
+#trick{position:absolute; left:50%; top:44%; transform:translate(-50%,-50%); z-index:18; --sx:80px; --sy:74px; --mx:42px; --my:26px}
+.slot{position:absolute; width:var(--card-w); height:var(--card-h); left:0; top:0}
+.slot[data-s="0"]{transform:translate(-50%, var(--my))}
+.slot[data-s="1"]{transform:translate(calc(-50% - var(--sx)), -14px) rotate(-7deg)}
+.slot[data-s="2"]{transform:translate(calc(-50% - var(--mx)), calc(0px - var(--sy))) rotate(-3deg)}
+.slot[data-s="3"]{transform:translate(calc(-50% + var(--mx)), calc(0px - var(--sy))) rotate(3deg)}
+.slot[data-s="4"]{transform:translate(calc(-50% + var(--sx)), -14px) rotate(7deg)}
+.slot.win .cardface{outline:3px solid var(--gold); outline-offset:-1px}
+/* ---------- 획득 점수카드 더미 ---------- */
+.pile{display:flex; flex-wrap:wrap; gap:2px; justify-content:center; max-width:112px; min-height:0}
+.pcard{width:20px; height:27px; border-radius:3px; background:var(--card); color:var(--ink);
+  font-size:9px; font-weight:700; display:grid; place-items:center; box-shadow:0 1px 3px rgba(0,0,0,.45);
+  border:1px solid var(--card-line)}
+.pcard.red{color:var(--crimson)}
+.pcard.back{background:linear-gradient(150deg,#27413A,#15251F); border-color:rgba(223,175,79,.4); color:rgba(223,175,79,.6); font-size:8px}
+/* ---------- 공약 퍽 (시그니처) ---------- */
+#puck{position:absolute; left:50%; top:calc(44% - 152px); transform:translate(-50%,-50%) scale(0); z-index:9;
+  min-width:172px; padding:9px 14px 8px; border-radius:16px;
+  background:linear-gradient(160deg,#22453A,#101F1A 72%);
+  border:1px solid var(--gold-dim);
+  box-shadow:0 10px 28px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+  text-align:center; transition:transform .45s cubic-bezier(.2,1.4,.4,1)}
+#puck.show{transform:translate(-50%,-50%) scale(1)}
+#puck .top{display:flex; align-items:center; justify-content:center; gap:9px; line-height:1}
+#puck .g{font-size:2rem; line-height:1; text-shadow:0 2px 6px rgba(0,0,0,.5)}
+#puck .c{font-size:1.5rem; font-weight:800; color:var(--gold); font-variant-numeric:tabular-nums; letter-spacing:.01em}
+#puck .lbl{font-size:.54rem; letter-spacing:.22em; color:var(--txt-dim); margin-top:1px}
+#puck .rows{margin-top:7px; padding-top:6px; border-top:1px solid rgba(223,175,79,.18);
+  display:flex; flex-direction:column; gap:3px}
+#puck .row{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:.7rem}
+#puck .row .k{color:var(--txt-dim); letter-spacing:.08em; font-size:.62rem}
+#puck .row .v{font-weight:700; color:var(--txt); max-width:104px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+#puck .row .v.gold{color:var(--gold)} #puck .row .v.mint{color:var(--mint)}
+#puck .row .v.dim{color:var(--txt-dim); font-weight:600}
+#puck .who{font-size:.58rem; letter-spacing:.06em; color:var(--txt-dim); margin-top:2px}
+#puck .red{color:var(--crimson)} #puck .blk{color:var(--txt)}
+@media (max-width:720px){
+  #puck{min-width:150px; padding:7px 11px 7px; top:calc(46% - 124px)}
+  #puck .g{font-size:1.55rem} #puck .c{font-size:1.2rem}
+  #puck .row{font-size:.64rem} #puck .row .v{max-width:88px}
+}
+/* ---------- 카드 ---------- */
+.cardface{width:var(--card-w); height:var(--card-h); border-radius:var(--r);
+  background:var(--card); border:1px solid var(--card-line); position:relative;
+  box-shadow:0 5px 14px rgba(0,0,0,.38); color:var(--ink)}
+.cardface .idx{position:absolute; top:5px; left:7px; font-size:calc(var(--card-w)*.24);
+  font-weight:700; line-height:1.02; text-align:center}
+.cardface .idx small{display:block; font-size:.8em; font-weight:600}
+.cardface .pip{position:absolute; right:6px; bottom:4px; font-size:calc(var(--card-w)*.5); line-height:1; opacity:.92}
+.cardface.red{color:var(--crimson)}
+/* 4색 무늬: 카드면(밝은 배경) */
+.su-S{color:var(--ink)} .su-C{color:var(--club)} .su-H{color:var(--crimson)} .su-D{color:var(--dia)} .su-N{color:var(--ink)}
+/* 다크 패널 위 무늬 글리프 */
+.chip.su-S,.tc.su-S{color:var(--txt)} .chip.su-C,.tc.su-C{color:var(--club-p)}
+.chip.su-H,.tc.su-H{color:var(--heart-p)} .chip.su-D,.tc.su-D{color:var(--dia-p)}
+.chip.on.su-S{color:#241C05} .chip.on.su-C{color:#0E1E42} .chip.on.su-H{color:#5C1A1E} .chip.on.su-D{color:#5A2E06}
+#puck .su-C{color:var(--club-p)} #puck .su-D{color:var(--dia-p)} #puck .su-H{color:var(--heart-p)} #puck .su-S,#puck .su-N{color:var(--txt)}
+.cardface.joker{background:linear-gradient(160deg,#FBFAF6, #F1EBDA)}
+.cardface.joker .pip{right:auto; left:50%; top:50%; bottom:auto; transform:translate(-50%,-50%); font-size:calc(var(--card-w)*.42); color:var(--gold-dim)}
+.cardface.joker .idx{font-size:calc(var(--card-w)*.17); letter-spacing:.05em; color:var(--gold-dim)}
+.cardback{width:var(--card-w); height:var(--card-h); border-radius:var(--r);
+  background:linear-gradient(150deg,#27413A,#15251F);
+  border:1px solid rgba(223,175,79,.4); box-shadow:0 5px 14px rgba(0,0,0,.38);
+  display:grid; place-items:center}
+.cardback::after{content:'M'; font-weight:700; color:rgba(223,175,79,.5); font-size:1.1rem; letter-spacing:.1em}
+/* ---------- 내 손패 ---------- */
+#hand{position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+  display:flex; z-index:15; padding:0 10px}
+#hand .hcard{margin-left:calc(var(--card-w)*-0.42); transition:transform .18s, filter .18s; cursor:default; position:relative}
+#hand .hcard:first-child{margin-left:0}
+#hand .hcard.legal{cursor:pointer}
+#hand .hcard.legal:hover{transform:translateY(-14px)}
+#hand .hcard.dim .cardface{filter:brightness(.62) saturate(.6)}
+#hand .hcard.sel{transform:translateY(-18px)}
+#hand .hcard.sel .cardface{outline:3px solid var(--gold); outline-offset:-1px}
+#hand .hcard .from-floor{position:absolute; top:-7px; left:50%; transform:translateX(-50%);
+  width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 8px rgba(223,175,79,.8)}
+/* ---------- 액션 시트 ---------- */
+#sheet{position:absolute; left:50%; bottom:calc(var(--card-h) + 44px); transform:translateX(-50%);
+  z-index:25; background:var(--panel); backdrop-filter:blur(8px);
+  border:1px solid var(--panel-line); border-radius:16px; padding:14px 16px;
+  box-shadow:0 12px 34px rgba(0,0,0,.5); min-width:min(92vw, 380px); max-width:94vw;
+  display:none; flex-direction:column; gap:10px}
+#sheet.show{display:flex}
+#sheet h3{font-size:.8rem; letter-spacing:.14em; color:var(--gold); font-weight:600}
+#sheet .hint{font-size:.74rem; color:var(--txt-dim)}
+.chips{display:flex; gap:6px; flex-wrap:wrap}
+.chip{border:1px solid var(--panel-line); background:rgba(255,255,255,.04); color:var(--txt);
+  border-radius:10px; padding:7px 12px; font:inherit; font-size:.86rem; cursor:pointer; transition:all .15s}
+.chip:hover{border-color:var(--gold)}
+.chip.on{background:var(--gold); color:#241C05; border-color:var(--gold); font-weight:700}
+.chip:disabled{opacity:.32; cursor:default}
+.chip.red{color:var(--crimson)} .chip.on.red{color:#7A1E24}
+.btnrow{display:flex; gap:8px; margin-top:2px}
+.btn{flex:1; border:none; border-radius:11px; padding:11px 0; font:inherit; font-size:.9rem; font-weight:700; cursor:pointer; transition:filter .15s}
+.btn:hover{filter:brightness(1.1)}
+.btn.primary{background:var(--gold); color:#241C05}
+.btn.ghost{background:rgba(255,255,255,.07); color:var(--txt)}
+.btn:disabled{opacity:.35; cursor:default; filter:none}
+.btn.ready{animation:btnPulse 1.6s ease-in-out infinite; box-shadow:0 0 0 0 rgba(223,175,79,.55)}
+@keyframes btnPulse{0%{box-shadow:0 0 0 0 rgba(223,175,79,.5)}70%{box-shadow:0 0 0 10px rgba(223,175,79,0)}100%{box-shadow:0 0 0 0 rgba(223,175,79,0)}}
+.btn.quiet{flex:0 0 auto; padding-left:16px; padding-right:16px; background:rgba(255,255,255,.05); color:var(--txt-dim); font-weight:600}
+.seat.announce .plate{animation:seatPop .55s cubic-bezier(.3,1.5,.4,1)}
+.seat.thinking .plate{border-color:rgba(223,175,79,.55); box-shadow:0 0 0 3px rgba(223,175,79,.14), 0 4px 14px rgba(0,0,0,.4)}
+.seat.thinking .avatar{animation:thinkBreathe 1.15s ease-in-out infinite}
+@keyframes thinkBreathe{0%,100%{opacity:.55}50%{opacity:1}}
+.think-dots{display:inline-flex; gap:3px; align-items:center}
+.think-dots i{width:4px; height:4px; border-radius:50%; background:var(--ink); display:block;
+  animation:dotBlink 1.05s infinite}
+.think-dots i:nth-child(2){animation-delay:.18s} .think-dots i:nth-child(3){animation-delay:.36s}
+@keyframes dotBlink{0%,60%,100%{opacity:.25} 30%{opacity:1}}
+@keyframes seatPop{0%{transform:scale(1)}35%{transform:scale(1.18)}100%{transform:scale(1)}}
+#puck.flash{animation:puckPop .5s cubic-bezier(.3,1.4,.4,1)}
+@keyframes puckPop{0%{transform:translate(-50%,-50%) scale(.5); opacity:0}60%{transform:translate(-50%,-50%) scale(1.12); opacity:1}100%{transform:translate(-50%,-50%) scale(1); opacity:1}}
+#puck .who{font-size:.56rem; letter-spacing:.06em; color:var(--txt-dim); margin-top:2px}
+/* ---------- 로그 ---------- */
+#log{position:absolute; right:0; top:0; bottom:0; width:min(78vw,270px); z-index:30;
+  background:var(--panel); backdrop-filter:blur(10px); border-left:1px solid var(--panel-line);
+  transform:translateX(102%); transition:transform .3s; display:flex; flex-direction:column}
+#log.open{transform:none}
+#log header{padding:14px 16px; font-size:.8rem; letter-spacing:.14em; color:var(--gold); display:flex; justify-content:space-between}
+#log header button{background:none; border:none; color:var(--txt-dim); font-size:1rem; cursor:pointer}
+#log ul{list-style:none; overflow-y:auto; padding:0 16px 16px; flex:1; font-size:.76rem; line-height:1.8; color:var(--txt-dim)}
+#log ul b{color:var(--txt)}
+/* ---------- 모달 ---------- */
+#modal{position:fixed; inset:0; z-index:40; background:rgba(4,8,7,.7); backdrop-filter:blur(3px);
+  display:none; place-items:center; padding:18px}
+#modal.show{display:grid}
+/* 내보내기 창은 게임 모달과 겹칠 수 있으므로 별도 레이어를 쓴다 */
+#expmodal{position:fixed; inset:0; z-index:55; background:rgba(4,8,7,.72); backdrop-filter:blur(3px);
+  display:none; place-items:center; padding:18px}
+#expmodal.show{display:grid}
+#expmodal .box{background:linear-gradient(165deg,#172621,#0E1815); border:1px solid var(--panel-line);
+  border-radius:20px; padding:24px; width:min(94vw,540px); box-shadow:0 24px 60px rgba(0,0,0,.6)}
+#expmodal h2{font-size:1.05rem; letter-spacing:.1em; margin-bottom:4px}
+#expmodal .sub{font-size:.76rem; color:var(--txt-dim); line-height:1.6}
+#modal .box{background:linear-gradient(165deg,#172621,#0E1815); border:1px solid var(--panel-line);
+  border-radius:20px; padding:26px 26px 22px; width:min(94vw,420px); box-shadow:0 24px 60px rgba(0,0,0,.6)}
+#modal h2{font-size:1.05rem; letter-spacing:.1em; margin-bottom:4px}
+#modal .sub{font-size:.78rem; color:var(--txt-dim); margin-bottom:16px}
+#modal .verdict{font-size:1.5rem; font-weight:700; margin:6px 0 2px}
+#modal .verdict.win{color:var(--gold)} #modal .verdict.lose{color:var(--slate)}
+#modal table{width:100%; border-collapse:collapse; margin:12px 0 16px; font-size:.82rem}
+#modal th{font-weight:500; color:var(--txt-dim); text-align:left; padding:5px 2px; border-bottom:1px solid var(--panel-line); font-size:.72rem; letter-spacing:.08em}
+#modal td{padding:6px 2px; border-bottom:1px solid rgba(255,255,255,.05); font-variant-numeric:tabular-nums}
+#modal td.num{text-align:right}
+.pos{color:var(--mint)} .neg{color:#E08A83}
+/* ---------- 토스트/FX ---------- */
+/* 토스트는 HUD 바로 아래에 붙인다 — 중앙의 공약 퍽(기루다/공약/선/프렌드)을 가리지 않도록 */
+#toast{position:absolute; left:50%; top:56px; transform:translate(-50%,-8px); z-index:50;
+  background:var(--card); color:var(--ink); font-weight:600; font-size:.86rem;
+  max-width:min(92vw,420px); text-align:center; line-height:1.45; word-break:keep-all;
+  border-radius:12px; padding:9px 20px; box-shadow:0 8px 24px rgba(0,0,0,.45);
+  opacity:0; pointer-events:none; transition:opacity .25s, transform .25s}
+#toast.show{opacity:1; transform:translate(-50%,0)}
+#fx{position:fixed; inset:0; z-index:60; pointer-events:none}
+.fly{position:fixed; transition:transform .3s cubic-bezier(.25,.9,.3,1), opacity .3s; will-change:transform}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important; animation:none!important}
+}
+
+/* ---------- 설정 패널 ---------- */
+#settings{position:fixed; inset:0; z-index:70; background:rgba(4,8,7,.78); backdrop-filter:blur(4px); display:none; place-items:center; padding:16px}
+#settings.show{display:grid}
+#settings .panel{background:linear-gradient(165deg,#172621,#0E1815); border:1px solid var(--panel-line); border-radius:20px; width:min(94vw,460px); max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.6)}
+#settings .panel>header{display:flex; align-items:center; justify-content:space-between; padding:18px 20px 12px}
+#settings h2{font-size:1rem; letter-spacing:.14em; color:var(--gold)}
+#settings .close{background:none;border:none;color:var(--txt-dim);font-size:1.1rem;cursor:pointer}
+#set-body{overflow-y:auto; padding:0 20px 18px; flex:1}
+.set-tabs{display:flex; gap:6px; position:sticky; top:0; background:linear-gradient(#132420,#132420 70%,transparent); padding:2px 0 10px; z-index:2}
+.set-tab{flex:1; border:1px solid var(--panel-line); background:rgba(255,255,255,.04); color:var(--txt-dim);
+  border-radius:10px; padding:8px 0; font:inherit; font-size:.8rem; font-weight:600; cursor:pointer}
+.set-tab.on{background:var(--gold); color:#241C05; border-color:var(--gold)}
+#landing-opts{margin:0 0 20px; display:flex; flex-direction:column; gap:10px}
+.land-row{display:flex; align-items:center; justify-content:space-between; gap:10px}
+.land-lbl{font-size:.78rem; color:var(--txt-dim)}
+.land-seg{display:flex; gap:5px}
+.land-seg button{border:1px solid var(--panel-line); background:rgba(255,255,255,.05); color:var(--txt);
+  border-radius:9px; padding:6px 11px; font:inherit; font-size:.76rem; cursor:pointer}
+.land-seg button.on{background:var(--gold); color:#241C05; border-color:var(--gold); font-weight:700}
+.set-sec{margin:14px 0 6px; font-size:.68rem; letter-spacing:.18em; color:var(--txt-dim); border-bottom:1px solid rgba(255,255,255,.06); padding-bottom:5px}
+.set-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0}
+.set-row .lbl{font-size:.82rem}
+.set-row .lbl small{display:block; font-size:.66rem; color:var(--txt-dim); margin-top:1px}
+.seg{display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end}
+.seg button{border:1px solid var(--panel-line); background:rgba(255,255,255,.04); color:var(--txt); border-radius:8px; padding:5px 10px; font:inherit; font-size:.74rem; cursor:pointer}
+.seg button.on{background:var(--gold); color:#241C05; border-color:var(--gold); font-weight:700}
+.stepper{display:flex; align-items:center; gap:2px}
+.stepper button{width:28px; height:28px; border-radius:8px; border:1px solid var(--panel-line); background:rgba(255,255,255,.04); color:var(--txt); font:inherit; cursor:pointer}
+.stepper .val{min-width:64px; text-align:center; font-size:.82rem; font-variant-numeric:tabular-nums}
+.name-input{background:rgba(255,255,255,.05); border:1px solid var(--panel-line); border-radius:8px;
+  color:var(--txt); font:inherit; font-size:.82rem; padding:6px 10px; width:120px}
+.name-input:focus{outline:none; border-color:var(--gold)}
+#settings footer{padding:12px 20px 18px; display:flex; gap:8px; border-top:1px solid rgba(255,255,255,.06)}
+#fin-chart{margin:6px 0 4px}
+#fin-chart svg{width:100%; display:block}
+.fin-grid{stroke:rgba(255,255,255,.08); stroke-width:1}
+.fin-zero{stroke:rgba(255,255,255,.25); stroke-width:1; stroke-dasharray:4 4}
+.fin-tick{fill:var(--txt-dim); font-size:9px; font-variant-numeric:tabular-nums}
+.fin-line{fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round}
+.fin-dot{stroke:none}
+.fin-legend{display:flex; flex-wrap:wrap; gap:5px 14px; font-size:.72rem; color:var(--txt-dim); margin:6px 0 10px}
+.fin-legend b{font-variant-numeric:tabular-nums}
+.fin-legend .sw{display:inline-block; width:10px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px}
+.rank-row{display:flex; align-items:center; gap:12px; padding:9px 4px; border-bottom:1px solid rgba(255,255,255,.05); font-size:.9rem}
+.rank-row .no{width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:.72rem; font-weight:700; background:rgba(255,255,255,.08)}
+.rank-row.first .no{background:var(--gold); color:#241C05}
+.rank-row .nm{flex:1; font-weight:600}
+.rank-row .amt{font-variant-numeric:tabular-nums; font-weight:600}
+/* ---------- 치트시트 HUD ---------- */
+/* itch.io 임베드는 우측 하단에 전체화면 버튼을 얹는다. 그 위로 띄운다 */
+#tools{position:fixed; right:14px; bottom:62px; z-index:27; display:flex; gap:6px; align-items:center}
+#tools button{background:var(--panel); border:1px solid var(--panel-line); color:var(--gold);
+  border-radius:999px; padding:9px 14px; font:inherit; font-size:.76rem; font-weight:600;
+  cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.45); backdrop-filter:blur(6px); white-space:nowrap}
+#tools button:disabled{opacity:.35; cursor:default; color:var(--txt-dim)}
+#tools button.on{background:var(--gold); color:#241C05; border-color:var(--gold)}
+#tools .kb{font-size:.6rem; opacity:.65; margin-left:4px}
+@media (max-width:720px){ #tools button{padding:8px 11px; font-size:.7rem} #tools .kb{display:none} }
+#cheat{position:fixed; right:14px; bottom:108px; z-index:27; width:min(86vw,252px);
+  max-height:56vh; overflow-y:auto; background:var(--panel); backdrop-filter:blur(10px);
+  border:1px solid var(--panel-line); border-radius:14px; padding:13px 14px;
+  box-shadow:0 12px 34px rgba(0,0,0,.5); display:none; font-size:.74rem; line-height:1.75; color:var(--txt-dim)}
+#cheat.show{display:block}
+#cheat h4{font-size:.66rem; letter-spacing:.16em; color:var(--gold); margin:9px 0 3px; font-weight:600}
+#cheat h4:first-child{margin-top:0}
+#cheat b{color:var(--txt)}
+#cheat .side-tag{display:inline-block; padding:1px 9px; border-radius:999px; font-weight:700; font-size:.7rem}
+#cheat .side-tag.ruling{background:var(--gold); color:#241C05}
+#cheat .side-tag.opp{background:var(--slate); color:#101B24}
+#cheat .side-tag.tbd{border:1px dashed var(--txt-dim)}
+#cheat .tline{display:flex; gap:7px; align-items:center}
+#cheat .tline .tc{font-weight:700}
+#cheat .tc.red{color:var(--crimson)} #cheat .tc.blk{color:var(--txt)}
+#cheat .dead{text-decoration:line-through; opacity:.55}
+/* ---------- 복기 모드 ---------- */
+.rhand{display:flex; flex-wrap:wrap; gap:2px; justify-content:center; max-width:118px; margin-top:3px}
+.rcard{width:19px; height:26px; border-radius:3px; background:var(--card); color:var(--ink);
+  font-size:8.5px; font-weight:700; display:grid; place-items:center; border:1px solid var(--card-line);
+  box-shadow:0 1px 2px rgba(0,0,0,.4); line-height:1}
+.rcard.dim{opacity:.28; filter:grayscale(.6)}
+.rcard.su-C{color:var(--club)} .rcard.su-D{color:var(--dia)} .rcard.su-H{color:var(--crimson)} .rcard.su-S{color:var(--ink)}
+@media (max-width:720px){ .rhand{max-width:96px} .rcard{width:16px; height:22px; font-size:7.5px} }
+#replay-bar{position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:28;
+  display:none; align-items:center; gap:8px; background:var(--panel); backdrop-filter:blur(8px);
+  border:1px solid var(--panel-line); border-radius:14px; padding:8px 12px; box-shadow:0 10px 28px rgba(0,0,0,.5)}
+#replay-bar.show{display:flex}
+#replay-bar button{background:rgba(255,255,255,.06); border:1px solid var(--panel-line); color:var(--txt);
+  border-radius:9px; padding:7px 11px; font:inherit; font-size:.78rem; cursor:pointer}
+#replay-bar button.primary{background:var(--gold); color:#241C05; border-color:var(--gold); font-weight:700}
+#replay-bar .info{font-size:.74rem; color:var(--txt-dim); font-variant-numeric:tabular-nums; min-width:96px; text-align:center}
+#replay-head{position:fixed; left:50%; top:44px; transform:translateX(-50%); z-index:28;
+  display:none; background:var(--panel); border:1px solid var(--panel-line); border-radius:12px;
+  padding:7px 14px; font-size:.76rem; color:var(--txt-dim); box-shadow:0 8px 20px rgba(0,0,0,.45); text-align:center}
+#replay-head.show{display:block}
+#replay-head b{color:var(--txt)}
+/* 복기 중 사람 손패는 비활성 */
+body.replaying #hand .hcard{pointer-events:none; opacity:.9}
+body.replaying #sheet{display:none!important}
+body.replaying #tools{display:none!important}
+/* 복기 중 내 손패는 하단 #hand가 크게 보여주므로 좌석의 축소 사본은 감춘다 */
+body.replaying #seat-0 .rhand{display:none}
+/* ---------- 시작 오버레이 ---------- */
+#start{position:fixed; inset:0; z-index:45; display:grid; place-items:center;
+  background:radial-gradient(110% 85% at 50% 40%, rgba(29,49,42,.94), rgba(9,15,13,.98))}
+#start .inner{text-align:center; max-width:340px; padding:20px}
+#start h1{font-size:2.1rem; letter-spacing:.34em; color:var(--gold); font-weight:700; text-indent:.34em}
+#start .en{letter-spacing:.5em; font-size:.7rem; color:var(--txt-dim); margin:6px 0 22px; text-indent:.5em}
+#start p{font-size:.8rem; color:var(--txt-dim); line-height:1.9; margin-bottom:26px}
+#start .btn{width:100%; padding:14px 0; font-size:1rem}
+
+/* ===== 좁은 화면(모바일) 마무리 — 기본 규칙 뒤에 와야 덮어쓴다 ===== */
+@media (max-width:720px){
+  /* --- 좁은 화면 정리 --- */
+  /* HUD: 세로로 깨져 좌석과 겹치던 문제. 한 줄로 고정하고 넘치면 줄인다 */
+  #hud{gap:8px; padding:8px 12px; flex-wrap:nowrap; align-items:flex-start}
+  #hud .title{display:none}                 /* 제목은 공간 대비 정보가 없다 */
+  /* 잘라내면 딜러·점수가 사라진다. 줄바꿈을 허용하고 좌석을 그만큼 내렸다 */
+  #hud .stat{font-size:.68rem; line-height:1.35; min-width:0; word-break:keep-all;
+             white-space:normal; overflow:visible}
+  #log-btn, #set-btn{position:static; flex:0 0 auto; white-space:nowrap;
+                     padding:4px 9px; font-size:.68rem}
+  /* 토스트는 좌석 위로 겹치지 않게 조금 더 내리고 좁게 */
+  #toast{top:calc(46% + 62px); bottom:auto; font-size:.78rem;
+         padding:8px 14px; max-width:88vw}
+  /* 도구 모음이 손패를 덮던 문제 — 손패 위로 올린다 */
+  #tools{right:10px; bottom:calc(var(--card-h) + 30px)}
+  #cheat{right:10px; bottom:calc(var(--card-h) + 76px); max-height:44vh}
+  /* 복기 바가 두 줄로 부풀던 문제 */
+  #replay-bar{gap:5px; padding:6px 8px; bottom:calc(var(--card-h) + 30px);
+              max-width:94vw; flex-wrap:wrap; justify-content:center}
+  #replay-bar button{padding:6px 9px; font-size:.72rem}
+  #replay-bar .info{min-width:74px; font-size:.68rem}
+  /* 복기 헤드는 맨 위에 두고, 그 대신 위쪽 좌석을 내려 자리를 만든다 */
+  #replay-head{top:80px; font-size:.66rem; padding:5px 9px; max-width:90vw; line-height:1.4}
+  body.replaying #seat-2, body.replaying #seat-3{top:136px}
+  body.replaying #seat-0{bottom:calc(var(--card-h) + 152px)}
+  body.replaying #seat-1, body.replaying #seat-4{top:54%}
+  /* 모달 여백 부족으로 글자가 붙던 문제 */
+  /* 기존 모바일 규칙이 퍽에 고정 크기를 줘 내용이 밖으로 흘렀다 — 내용에 맞춘다 */
+  /* 기존 모바일 규칙이 퍽에 고정 크기를 줘 내용이 밖으로 흘렀다 — 내용에 맞추고 위로 올린다 */
+  #puck{width:auto; height:auto; min-width:148px; padding:7px 12px 6px; top:calc(46% - 178px)}
+  #puck .lbl{display:none}
+  #puck .row{font-size:.64rem} #puck .row .k{font-size:.56rem} #puck .row .v{max-width:84px}
+  #modal{padding:12px} #modal .box{padding:20px 18px 18px; width:min(96vw,420px)}
+  #modal h2{font-size:.98rem} #modal .sub{font-size:.74rem; line-height:1.6}
+  #expmodal{padding:12px} #expmodal .box{padding:20px 18px; width:min(96vw,540px)}
+}
+
+/* ===== 세로가 짧은 기기(구형·소형 아이폰): 복기 중 중복 정보를 접는다 ===== */
+@media (max-height:720px){
+  /* 짧은 화면에선 토스트를 조금 더 올려 내 좌석과 떼어 놓는다 */
+  #toast{top:calc(46% + 20px)}
+  /* 복기 헤드가 공약·주공·프렌드를 이미 보여주므로 퍽은 접는다 */
+  body.replaying #puck{display:none}
+  /* 손패가 바로 아래에 있어 내 좌석 칩은 정보가 겹친다 */
+  body.replaying #seat-0{display:none}
+  /* 위 좌석의 공개 손패가 길어 옆 좌석과 붙는다 */
+  body.replaying #seat-1, body.replaying #seat-4{top:62%}
+}
+</style>
+</head>
+<body>
+<div id="table">
+  <div id="rings"></div>
+  <header id="hud">
+    <span class="title">마이티</span>
+    <span class="stat" id="hud-round"></span>
+    <span class="stat" id="hud-contract"></span>
+    <span class="stat" id="hud-score"></span>
+    <span class="spacer"></span>
+    <button id="log-btn">기록</button>
+    <button id="set-btn" style="background:none;border:1px solid var(--panel-line);color:var(--txt-dim);border-radius:8px;padding:5px 12px;font:inherit;font-size:.75rem;cursor:pointer">설정</button>
+  </header>
+  <div id="seats"></div>
+  <div id="trick"></div>
+  <div id="puck"></div>
+  <div id="hand"></div>
+  <div id="sheet"></div>
+  <aside id="log"><header><span>진행 기록</span><button id="log-close">✕</button></header><ul id="log-list"></ul></aside>
+  <div id="modal"><div class="box" id="modal-box"></div></div>
+  <div id="expmodal"><div class="box" id="expmodal-box"></div></div>
+  <div id="toast"></div>
+  <div id="tools">
+    <button id="undo-btn">되돌리기<span class="kb">Z</span></button>
+    <button id="replay-btn">복기<span class="kb">R</span></button>
+    <button id="cheat-btn">시트<span class="kb">C</span></button>
+  </div>
+  <div id="cheat"></div>
+  <div id="replay-head"></div>
+  <div id="replay-bar"></div>
+  <div id="fx"></div>
+  <div id="settings"><div class="panel">
+    <header><h2>룰 설정 <span style="font-size:.6rem;color:var(--txt-dim);font-weight:400;letter-spacing:.05em"><span class="app-ver"></span></span></h2><button class="close" id="set-close">✕</button></header>
+    <div id="set-body"></div>
+    <footer><button class="btn ghost" id="set-reset">리그 룰로 초기화</button><button class="btn primary" id="set-done">완료</button></footer>
+  </div></div>
+  <div id="start"><div class="inner">
+    <h1>마이티</h1><div class="en">MIGHTY · SOLO TABLE</div>
+    <div style="font-size:.62rem;color:var(--txt-dim);letter-spacing:.1em;margin-bottom:14px"><span class="app-ver"></span></div>
+    <p>5인 트릭테이킹의 정석, 마이티.<br>당신과 네 명의 컴퓨터 플레이어가 한 테이블에 앉습니다.<br>공약을 선언하고, 프렌드를 찾고, 판을 지배하세요.</p>
+    <div id="landing-opts"></div>
+    <button class="btn primary" id="start-btn">매치 시작</button>
+    <button class="btn ghost" id="start-set-btn" style="width:100%;margin-top:9px">룰 설정</button>
+  </div></div>
+</div>
+
+<script>
+/*__INJECT:engine__*/
+</script>
+
+
+<script>
+/*__INJECT:master__*/
+</script>
+<script>
+/*__INJECT:ai__*/
+</script>
+<script>
+/*__INJECT:ui__*/
+</script>
+</body>
+</html>

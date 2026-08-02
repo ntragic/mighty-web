@@ -1,0 +1,3367 @@
+{
+  "meta": {
+    "date": "2026-07-24T09:10:55.704Z",
+    "gens": 300,
+    "gamesPerGen": 1200,
+    "pop": 28,
+    "seed": 20260725,
+    "elapsedSec": 108.3
+  },
+  "history": [
+    {
+      "gen": 1,
+      "sigma": 0.248,
+      "best": 236.5,
+      "mean": 1.1,
+      "declWinRate": 61.6,
+      "games": 682,
+      "benchVsDefault": 94.4
+    },
+    {
+      "gen": 2,
+      "sigma": 0.246,
+      "best": 208.6,
+      "mean": 1.1,
+      "declWinRate": 57.7,
+      "games": 732
+    },
+    {
+      "gen": 3,
+      "sigma": 0.245,
+      "best": 268.7,
+      "mean": 1.5,
+      "declWinRate": 58.1,
+      "games": 708
+    },
+    {
+      "gen": 4,
+      "sigma": 0.243,
+      "best": 228.7,
+      "mean": 7.6,
+      "declWinRate": 61.6,
+      "games": 716
+    },
+    {
+      "gen": 5,
+      "sigma": 0.241,
+      "best": 288.3,
+      "mean": -1.7,
+      "declWinRate": 62,
+      "games": 639
+    },
+    {
+      "gen": 6,
+      "sigma": 0.24,
+      "best": 304.2,
+      "mean": 1.9,
+      "declWinRate": 61,
+      "games": 733
+    },
+    {
+      "gen": 7,
+      "sigma": 0.238,
+      "best": 252.6,
+      "mean": -0.2,
+      "declWinRate": 62.1,
+      "games": 720
+    },
+    {
+      "gen": 8,
+      "sigma": 0.236,
+      "best": 188.1,
+      "mean": -0.3,
+      "declWinRate": 62.7,
+      "games": 636
+    },
+    {
+      "gen": 9,
+      "sigma": 0.235,
+      "best": 300.8,
+      "mean": -4.3,
+      "declWinRate": 62.1,
+      "games": 662
+    },
+    {
+      "gen": 10,
+      "sigma": 0.233,
+      "best": 277.3,
+      "mean": 0.6,
+      "declWinRate": 56.6,
+      "games": 701
+    },
+    {
+      "gen": 11,
+      "sigma": 0.231,
+      "best": 295.5,
+      "mean": -0.9,
+      "declWinRate": 63,
+      "games": 710
+    },
+    {
+      "gen": 12,
+      "sigma": 0.23,
+      "best": 294.3,
+      "mean": -1.4,
+      "declWinRate": 60.6,
+      "games": 695
+    },
+    {
+      "gen": 13,
+      "sigma": 0.228,
+      "best": 281.9,
+      "mean": 1.7,
+      "declWinRate": 64,
+      "games": 681
+    },
+    {
+      "gen": 14,
+      "sigma": 0.226,
+      "best": 253.9,
+      "mean": 0.7,
+      "declWinRate": 60.6,
+      "games": 721
+    },
+    {
+      "gen": 15,
+      "sigma": 0.225,
+      "best": 251.9,
+      "mean": 0.7,
+      "declWinRate": 64.2,
+      "games": 698,
+      "benchVsDefault": 40.2
+    },
+    {
+      "gen": 16,
+      "sigma": 0.223,
+      "best": 328.1,
+      "mean": 2.4,
+      "declWinRate": 65.3,
+      "games": 715
+    },
+    {
+      "gen": 17,
+      "sigma": 0.222,
+      "best": 264.1,
+      "mean": -0.5,
+      "declWinRate": 64,
+      "games": 726
+    },
+    {
+      "gen": 18,
+      "sigma": 0.22,
+      "best": 229,
+      "mean": -0.8,
+      "declWinRate": 60.9,
+      "games": 754
+    },
+    {
+      "gen": 19,
+      "sigma": 0.219,
+      "best": 226.9,
+      "mean": 1.2,
+      "declWinRate": 64.1,
+      "games": 755
+    },
+    {
+      "gen": 20,
+      "sigma": 0.217,
+      "best": 220.9,
+      "mean": -1.1,
+      "declWinRate": 64.1,
+      "games": 740
+    },
+    {
+      "gen": 21,
+      "sigma": 0.216,
+      "best": 206.8,
+      "mean": -3.2,
+      "declWinRate": 63.4,
+      "games": 673
+    },
+    {
+      "gen": 22,
+      "sigma": 0.214,
+      "best": 282,
+      "mean": 1.3,
+      "declWinRate": 62.2,
+      "games": 694
+    },
+    {
+      "gen": 23,
+      "sigma": 0.212,
+      "best": 200,
+      "mean": 3.2,
+      "declWinRate": 64.4,
+      "games": 679
+    },
+    {
+      "gen": 24,
+      "sigma": 0.211,
+      "best": 485.3,
+      "mean": 3.3,
+      "declWinRate": 65.1,
+      "games": 650
+    },
+    {
+      "gen": 25,
+      "sigma": 0.21,
+      "best": 239,
+      "mean": 0.3,
+      "declWinRate": 61,
+      "games": 680
+    },
+    {
+      "gen": 26,
+      "sigma": 0.208,
+      "best": 284.8,
+      "mean": 1.2,
+      "declWinRate": 63.6,
+      "games": 605
+    },
+    {
+      "gen": 27,
+      "sigma": 0.207,
+      "best": 384.9,
+      "mean": -0.3,
+      "declWinRate": 64.7,
+      "games": 632
+    },
+    {
+      "gen": 28,
+      "sigma": 0.205,
+      "best": 224.1,
+      "mean": 1.8,
+      "declWinRate": 65.7,
+      "games": 664
+    },
+    {
+      "gen": 29,
+      "sigma": 0.204,
+      "best": 231.5,
+      "mean": -1.5,
+      "declWinRate": 61.7,
+      "games": 716
+    },
+    {
+      "gen": 30,
+      "sigma": 0.202,
+      "best": 204.2,
+      "mean": 0.1,
+      "declWinRate": 62.1,
+      "games": 667,
+      "benchVsDefault": 140.3
+    },
+    {
+      "gen": 31,
+      "sigma": 0.201,
+      "best": 183.8,
+      "mean": -0.9,
+      "declWinRate": 61.5,
+      "games": 668
+    },
+    {
+      "gen": 32,
+      "sigma": 0.199,
+      "best": 288.6,
+      "mean": 0.5,
+      "declWinRate": 65.8,
+      "games": 702
+    },
+    {
+      "gen": 33,
+      "sigma": 0.198,
+      "best": 273.5,
+      "mean": 1.8,
+      "declWinRate": 63.4,
+      "games": 636
+    },
+    {
+      "gen": 34,
+      "sigma": 0.197,
+      "best": 257.7,
+      "mean": 1.1,
+      "declWinRate": 66.5,
+      "games": 662
+    },
+    {
+      "gen": 35,
+      "sigma": 0.195,
+      "best": 273.1,
+      "mean": -5.2,
+      "declWinRate": 65.4,
+      "games": 653
+    },
+    {
+      "gen": 36,
+      "sigma": 0.194,
+      "best": 252.8,
+      "mean": 0.8,
+      "declWinRate": 68.4,
+      "games": 617
+    },
+    {
+      "gen": 37,
+      "sigma": 0.192,
+      "best": 346.5,
+      "mean": 1.8,
+      "declWinRate": 67.5,
+      "games": 643
+    },
+    {
+      "gen": 38,
+      "sigma": 0.191,
+      "best": 286.9,
+      "mean": 3.8,
+      "declWinRate": 67.6,
+      "games": 661
+    },
+    {
+      "gen": 39,
+      "sigma": 0.19,
+      "best": 198.6,
+      "mean": 0,
+      "declWinRate": 62.9,
+      "games": 743
+    },
+    {
+      "gen": 40,
+      "sigma": 0.188,
+      "best": 267.2,
+      "mean": -1,
+      "declWinRate": 64.6,
+      "games": 771
+    },
+    {
+      "gen": 41,
+      "sigma": 0.187,
+      "best": 168,
+      "mean": -0.8,
+      "declWinRate": 62.1,
+      "games": 782
+    },
+    {
+      "gen": 42,
+      "sigma": 0.186,
+      "best": 336.9,
+      "mean": 1.6,
+      "declWinRate": 62.1,
+      "games": 819
+    },
+    {
+      "gen": 43,
+      "sigma": 0.184,
+      "best": 237.7,
+      "mean": -2.5,
+      "declWinRate": 59.6,
+      "games": 758
+    },
+    {
+      "gen": 44,
+      "sigma": 0.183,
+      "best": 196.8,
+      "mean": -1.5,
+      "declWinRate": 63.7,
+      "games": 819
+    },
+    {
+      "gen": 45,
+      "sigma": 0.182,
+      "best": 262.7,
+      "mean": 1.1,
+      "declWinRate": 59.1,
+      "games": 842,
+      "benchVsDefault": 89.9
+    },
+    {
+      "gen": 46,
+      "sigma": 0.181,
+      "best": 199.4,
+      "mean": -1.2,
+      "declWinRate": 57.7,
+      "games": 887
+    },
+    {
+      "gen": 47,
+      "sigma": 0.179,
+      "best": 306.3,
+      "mean": 2,
+      "declWinRate": 60.3,
+      "games": 822
+    },
+    {
+      "gen": 48,
+      "sigma": 0.178,
+      "best": 265.5,
+      "mean": 1,
+      "declWinRate": 59.3,
+      "games": 827
+    },
+    {
+      "gen": 49,
+      "sigma": 0.177,
+      "best": 200.6,
+      "mean": -0.6,
+      "declWinRate": 59,
+      "games": 810
+    },
+    {
+      "gen": 50,
+      "sigma": 0.176,
+      "best": 249.2,
+      "mean": -0.9,
+      "declWinRate": 61.1,
+      "games": 748
+    },
+    {
+      "gen": 51,
+      "sigma": 0.174,
+      "best": 187.8,
+      "mean": -1.3,
+      "declWinRate": 62.8,
+      "games": 792
+    },
+    {
+      "gen": 52,
+      "sigma": 0.173,
+      "best": 201.4,
+      "mean": 0.1,
+      "declWinRate": 63.6,
+      "games": 738
+    },
+    {
+      "gen": 53,
+      "sigma": 0.172,
+      "best": 184.1,
+      "mean": -0.6,
+      "declWinRate": 62.4,
+      "games": 695
+    },
+    {
+      "gen": 54,
+      "sigma": 0.171,
+      "best": 288.2,
+      "mean": 2.9,
+      "declWinRate": 65.6,
+      "games": 741
+    },
+    {
+      "gen": 55,
+      "sigma": 0.169,
+      "best": 328.7,
+      "mean": 1.1,
+      "declWinRate": 59.5,
+      "games": 735
+    },
+    {
+      "gen": 56,
+      "sigma": 0.168,
+      "best": 204.7,
+      "mean": -1.1,
+      "declWinRate": 60.6,
+      "games": 714
+    },
+    {
+      "gen": 57,
+      "sigma": 0.167,
+      "best": 308,
+      "mean": 1.2,
+      "declWinRate": 62.6,
+      "games": 679
+    },
+    {
+      "gen": 58,
+      "sigma": 0.166,
+      "best": 324,
+      "mean": 1,
+      "declWinRate": 56.2,
+      "games": 697
+    },
+    {
+      "gen": 59,
+      "sigma": 0.165,
+      "best": 356.5,
+      "mean": 0.5,
+      "declWinRate": 57,
+      "games": 642
+    },
+    {
+      "gen": 60,
+      "sigma": 0.164,
+      "best": 257.1,
+      "mean": 5.4,
+      "declWinRate": 61.5,
+      "games": 624,
+      "benchVsDefault": 22.7
+    },
+    {
+      "gen": 61,
+      "sigma": 0.162,
+      "best": 229.9,
+      "mean": -0.5,
+      "declWinRate": 65.1,
+      "games": 585
+    },
+    {
+      "gen": 62,
+      "sigma": 0.161,
+      "best": 338.5,
+      "mean": -3.2,
+      "declWinRate": 67.9,
+      "games": 582
+    },
+    {
+      "gen": 63,
+      "sigma": 0.16,
+      "best": 265.6,
+      "mean": -1.7,
+      "declWinRate": 69.3,
+      "games": 544
+    },
+    {
+      "gen": 64,
+      "sigma": 0.159,
+      "best": 265.2,
+      "mean": 3.7,
+      "declWinRate": 69.8,
+      "games": 427
+    },
+    {
+      "gen": 65,
+      "sigma": 0.158,
+      "best": 316,
+      "mean": -1.9,
+      "declWinRate": 67.1,
+      "games": 504
+    },
+    {
+      "gen": 66,
+      "sigma": 0.157,
+      "best": 354.5,
+      "mean": 0.8,
+      "declWinRate": 67.1,
+      "games": 477
+    },
+    {
+      "gen": 67,
+      "sigma": 0.156,
+      "best": 248.8,
+      "mean": 0.7,
+      "declWinRate": 65.6,
+      "games": 488
+    },
+    {
+      "gen": 68,
+      "sigma": 0.155,
+      "best": 222,
+      "mean": -1.8,
+      "declWinRate": 70.3,
+      "games": 515
+    },
+    {
+      "gen": 69,
+      "sigma": 0.154,
+      "best": 272.8,
+      "mean": -0.4,
+      "declWinRate": 69.9,
+      "games": 534
+    },
+    {
+      "gen": 70,
+      "sigma": 0.152,
+      "best": 216.8,
+      "mean": 1.1,
+      "declWinRate": 71.4,
+      "games": 597
+    },
+    {
+      "gen": 71,
+      "sigma": 0.151,
+      "best": 270.5,
+      "mean": -2.7,
+      "declWinRate": 69.6,
+      "games": 536
+    },
+    {
+      "gen": 72,
+      "sigma": 0.15,
+      "best": 255,
+      "mean": 0.4,
+      "declWinRate": 62,
+      "games": 594
+    },
+    {
+      "gen": 73,
+      "sigma": 0.149,
+      "best": 178.7,
+      "mean": 0,
+      "declWinRate": 66.3,
+      "games": 608
+    },
+    {
+      "gen": 74,
+      "sigma": 0.148,
+      "best": 286.7,
+      "mean": 1.9,
+      "declWinRate": 67.3,
+      "games": 599
+    },
+    {
+      "gen": 75,
+      "sigma": 0.147,
+      "best": 471.6,
+      "mean": 4,
+      "declWinRate": 69.9,
+      "games": 534,
+      "benchVsDefault": 9.8
+    },
+    {
+      "gen": 76,
+      "sigma": 0.146,
+      "best": 522.5,
+      "mean": 6.4,
+      "declWinRate": 70.4,
+      "games": 558
+    },
+    {
+      "gen": 77,
+      "sigma": 0.145,
+      "best": 292.6,
+      "mean": 1.3,
+      "declWinRate": 64.8,
+      "games": 625
+    },
+    {
+      "gen": 78,
+      "sigma": 0.144,
+      "best": 257.3,
+      "mean": -2.6,
+      "declWinRate": 72.6,
+      "games": 565
+    },
+    {
+      "gen": 79,
+      "sigma": 0.143,
+      "best": 153.4,
+      "mean": -3.2,
+      "declWinRate": 69.5,
+      "games": 673
+    },
+    {
+      "gen": 80,
+      "sigma": 0.142,
+      "best": 221.8,
+      "mean": 0.7,
+      "declWinRate": 66.8,
+      "games": 653
+    },
+    {
+      "gen": 81,
+      "sigma": 0.141,
+      "best": 270.7,
+      "mean": 0.2,
+      "declWinRate": 67.1,
+      "games": 690
+    },
+    {
+      "gen": 82,
+      "sigma": 0.14,
+      "best": 189.8,
+      "mean": -0.4,
+      "declWinRate": 65.7,
+      "games": 688
+    },
+    {
+      "gen": 83,
+      "sigma": 0.139,
+      "best": 243.4,
+      "mean": 0.3,
+      "declWinRate": 63.7,
+      "games": 705
+    },
+    {
+      "gen": 84,
+      "sigma": 0.138,
+      "best": 294,
+      "mean": -1,
+      "declWinRate": 63.6,
+      "games": 706
+    },
+    {
+      "gen": 85,
+      "sigma": 0.137,
+      "best": 264.3,
+      "mean": 0,
+      "declWinRate": 62.4,
+      "games": 740
+    },
+    {
+      "gen": 86,
+      "sigma": 0.136,
+      "best": 228.3,
+      "mean": 2.5,
+      "declWinRate": 64.7,
+      "games": 754
+    },
+    {
+      "gen": 87,
+      "sigma": 0.135,
+      "best": 381.3,
+      "mean": 1,
+      "declWinRate": 67.8,
+      "games": 739
+    },
+    {
+      "gen": 88,
+      "sigma": 0.134,
+      "best": 263.6,
+      "mean": 0.3,
+      "declWinRate": 66.6,
+      "games": 763
+    },
+    {
+      "gen": 89,
+      "sigma": 0.133,
+      "best": 169.5,
+      "mean": 2.3,
+      "declWinRate": 65.9,
+      "games": 783
+    },
+    {
+      "gen": 90,
+      "sigma": 0.132,
+      "best": 147.9,
+      "mean": 1.3,
+      "declWinRate": 61.6,
+      "games": 761,
+      "benchVsDefault": 92.4
+    },
+    {
+      "gen": 91,
+      "sigma": 0.131,
+      "best": 261.7,
+      "mean": 0.8,
+      "declWinRate": 70.4,
+      "games": 713
+    },
+    {
+      "gen": 92,
+      "sigma": 0.13,
+      "best": 351.4,
+      "mean": 1.1,
+      "declWinRate": 66.2,
+      "games": 749
+    },
+    {
+      "gen": 93,
+      "sigma": 0.13,
+      "best": 208.8,
+      "mean": 0.2,
+      "declWinRate": 68.6,
+      "games": 708
+    },
+    {
+      "gen": 94,
+      "sigma": 0.129,
+      "best": 240,
+      "mean": 1.4,
+      "declWinRate": 64.2,
+      "games": 693
+    },
+    {
+      "gen": 95,
+      "sigma": 0.128,
+      "best": 162.8,
+      "mean": -3,
+      "declWinRate": 62.2,
+      "games": 707
+    },
+    {
+      "gen": 96,
+      "sigma": 0.127,
+      "best": 187.9,
+      "mean": -0.7,
+      "declWinRate": 65.5,
+      "games": 699
+    },
+    {
+      "gen": 97,
+      "sigma": 0.126,
+      "best": 247.7,
+      "mean": -4.8,
+      "declWinRate": 65.7,
+      "games": 720
+    },
+    {
+      "gen": 98,
+      "sigma": 0.125,
+      "best": 383.3,
+      "mean": 1.3,
+      "declWinRate": 67.7,
+      "games": 713
+    },
+    {
+      "gen": 99,
+      "sigma": 0.124,
+      "best": 208.7,
+      "mean": 0.9,
+      "declWinRate": 66.9,
+      "games": 722
+    },
+    {
+      "gen": 100,
+      "sigma": 0.123,
+      "best": 319.5,
+      "mean": 1.1,
+      "declWinRate": 66.4,
+      "games": 729
+    },
+    {
+      "gen": 101,
+      "sigma": 0.122,
+      "best": 237.9,
+      "mean": -2.6,
+      "declWinRate": 70,
+      "games": 660
+    },
+    {
+      "gen": 102,
+      "sigma": 0.122,
+      "best": 267,
+      "mean": -0.6,
+      "declWinRate": 66.6,
+      "games": 695
+    },
+    {
+      "gen": 103,
+      "sigma": 0.121,
+      "best": 292,
+      "mean": 0.5,
+      "declWinRate": 67.8,
+      "games": 673
+    },
+    {
+      "gen": 104,
+      "sigma": 0.12,
+      "best": 200.8,
+      "mean": -1.8,
+      "declWinRate": 67.6,
+      "games": 680
+    },
+    {
+      "gen": 105,
+      "sigma": 0.119,
+      "best": 357.4,
+      "mean": 2.2,
+      "declWinRate": 65.9,
+      "games": 680,
+      "benchVsDefault": 137.9
+    },
+    {
+      "gen": 106,
+      "sigma": 0.118,
+      "best": 386.9,
+      "mean": -0.2,
+      "declWinRate": 64.1,
+      "games": 702
+    },
+    {
+      "gen": 107,
+      "sigma": 0.117,
+      "best": 324.2,
+      "mean": -4.3,
+      "declWinRate": 66.8,
+      "games": 714
+    },
+    {
+      "gen": 108,
+      "sigma": 0.117,
+      "best": 202.2,
+      "mean": 3.6,
+      "declWinRate": 66.7,
+      "games": 732
+    },
+    {
+      "gen": 109,
+      "sigma": 0.116,
+      "best": 251.6,
+      "mean": -1.3,
+      "declWinRate": 65,
+      "games": 718
+    },
+    {
+      "gen": 110,
+      "sigma": 0.115,
+      "best": 260.2,
+      "mean": 2.6,
+      "declWinRate": 62.5,
+      "games": 779
+    },
+    {
+      "gen": 111,
+      "sigma": 0.114,
+      "best": 332.8,
+      "mean": 3.4,
+      "declWinRate": 65,
+      "games": 769
+    },
+    {
+      "gen": 112,
+      "sigma": 0.113,
+      "best": 156,
+      "mean": 1,
+      "declWinRate": 63.2,
+      "games": 828
+    },
+    {
+      "gen": 113,
+      "sigma": 0.112,
+      "best": 208.4,
+      "mean": -1.6,
+      "declWinRate": 64.4,
+      "games": 800
+    },
+    {
+      "gen": 114,
+      "sigma": 0.112,
+      "best": 300,
+      "mean": -2,
+      "declWinRate": 61.4,
+      "games": 790
+    },
+    {
+      "gen": 115,
+      "sigma": 0.111,
+      "best": 236.7,
+      "mean": -0.6,
+      "declWinRate": 66,
+      "games": 814
+    },
+    {
+      "gen": 116,
+      "sigma": 0.11,
+      "best": 286.9,
+      "mean": 3,
+      "declWinRate": 62.3,
+      "games": 828
+    },
+    {
+      "gen": 117,
+      "sigma": 0.109,
+      "best": 335.3,
+      "mean": 0.6,
+      "declWinRate": 61.1,
+      "games": 805
+    },
+    {
+      "gen": 118,
+      "sigma": 0.109,
+      "best": 212.1,
+      "mean": 0.5,
+      "declWinRate": 66.6,
+      "games": 830
+    },
+    {
+      "gen": 119,
+      "sigma": 0.108,
+      "best": 237.6,
+      "mean": 0.9,
+      "declWinRate": 60.6,
+      "games": 812
+    },
+    {
+      "gen": 120,
+      "sigma": 0.107,
+      "best": 253.9,
+      "mean": 0.7,
+      "declWinRate": 60.7,
+      "games": 781,
+      "benchVsDefault": 50.1
+    },
+    {
+      "gen": 121,
+      "sigma": 0.106,
+      "best": 269.4,
+      "mean": -0.1,
+      "declWinRate": 64.8,
+      "games": 762
+    },
+    {
+      "gen": 122,
+      "sigma": 0.106,
+      "best": 332.7,
+      "mean": 0.5,
+      "declWinRate": 63.6,
+      "games": 764
+    },
+    {
+      "gen": 123,
+      "sigma": 0.105,
+      "best": 300.9,
+      "mean": -2.5,
+      "declWinRate": 65.8,
+      "games": 734
+    },
+    {
+      "gen": 124,
+      "sigma": 0.104,
+      "best": 294.2,
+      "mean": 1.9,
+      "declWinRate": 62.4,
+      "games": 774
+    },
+    {
+      "gen": 125,
+      "sigma": 0.103,
+      "best": 193.9,
+      "mean": 1.1,
+      "declWinRate": 65,
+      "games": 759
+    },
+    {
+      "gen": 126,
+      "sigma": 0.103,
+      "best": 214.8,
+      "mean": -1,
+      "declWinRate": 62.5,
+      "games": 753
+    },
+    {
+      "gen": 127,
+      "sigma": 0.102,
+      "best": 416.8,
+      "mean": -1.1,
+      "declWinRate": 65.6,
+      "games": 765
+    },
+    {
+      "gen": 128,
+      "sigma": 0.101,
+      "best": 343.3,
+      "mean": -1.2,
+      "declWinRate": 64.6,
+      "games": 731
+    },
+    {
+      "gen": 129,
+      "sigma": 0.1,
+      "best": 181.1,
+      "mean": 0.5,
+      "declWinRate": 63.3,
+      "games": 741
+    },
+    {
+      "gen": 130,
+      "sigma": 0.1,
+      "best": 200.8,
+      "mean": 2.6,
+      "declWinRate": 66.4,
+      "games": 721
+    },
+    {
+      "gen": 131,
+      "sigma": 0.099,
+      "best": 270,
+      "mean": 1.3,
+      "declWinRate": 70,
+      "games": 713
+    },
+    {
+      "gen": 132,
+      "sigma": 0.098,
+      "best": 181.5,
+      "mean": -0.3,
+      "declWinRate": 63,
+      "games": 741
+    },
+    {
+      "gen": 133,
+      "sigma": 0.098,
+      "best": 147.5,
+      "mean": 0.9,
+      "declWinRate": 63.1,
+      "games": 721
+    },
+    {
+      "gen": 134,
+      "sigma": 0.097,
+      "best": 252.2,
+      "mean": 3.7,
+      "declWinRate": 63.5,
+      "games": 713
+    },
+    {
+      "gen": 135,
+      "sigma": 0.096,
+      "best": 207.3,
+      "mean": -1,
+      "declWinRate": 69.2,
+      "games": 697,
+      "benchVsDefault": 12.6
+    },
+    {
+      "gen": 136,
+      "sigma": 0.096,
+      "best": 233.3,
+      "mean": -3,
+      "declWinRate": 64.1,
+      "games": 713
+    },
+    {
+      "gen": 137,
+      "sigma": 0.095,
+      "best": 197.2,
+      "mean": 0,
+      "declWinRate": 62.1,
+      "games": 720
+    },
+    {
+      "gen": 138,
+      "sigma": 0.094,
+      "best": 208.2,
+      "mean": 3.6,
+      "declWinRate": 63.9,
+      "games": 701
+    },
+    {
+      "gen": 139,
+      "sigma": 0.094,
+      "best": 270.1,
+      "mean": 0.7,
+      "declWinRate": 64,
+      "games": 716
+    },
+    {
+      "gen": 140,
+      "sigma": 0.093,
+      "best": 234,
+      "mean": -0.5,
+      "declWinRate": 63.4,
+      "games": 735
+    },
+    {
+      "gen": 141,
+      "sigma": 0.092,
+      "best": 210.4,
+      "mean": 2.9,
+      "declWinRate": 61.9,
+      "games": 759
+    },
+    {
+      "gen": 142,
+      "sigma": 0.092,
+      "best": 175.4,
+      "mean": -1.3,
+      "declWinRate": 62.2,
+      "games": 746
+    },
+    {
+      "gen": 143,
+      "sigma": 0.091,
+      "best": 160,
+      "mean": 0.1,
+      "declWinRate": 59.9,
+      "games": 760
+    },
+    {
+      "gen": 144,
+      "sigma": 0.09,
+      "best": 206.8,
+      "mean": 1.7,
+      "declWinRate": 58.3,
+      "games": 769
+    },
+    {
+      "gen": 145,
+      "sigma": 0.09,
+      "best": 204.5,
+      "mean": -0.7,
+      "declWinRate": 59.8,
+      "games": 779
+    },
+    {
+      "gen": 146,
+      "sigma": 0.089,
+      "best": 204.5,
+      "mean": 2,
+      "declWinRate": 61.4,
+      "games": 704
+    },
+    {
+      "gen": 147,
+      "sigma": 0.088,
+      "best": 310.7,
+      "mean": -0.9,
+      "declWinRate": 66,
+      "games": 662
+    },
+    {
+      "gen": 148,
+      "sigma": 0.088,
+      "best": 295.7,
+      "mean": -1.5,
+      "declWinRate": 66.9,
+      "games": 718
+    },
+    {
+      "gen": 149,
+      "sigma": 0.087,
+      "best": 247.2,
+      "mean": -0.7,
+      "declWinRate": 63.3,
+      "games": 711
+    },
+    {
+      "gen": 150,
+      "sigma": 0.087,
+      "best": 275.6,
+      "mean": -1.2,
+      "declWinRate": 65.9,
+      "games": 712,
+      "benchVsDefault": 15.8
+    },
+    {
+      "gen": 151,
+      "sigma": 0.086,
+      "best": 141.6,
+      "mean": 1,
+      "declWinRate": 65.1,
+      "games": 700
+    },
+    {
+      "gen": 152,
+      "sigma": 0.085,
+      "best": 249.2,
+      "mean": -0.5,
+      "declWinRate": 61.5,
+      "games": 736
+    },
+    {
+      "gen": 153,
+      "sigma": 0.085,
+      "best": 222.6,
+      "mean": 0.1,
+      "declWinRate": 61,
+      "games": 713
+    },
+    {
+      "gen": 154,
+      "sigma": 0.084,
+      "best": 269.3,
+      "mean": 1.5,
+      "declWinRate": 62.9,
+      "games": 677
+    },
+    {
+      "gen": 155,
+      "sigma": 0.084,
+      "best": 242.7,
+      "mean": -0.2,
+      "declWinRate": 59.1,
+      "games": 740
+    },
+    {
+      "gen": 156,
+      "sigma": 0.083,
+      "best": 149.2,
+      "mean": 0.1,
+      "declWinRate": 61.4,
+      "games": 770
+    },
+    {
+      "gen": 157,
+      "sigma": 0.082,
+      "best": 204.1,
+      "mean": 0.3,
+      "declWinRate": 60.9,
+      "games": 747
+    },
+    {
+      "gen": 158,
+      "sigma": 0.082,
+      "best": 233.6,
+      "mean": 0.4,
+      "declWinRate": 64.9,
+      "games": 704
+    },
+    {
+      "gen": 159,
+      "sigma": 0.081,
+      "best": 337.6,
+      "mean": -0.6,
+      "declWinRate": 66,
+      "games": 685
+    },
+    {
+      "gen": 160,
+      "sigma": 0.081,
+      "best": 228.6,
+      "mean": -1.3,
+      "declWinRate": 62,
+      "games": 694
+    },
+    {
+      "gen": 161,
+      "sigma": 0.08,
+      "best": 203.7,
+      "mean": 0.7,
+      "declWinRate": 65,
+      "games": 721
+    },
+    {
+      "gen": 162,
+      "sigma": 0.08,
+      "best": 299.1,
+      "mean": 1.6,
+      "declWinRate": 63.4,
+      "games": 699
+    },
+    {
+      "gen": 163,
+      "sigma": 0.079,
+      "best": 238.3,
+      "mean": -0.2,
+      "declWinRate": 62.7,
+      "games": 702
+    },
+    {
+      "gen": 164,
+      "sigma": 0.078,
+      "best": 322.3,
+      "mean": 3.4,
+      "declWinRate": 65.9,
+      "games": 674
+    },
+    {
+      "gen": 165,
+      "sigma": 0.078,
+      "best": 183.3,
+      "mean": 2.8,
+      "declWinRate": 64.5,
+      "games": 719,
+      "benchVsDefault": 51.8
+    },
+    {
+      "gen": 166,
+      "sigma": 0.077,
+      "best": 203.3,
+      "mean": -2.8,
+      "declWinRate": 67.5,
+      "games": 677
+    },
+    {
+      "gen": 167,
+      "sigma": 0.077,
+      "best": 411.8,
+      "mean": -0.4,
+      "declWinRate": 70.3,
+      "games": 673
+    },
+    {
+      "gen": 168,
+      "sigma": 0.076,
+      "best": 236.4,
+      "mean": 0.1,
+      "declWinRate": 70.6,
+      "games": 711
+    },
+    {
+      "gen": 169,
+      "sigma": 0.076,
+      "best": 197.8,
+      "mean": 2.5,
+      "declWinRate": 64.6,
+      "games": 694
+    },
+    {
+      "gen": 170,
+      "sigma": 0.075,
+      "best": 315.4,
+      "mean": -5.3,
+      "declWinRate": 66.9,
+      "games": 706
+    },
+    {
+      "gen": 171,
+      "sigma": 0.075,
+      "best": 281.8,
+      "mean": -1.5,
+      "declWinRate": 65.4,
+      "games": 697
+    },
+    {
+      "gen": 172,
+      "sigma": 0.074,
+      "best": 207.9,
+      "mean": -1.4,
+      "declWinRate": 70.3,
+      "games": 676
+    },
+    {
+      "gen": 173,
+      "sigma": 0.074,
+      "best": 307.9,
+      "mean": 1.4,
+      "declWinRate": 68.9,
+      "games": 682
+    },
+    {
+      "gen": 174,
+      "sigma": 0.073,
+      "best": 311.9,
+      "mean": -0.6,
+      "declWinRate": 61.6,
+      "games": 703
+    },
+    {
+      "gen": 175,
+      "sigma": 0.073,
+      "best": 156.8,
+      "mean": -1.9,
+      "declWinRate": 65.7,
+      "games": 735
+    },
+    {
+      "gen": 176,
+      "sigma": 0.072,
+      "best": 205.9,
+      "mean": -1.1,
+      "declWinRate": 65.3,
+      "games": 669
+    },
+    {
+      "gen": 177,
+      "sigma": 0.072,
+      "best": 198.3,
+      "mean": 1.6,
+      "declWinRate": 65.1,
+      "games": 740
+    },
+    {
+      "gen": 178,
+      "sigma": 0.071,
+      "best": 378.2,
+      "mean": -2.8,
+      "declWinRate": 66.5,
+      "games": 729
+    },
+    {
+      "gen": 179,
+      "sigma": 0.071,
+      "best": 285.3,
+      "mean": 0.8,
+      "declWinRate": 67.1,
+      "games": 735
+    },
+    {
+      "gen": 180,
+      "sigma": 0.07,
+      "best": 215.2,
+      "mean": 0,
+      "declWinRate": 65.8,
+      "games": 731,
+      "benchVsDefault": 28.8
+    },
+    {
+      "gen": 181,
+      "sigma": 0.07,
+      "best": 214.7,
+      "mean": 3.2,
+      "declWinRate": 63.6,
+      "games": 693
+    },
+    {
+      "gen": 182,
+      "sigma": 0.069,
+      "best": 292.1,
+      "mean": 1.3,
+      "declWinRate": 62.2,
+      "games": 690
+    },
+    {
+      "gen": 183,
+      "sigma": 0.069,
+      "best": 197.7,
+      "mean": 3.8,
+      "declWinRate": 63.1,
+      "games": 715
+    },
+    {
+      "gen": 184,
+      "sigma": 0.068,
+      "best": 205.9,
+      "mean": -4,
+      "declWinRate": 65.4,
+      "games": 728
+    },
+    {
+      "gen": 185,
+      "sigma": 0.068,
+      "best": 320.7,
+      "mean": -0.1,
+      "declWinRate": 64.7,
+      "games": 742
+    },
+    {
+      "gen": 186,
+      "sigma": 0.067,
+      "best": 289.7,
+      "mean": -4.5,
+      "declWinRate": 68.1,
+      "games": 706
+    },
+    {
+      "gen": 187,
+      "sigma": 0.067,
+      "best": 278.4,
+      "mean": 2.3,
+      "declWinRate": 65.4,
+      "games": 712
+    },
+    {
+      "gen": 188,
+      "sigma": 0.066,
+      "best": 185.5,
+      "mean": -0.2,
+      "declWinRate": 63.1,
+      "games": 702
+    },
+    {
+      "gen": 189,
+      "sigma": 0.066,
+      "best": 179.8,
+      "mean": -0.5,
+      "declWinRate": 62.9,
+      "games": 734
+    },
+    {
+      "gen": 190,
+      "sigma": 0.065,
+      "best": 220.3,
+      "mean": -2.7,
+      "declWinRate": 61.8,
+      "games": 733
+    },
+    {
+      "gen": 191,
+      "sigma": 0.065,
+      "best": 232.8,
+      "mean": 1.5,
+      "declWinRate": 60.2,
+      "games": 727
+    },
+    {
+      "gen": 192,
+      "sigma": 0.064,
+      "best": 198.2,
+      "mean": -0.3,
+      "declWinRate": 62.5,
+      "games": 690
+    },
+    {
+      "gen": 193,
+      "sigma": 0.064,
+      "best": 284.9,
+      "mean": -0.4,
+      "declWinRate": 62.4,
+      "games": 683
+    },
+    {
+      "gen": 194,
+      "sigma": 0.063,
+      "best": 234.1,
+      "mean": -0.1,
+      "declWinRate": 60.6,
+      "games": 672
+    },
+    {
+      "gen": 195,
+      "sigma": 0.063,
+      "best": 278.2,
+      "mean": 2.7,
+      "declWinRate": 65.4,
+      "games": 677,
+      "benchVsDefault": 112.4
+    },
+    {
+      "gen": 196,
+      "sigma": 0.063,
+      "best": 184.3,
+      "mean": 0.3,
+      "declWinRate": 63.7,
+      "games": 673
+    },
+    {
+      "gen": 197,
+      "sigma": 0.062,
+      "best": 182.8,
+      "mean": -1.3,
+      "declWinRate": 63.9,
+      "games": 671
+    },
+    {
+      "gen": 198,
+      "sigma": 0.062,
+      "best": 300.7,
+      "mean": -1.1,
+      "declWinRate": 63.6,
+      "games": 685
+    },
+    {
+      "gen": 199,
+      "sigma": 0.061,
+      "best": 237,
+      "mean": -2.8,
+      "declWinRate": 59.7,
+      "games": 700
+    },
+    {
+      "gen": 200,
+      "sigma": 0.061,
+      "best": 453,
+      "mean": -3.4,
+      "declWinRate": 63.5,
+      "games": 702
+    },
+    {
+      "gen": 201,
+      "sigma": 0.06,
+      "best": 173.3,
+      "mean": 2.4,
+      "declWinRate": 60.2,
+      "games": 681
+    },
+    {
+      "gen": 202,
+      "sigma": 0.06,
+      "best": 153.6,
+      "mean": 0.1,
+      "declWinRate": 63.3,
+      "games": 714
+    },
+    {
+      "gen": 203,
+      "sigma": 0.06,
+      "best": 448.4,
+      "mean": 1.6,
+      "declWinRate": 61.2,
+      "games": 699
+    },
+    {
+      "gen": 204,
+      "sigma": 0.059,
+      "best": 200.8,
+      "mean": 0,
+      "declWinRate": 62.6,
+      "games": 679
+    },
+    {
+      "gen": 205,
+      "sigma": 0.059,
+      "best": 236.8,
+      "mean": 1.2,
+      "declWinRate": 59,
+      "games": 687
+    },
+    {
+      "gen": 206,
+      "sigma": 0.058,
+      "best": 334.9,
+      "mean": 0.3,
+      "declWinRate": 60.1,
+      "games": 682
+    },
+    {
+      "gen": 207,
+      "sigma": 0.058,
+      "best": 199.2,
+      "mean": 0.9,
+      "declWinRate": 61.7,
+      "games": 713
+    },
+    {
+      "gen": 208,
+      "sigma": 0.057,
+      "best": 289.3,
+      "mean": -5.5,
+      "declWinRate": 62.6,
+      "games": 745
+    },
+    {
+      "gen": 209,
+      "sigma": 0.057,
+      "best": 252.4,
+      "mean": 0,
+      "declWinRate": 64.6,
+      "games": 721
+    },
+    {
+      "gen": 210,
+      "sigma": 0.057,
+      "best": 161.9,
+      "mean": -1.4,
+      "declWinRate": 63,
+      "games": 755,
+      "benchVsDefault": 90.2
+    },
+    {
+      "gen": 211,
+      "sigma": 0.056,
+      "best": 187.6,
+      "mean": -2.3,
+      "declWinRate": 63.1,
+      "games": 739
+    },
+    {
+      "gen": 212,
+      "sigma": 0.056,
+      "best": 180,
+      "mean": 1.2,
+      "declWinRate": 66.4,
+      "games": 726
+    },
+    {
+      "gen": 213,
+      "sigma": 0.055,
+      "best": 247.9,
+      "mean": 0,
+      "declWinRate": 64.1,
+      "games": 730
+    },
+    {
+      "gen": 214,
+      "sigma": 0.055,
+      "best": 231.1,
+      "mean": -0.3,
+      "declWinRate": 66.3,
+      "games": 745
+    },
+    {
+      "gen": 215,
+      "sigma": 0.055,
+      "best": 247.3,
+      "mean": -1.2,
+      "declWinRate": 66.8,
+      "games": 755
+    },
+    {
+      "gen": 216,
+      "sigma": 0.054,
+      "best": 196.4,
+      "mean": 0.1,
+      "declWinRate": 66.3,
+      "games": 706
+    },
+    {
+      "gen": 217,
+      "sigma": 0.054,
+      "best": 223.1,
+      "mean": -4.6,
+      "declWinRate": 66.9,
+      "games": 718
+    },
+    {
+      "gen": 218,
+      "sigma": 0.054,
+      "best": 179.4,
+      "mean": -1,
+      "declWinRate": 65.8,
+      "games": 733
+    },
+    {
+      "gen": 219,
+      "sigma": 0.053,
+      "best": 166.4,
+      "mean": -1.3,
+      "declWinRate": 62.6,
+      "games": 751
+    },
+    {
+      "gen": 220,
+      "sigma": 0.053,
+      "best": 271.4,
+      "mean": -3.3,
+      "declWinRate": 63.1,
+      "games": 747
+    },
+    {
+      "gen": 221,
+      "sigma": 0.052,
+      "best": 293.8,
+      "mean": 2.5,
+      "declWinRate": 66,
+      "games": 733
+    },
+    {
+      "gen": 222,
+      "sigma": 0.052,
+      "best": 317,
+      "mean": 1.7,
+      "declWinRate": 63.3,
+      "games": 760
+    },
+    {
+      "gen": 223,
+      "sigma": 0.052,
+      "best": 216.6,
+      "mean": 0.6,
+      "declWinRate": 63,
+      "games": 764
+    },
+    {
+      "gen": 224,
+      "sigma": 0.051,
+      "best": 255.7,
+      "mean": -3,
+      "declWinRate": 62.3,
+      "games": 732
+    },
+    {
+      "gen": 225,
+      "sigma": 0.051,
+      "best": 275.9,
+      "mean": 2,
+      "declWinRate": 61.1,
+      "games": 789,
+      "benchVsDefault": 35.4
+    },
+    {
+      "gen": 226,
+      "sigma": 0.051,
+      "best": 214.1,
+      "mean": 0,
+      "declWinRate": 63.3,
+      "games": 741
+    },
+    {
+      "gen": 227,
+      "sigma": 0.05,
+      "best": 163.3,
+      "mean": -0.3,
+      "declWinRate": 64,
+      "games": 783
+    },
+    {
+      "gen": 228,
+      "sigma": 0.05,
+      "best": 293.7,
+      "mean": 1.4,
+      "declWinRate": 63.1,
+      "games": 778
+    },
+    {
+      "gen": 229,
+      "sigma": 0.05,
+      "best": 222.8,
+      "mean": 0.9,
+      "declWinRate": 62.2,
+      "games": 738
+    },
+    {
+      "gen": 230,
+      "sigma": 0.049,
+      "best": 303.5,
+      "mean": -1.8,
+      "declWinRate": 61.4,
+      "games": 772
+    },
+    {
+      "gen": 231,
+      "sigma": 0.049,
+      "best": 244.2,
+      "mean": 1.5,
+      "declWinRate": 60.7,
+      "games": 698
+    },
+    {
+      "gen": 232,
+      "sigma": 0.049,
+      "best": 142.1,
+      "mean": -1,
+      "declWinRate": 63.2,
+      "games": 747
+    },
+    {
+      "gen": 233,
+      "sigma": 0.048,
+      "best": 182.8,
+      "mean": 0.5,
+      "declWinRate": 60.7,
+      "games": 728
+    },
+    {
+      "gen": 234,
+      "sigma": 0.048,
+      "best": 196.5,
+      "mean": 0,
+      "declWinRate": 63.2,
+      "games": 718
+    },
+    {
+      "gen": 235,
+      "sigma": 0.047,
+      "best": 295.5,
+      "mean": -0.1,
+      "declWinRate": 63.5,
+      "games": 737
+    },
+    {
+      "gen": 236,
+      "sigma": 0.047,
+      "best": 259.7,
+      "mean": 0.8,
+      "declWinRate": 61.8,
+      "games": 746
+    },
+    {
+      "gen": 237,
+      "sigma": 0.047,
+      "best": 260,
+      "mean": 1.9,
+      "declWinRate": 59.1,
+      "games": 711
+    },
+    {
+      "gen": 238,
+      "sigma": 0.046,
+      "best": 176.2,
+      "mean": 0.6,
+      "declWinRate": 64.8,
+      "games": 741
+    },
+    {
+      "gen": 239,
+      "sigma": 0.046,
+      "best": 253.9,
+      "mean": 0.4,
+      "declWinRate": 57.9,
+      "games": 730
+    },
+    {
+      "gen": 240,
+      "sigma": 0.046,
+      "best": 303.3,
+      "mean": 3.8,
+      "declWinRate": 60.2,
+      "games": 723,
+      "benchVsDefault": 21
+    },
+    {
+      "gen": 241,
+      "sigma": 0.046,
+      "best": 204.5,
+      "mean": 0.5,
+      "declWinRate": 63.3,
+      "games": 708
+    },
+    {
+      "gen": 242,
+      "sigma": 0.045,
+      "best": 174.8,
+      "mean": -2.7,
+      "declWinRate": 63.4,
+      "games": 716
+    },
+    {
+      "gen": 243,
+      "sigma": 0.045,
+      "best": 239.8,
+      "mean": -0.9,
+      "declWinRate": 63.3,
+      "games": 713
+    },
+    {
+      "gen": 244,
+      "sigma": 0.045,
+      "best": 180.5,
+      "mean": 1.5,
+      "declWinRate": 61.2,
+      "games": 752
+    },
+    {
+      "gen": 245,
+      "sigma": 0.044,
+      "best": 180.7,
+      "mean": 1.4,
+      "declWinRate": 62.7,
+      "games": 754
+    },
+    {
+      "gen": 246,
+      "sigma": 0.044,
+      "best": 262.7,
+      "mean": 0.8,
+      "declWinRate": 63.7,
+      "games": 733
+    },
+    {
+      "gen": 247,
+      "sigma": 0.044,
+      "best": 298.4,
+      "mean": 2.4,
+      "declWinRate": 64.3,
+      "games": 726
+    },
+    {
+      "gen": 248,
+      "sigma": 0.043,
+      "best": 333.9,
+      "mean": 2.6,
+      "declWinRate": 64.6,
+      "games": 734
+    },
+    {
+      "gen": 249,
+      "sigma": 0.043,
+      "best": 189.2,
+      "mean": -3.7,
+      "declWinRate": 64.8,
+      "games": 749
+    },
+    {
+      "gen": 250,
+      "sigma": 0.043,
+      "best": 261.4,
+      "mean": -0.7,
+      "declWinRate": 64.3,
+      "games": 719
+    },
+    {
+      "gen": 251,
+      "sigma": 0.042,
+      "best": 185.8,
+      "mean": -1.2,
+      "declWinRate": 63.7,
+      "games": 721
+    },
+    {
+      "gen": 252,
+      "sigma": 0.042,
+      "best": 249.2,
+      "mean": -1.5,
+      "declWinRate": 63.4,
+      "games": 729
+    },
+    {
+      "gen": 253,
+      "sigma": 0.042,
+      "best": 176.9,
+      "mean": 0.4,
+      "declWinRate": 62.1,
+      "games": 731
+    },
+    {
+      "gen": 254,
+      "sigma": 0.042,
+      "best": 202.6,
+      "mean": 0.8,
+      "declWinRate": 65.5,
+      "games": 724
+    },
+    {
+      "gen": 255,
+      "sigma": 0.041,
+      "best": 170.8,
+      "mean": 2.1,
+      "declWinRate": 64.6,
+      "games": 687,
+      "benchVsDefault": -15.1
+    },
+    {
+      "gen": 256,
+      "sigma": 0.041,
+      "best": 202.9,
+      "mean": -0.9,
+      "declWinRate": 64.2,
+      "games": 729
+    },
+    {
+      "gen": 257,
+      "sigma": 0.041,
+      "best": 239.4,
+      "mean": 2.2,
+      "declWinRate": 65.4,
+      "games": 683
+    },
+    {
+      "gen": 258,
+      "sigma": 0.04,
+      "best": 302.5,
+      "mean": 2,
+      "declWinRate": 66.3,
+      "games": 698
+    },
+    {
+      "gen": 259,
+      "sigma": 0.04,
+      "best": 269.2,
+      "mean": -0.5,
+      "declWinRate": 63.8,
+      "games": 669
+    },
+    {
+      "gen": 260,
+      "sigma": 0.04,
+      "best": 313.9,
+      "mean": -1.8,
+      "declWinRate": 62.9,
+      "games": 680
+    },
+    {
+      "gen": 261,
+      "sigma": 0.04,
+      "best": 258.1,
+      "mean": 0.8,
+      "declWinRate": 66.1,
+      "games": 697
+    },
+    {
+      "gen": 262,
+      "sigma": 0.039,
+      "best": 257.6,
+      "mean": -1,
+      "declWinRate": 63.9,
+      "games": 675
+    },
+    {
+      "gen": 263,
+      "sigma": 0.039,
+      "best": 260.4,
+      "mean": -2.8,
+      "declWinRate": 64.4,
+      "games": 694
+    },
+    {
+      "gen": 264,
+      "sigma": 0.039,
+      "best": 317.9,
+      "mean": -2,
+      "declWinRate": 59,
+      "games": 646
+    },
+    {
+      "gen": 265,
+      "sigma": 0.038,
+      "best": 230.2,
+      "mean": 0,
+      "declWinRate": 60.8,
+      "games": 668
+    },
+    {
+      "gen": 266,
+      "sigma": 0.038,
+      "best": 249.6,
+      "mean": 1.3,
+      "declWinRate": 64.2,
+      "games": 671
+    },
+    {
+      "gen": 267,
+      "sigma": 0.038,
+      "best": 233.9,
+      "mean": -0.2,
+      "declWinRate": 57.4,
+      "games": 702
+    },
+    {
+      "gen": 268,
+      "sigma": 0.038,
+      "best": 319.5,
+      "mean": 2.2,
+      "declWinRate": 63.2,
+      "games": 702
+    },
+    {
+      "gen": 269,
+      "sigma": 0.037,
+      "best": 250.4,
+      "mean": -0.7,
+      "declWinRate": 62,
+      "games": 693
+    },
+    {
+      "gen": 270,
+      "sigma": 0.037,
+      "best": 201.6,
+      "mean": 0,
+      "declWinRate": 61.9,
+      "games": 682,
+      "benchVsDefault": 20.1
+    },
+    {
+      "gen": 271,
+      "sigma": 0.037,
+      "best": 340.2,
+      "mean": 1.3,
+      "declWinRate": 57.7,
+      "games": 698
+    },
+    {
+      "gen": 272,
+      "sigma": 0.037,
+      "best": 311.8,
+      "mean": -2.8,
+      "declWinRate": 61.7,
+      "games": 716
+    },
+    {
+      "gen": 273,
+      "sigma": 0.036,
+      "best": 299.2,
+      "mean": -1.2,
+      "declWinRate": 64.4,
+      "games": 703
+    },
+    {
+      "gen": 274,
+      "sigma": 0.036,
+      "best": 277.5,
+      "mean": -1.7,
+      "declWinRate": 60.9,
+      "games": 672
+    },
+    {
+      "gen": 275,
+      "sigma": 0.036,
+      "best": 250,
+      "mean": 0.1,
+      "declWinRate": 57.4,
+      "games": 705
+    },
+    {
+      "gen": 276,
+      "sigma": 0.036,
+      "best": 295.3,
+      "mean": -0.2,
+      "declWinRate": 60.8,
+      "games": 666
+    },
+    {
+      "gen": 277,
+      "sigma": 0.035,
+      "best": 297.4,
+      "mean": 0.3,
+      "declWinRate": 61.4,
+      "games": 664
+    },
+    {
+      "gen": 278,
+      "sigma": 0.035,
+      "best": 333.6,
+      "mean": -2,
+      "declWinRate": 63.2,
+      "games": 649
+    },
+    {
+      "gen": 279,
+      "sigma": 0.035,
+      "best": 200,
+      "mean": 0.8,
+      "declWinRate": 60,
+      "games": 685
+    },
+    {
+      "gen": 280,
+      "sigma": 0.035,
+      "best": 237.7,
+      "mean": -1.2,
+      "declWinRate": 58.9,
+      "games": 688
+    },
+    {
+      "gen": 281,
+      "sigma": 0.034,
+      "best": 433.3,
+      "mean": 1.7,
+      "declWinRate": 62.5,
+      "games": 661
+    },
+    {
+      "gen": 282,
+      "sigma": 0.034,
+      "best": 242.7,
+      "mean": -0.5,
+      "declWinRate": 60.9,
+      "games": 680
+    },
+    {
+      "gen": 283,
+      "sigma": 0.034,
+      "best": 226.6,
+      "mean": 4.4,
+      "declWinRate": 63.2,
+      "games": 682
+    },
+    {
+      "gen": 284,
+      "sigma": 0.034,
+      "best": 241.4,
+      "mean": 2,
+      "declWinRate": 61.7,
+      "games": 710
+    },
+    {
+      "gen": 285,
+      "sigma": 0.033,
+      "best": 360.2,
+      "mean": 0,
+      "declWinRate": 60.3,
+      "games": 673,
+      "benchVsDefault": 89.9
+    },
+    {
+      "gen": 286,
+      "sigma": 0.033,
+      "best": 503.3,
+      "mean": -1.3,
+      "declWinRate": 61.4,
+      "games": 678
+    },
+    {
+      "gen": 287,
+      "sigma": 0.033,
+      "best": 268.3,
+      "mean": -2.3,
+      "declWinRate": 65.3,
+      "games": 685
+    },
+    {
+      "gen": 288,
+      "sigma": 0.033,
+      "best": 222.9,
+      "mean": -0.5,
+      "declWinRate": 62.2,
+      "games": 649
+    },
+    {
+      "gen": 289,
+      "sigma": 0.032,
+      "best": 281.8,
+      "mean": -0.3,
+      "declWinRate": 60.4,
+      "games": 676
+    },
+    {
+      "gen": 290,
+      "sigma": 0.032,
+      "best": 171.6,
+      "mean": -0.5,
+      "declWinRate": 59.1,
+      "games": 685
+    },
+    {
+      "gen": 291,
+      "sigma": 0.032,
+      "best": 276.8,
+      "mean": -1.3,
+      "declWinRate": 61.6,
+      "games": 680
+    },
+    {
+      "gen": 292,
+      "sigma": 0.032,
+      "best": 254.3,
+      "mean": 1.4,
+      "declWinRate": 59.5,
+      "games": 676
+    },
+    {
+      "gen": 293,
+      "sigma": 0.032,
+      "best": 240.5,
+      "mean": -1.2,
+      "declWinRate": 61.8,
+      "games": 701
+    },
+    {
+      "gen": 294,
+      "sigma": 0.031,
+      "best": 125.6,
+      "mean": -0.6,
+      "declWinRate": 62,
+      "games": 697
+    },
+    {
+      "gen": 295,
+      "sigma": 0.031,
+      "best": 315.1,
+      "mean": 0.3,
+      "declWinRate": 62.2,
+      "games": 670
+    },
+    {
+      "gen": 296,
+      "sigma": 0.031,
+      "best": 253.5,
+      "mean": 0.5,
+      "declWinRate": 62.2,
+      "games": 707
+    },
+    {
+      "gen": 297,
+      "sigma": 0.031,
+      "best": 348.8,
+      "mean": -1.4,
+      "declWinRate": 61.2,
+      "games": 729
+    },
+    {
+      "gen": 298,
+      "sigma": 0.03,
+      "best": 203.6,
+      "mean": -3.1,
+      "declWinRate": 62.4,
+      "games": 718
+    },
+    {
+      "gen": 299,
+      "sigma": 0.03,
+      "best": 237.8,
+      "mean": 2.1,
+      "declWinRate": 60.6,
+      "games": 753
+    },
+    {
+      "gen": 300,
+      "sigma": 0.03,
+      "best": 243.1,
+      "mean": 0.7,
+      "declWinRate": 54.3,
+      "games": 726,
+      "benchVsDefault": 18.9
+    }
+  ],
+  "finalBenchVsDefault": {
+    "avgPrizePerGame": 55.2,
+    "games": 1682
+  },
+  "best": {
+    "fitness": 103.7,
+    "genome": {
+      "risk": 0.24610457193340496,
+      "friendCoop": 0.4958026789479373,
+      "defCoop": 0.7271728342499176,
+      "bidMargin": 0.5790830658601052,
+      "bidRiskScale": 1.6870544814747657,
+      "competeBase": 0.25790333948309835,
+      "competeRisk": 0.2386409785242662,
+      "selfThresh": 23.444104228592483,
+      "selfRisk": 0.04173203165546248,
+      "trumpLead": 2.526272267440874,
+      "jokerLeadMid": 3.9362287168701617,
+      "costLead": 0.2534107858008782,
+      "ptsValue": 2.055077163298538,
+      "trickBase": 0.0690523295635509,
+      "overtakeAvoid": 4.641572329405602,
+      "defendPts": 0.9670846483451339,
+      "costWin": 0.5515680942101314,
+      "riskPenalty": 0.47036174312247503,
+      "feed": 3.423442658098121,
+      "feedSafe": 0.4172318842613903,
+      "dumpPtsPenalty": 1.8747212149768573,
+      "costDump": 0.5094764767426747,
+      "runProtect": 2.4288049916020222,
+      "runBlock": 2.261866883217335,
+      "beatRisk": 0.05,
+      "friendGuard": 2.2821297104816782,
+      "mightyGate": 0.026377116234997167
+    }
+  },
+  "rankedPool": [
+    {
+      "fitness": 103.7,
+      "genome": {
+        "risk": 0.24610457193340496,
+        "friendCoop": 0.4958026789479373,
+        "defCoop": 0.7271728342499176,
+        "bidMargin": 0.5790830658601052,
+        "bidRiskScale": 1.6870544814747657,
+        "competeBase": 0.25790333948309835,
+        "competeRisk": 0.2386409785242662,
+        "selfThresh": 23.444104228592483,
+        "selfRisk": 0.04173203165546248,
+        "trumpLead": 2.526272267440874,
+        "jokerLeadMid": 3.9362287168701617,
+        "costLead": 0.2534107858008782,
+        "ptsValue": 2.055077163298538,
+        "trickBase": 0.0690523295635509,
+        "overtakeAvoid": 4.641572329405602,
+        "defendPts": 0.9670846483451339,
+        "costWin": 0.5515680942101314,
+        "riskPenalty": 0.47036174312247503,
+        "feed": 3.423442658098121,
+        "feedSafe": 0.4172318842613903,
+        "dumpPtsPenalty": 1.8747212149768573,
+        "costDump": 0.5094764767426747,
+        "runProtect": 2.4288049916020222,
+        "runBlock": 2.261866883217335,
+        "beatRisk": 0.05,
+        "friendGuard": 2.2821297104816782,
+        "mightyGate": 0.026377116234997167
+      }
+    },
+    {
+      "fitness": 95.4,
+      "genome": {
+        "risk": 0.2512155490772534,
+        "friendCoop": 0.4979394360768692,
+        "defCoop": 0.7022005872944557,
+        "bidMargin": 0.37204030876846284,
+        "bidRiskScale": 1.5939835922735988,
+        "competeBase": 0.25147853296829964,
+        "competeRisk": 0.23153410484208184,
+        "selfThresh": 23.50024512215006,
+        "selfRisk": 0.018649089115184973,
+        "trumpLead": 2.6728907592206124,
+        "jokerLeadMid": 3.8336407504079806,
+        "costLead": 0.27952275657601416,
+        "ptsValue": 2.1037671767795176,
+        "trickBase": 0.1945924270351052,
+        "overtakeAvoid": 4.841423591917923,
+        "defendPts": 1.0053204255764527,
+        "costWin": 0.6105758061696563,
+        "riskPenalty": 0.3598095305516324,
+        "feed": 3.2203391341863097,
+        "feedSafe": 0.39939409644459034,
+        "dumpPtsPenalty": 1.5547708106756706,
+        "costDump": 0.4602033552452488,
+        "runProtect": 2.634465904296225,
+        "runBlock": 2.2074085365853446,
+        "beatRisk": 0.07351008086851007,
+        "friendGuard": 2.160380450986109,
+        "mightyGate": 0.0020284732105018775
+      }
+    },
+    {
+      "fitness": 85.4,
+      "genome": {
+        "risk": 0.28900292286208756,
+        "friendCoop": 0.5042691351358438,
+        "defCoop": 0.7608594398519357,
+        "bidMargin": 0.45034868484988044,
+        "bidRiskScale": 1.57514855042219,
+        "competeBase": 0.2610124655962582,
+        "competeRisk": 0.21199587104303072,
+        "selfThresh": 23.349797641061613,
+        "selfRisk": 0.06568845182750674,
+        "trumpLead": 2.7273535235820137,
+        "jokerLeadMid": 4.0919879342030745,
+        "costLead": 0.25274361219882585,
+        "ptsValue": 2.128286290835329,
+        "trickBase": 0.23331715819751975,
+        "overtakeAvoid": 4.7068144788856525,
+        "defendPts": 0.8686345173004909,
+        "costWin": 0.5089578345169448,
+        "riskPenalty": 0.42349502718417653,
+        "feed": 3.5573046122809915,
+        "feedSafe": 0.399015512894284,
+        "dumpPtsPenalty": 1.9771453702287798,
+        "costDump": 0.503722908271735,
+        "runProtect": 2.4015334001046877,
+        "runBlock": 2.395078472316162,
+        "beatRisk": 0.0753221405248486,
+        "friendGuard": 2.2167973199989808,
+        "mightyGate": 0.2537936410692038
+      }
+    },
+    {
+      "fitness": 73.6,
+      "genome": {
+        "risk": 0.2196442918677262,
+        "friendCoop": 0.48174273981582527,
+        "defCoop": 0.7240249982481495,
+        "bidMargin": 0.42495381633570956,
+        "bidRiskScale": 1.6398773627405554,
+        "competeBase": 0.24401048945233955,
+        "competeRisk": 0.18718276059652406,
+        "selfThresh": 23.34618742628645,
+        "selfRisk": 0.08011492149485039,
+        "trumpLead": 2.5061796359443953,
+        "jokerLeadMid": 3.7420610658765514,
+        "costLead": 0.2892666971350488,
+        "ptsValue": 2.1239828399929563,
+        "trickBase": 0.1323102792449612,
+        "overtakeAvoid": 4.634834447889861,
+        "defendPts": 0.9185034932414688,
+        "costWin": 0.6011059789139896,
+        "riskPenalty": 0.3699660532672515,
+        "feed": 3.330510845201621,
+        "feedSafe": 0.43500224796375897,
+        "dumpPtsPenalty": 1.81424566078785,
+        "costDump": 0.4940700797486702,
+        "runProtect": 2.5017248258670586,
+        "runBlock": 2.249409771837941,
+        "beatRisk": 0.05477945663711481,
+        "friendGuard": 2.176331923898801,
+        "mightyGate": 0.1061180221095196
+      }
+    },
+    {
+      "fitness": 67,
+      "genome": {
+        "risk": 0.25420095666737963,
+        "friendCoop": 0.49602320320079296,
+        "defCoop": 0.7436545568226255,
+        "bidMargin": 0.49832140991986107,
+        "bidRiskScale": 1.6481125884196062,
+        "competeBase": 0.23649941496874333,
+        "competeRisk": 0.20185119174435295,
+        "selfThresh": 23.676292018140657,
+        "selfRisk": 0.035069896267047485,
+        "trumpLead": 2.5345916789048615,
+        "jokerLeadMid": 3.886801053613582,
+        "costLead": 0.26703976834373894,
+        "ptsValue": 2.032490408202953,
+        "trickBase": 0.09691090200102956,
+        "overtakeAvoid": 4.53393751521014,
+        "defendPts": 0.9778733321530024,
+        "costWin": 0.5807757017408133,
+        "riskPenalty": 0.45001682241338753,
+        "feed": 3.061691214340854,
+        "feedSafe": 0.4077784371633013,
+        "dumpPtsPenalty": 1.7026459757130814,
+        "costDump": 0.47518001253999337,
+        "runProtect": 2.384711648948756,
+        "runBlock": 2.2767149717257436,
+        "beatRisk": 0.060273152246497576,
+        "friendGuard": 2.1169240861536665,
+        "mightyGate": 0
+      }
+    },
+    {
+      "fitness": 46.7,
+      "genome": {
+        "risk": 0.2820282333025132,
+        "friendCoop": 0.5091715903869533,
+        "defCoop": 0.7169421890302451,
+        "bidMargin": 0.38609977574889465,
+        "bidRiskScale": 1.6449829173097208,
+        "competeBase": 0.27257358348645105,
+        "competeRisk": 0.21598460989599233,
+        "selfThresh": 23.369378660910094,
+        "selfRisk": 0.17649470512393794,
+        "trumpLead": 2.777919629816402,
+        "jokerLeadMid": 3.7938978730764,
+        "costLead": 0.2209947447769548,
+        "ptsValue": 2.051278656914518,
+        "trickBase": 0.10390079667144302,
+        "overtakeAvoid": 4.626571126132579,
+        "defendPts": 0.9735907071964162,
+        "costWin": 0.5015723783648558,
+        "riskPenalty": 0.49844134434574944,
+        "feed": 3.295457966734716,
+        "feedSafe": 0.4186071203056558,
+        "dumpPtsPenalty": 1.7619062357327169,
+        "costDump": 0.5220757706644238,
+        "runProtect": 2.3458313694266257,
+        "runBlock": 2.2696899689181307,
+        "beatRisk": 0.054822244089505784,
+        "friendGuard": 2.422295048743601,
+        "mightyGate": 0.038498314481315146
+      }
+    },
+    {
+      "fitness": 43.9,
+      "genome": {
+        "risk": 0.2669480972849761,
+        "friendCoop": 0.49578162484036015,
+        "defCoop": 0.7099060168476456,
+        "bidMargin": 0.4009651771473727,
+        "bidRiskScale": 1.6505281606251252,
+        "competeBase": 0.26913205958710773,
+        "competeRisk": 0.19433397661914867,
+        "selfThresh": 23.254940368156582,
+        "selfRisk": 0.15636939441172176,
+        "trumpLead": 2.5710620106247823,
+        "jokerLeadMid": 3.8909104239834993,
+        "costLead": 0.22398118406062056,
+        "ptsValue": 2.0675556530095256,
+        "trickBase": 0.11254878148150942,
+        "overtakeAvoid": 4.584183690479281,
+        "defendPts": 0.9493978993067771,
+        "costWin": 0.5690664817753285,
+        "riskPenalty": 0.4906592706932553,
+        "feed": 3.0287103737843375,
+        "feedSafe": 0.44239963752201206,
+        "dumpPtsPenalty": 1.8685723385580444,
+        "costDump": 0.5238151645426278,
+        "runProtect": 2.498223284120125,
+        "runBlock": 2.4378387543041526,
+        "beatRisk": 0.08341047602367574,
+        "friendGuard": 2.1547748021374113,
+        "mightyGate": 0
+      }
+    },
+    {
+      "fitness": 39.7,
+      "genome": {
+        "risk": 0.21569632923691376,
+        "friendCoop": 0.5270395963854808,
+        "defCoop": 0.7287162823686807,
+        "bidMargin": 0.3867696033343903,
+        "bidRiskScale": 1.6919794709047753,
+        "competeBase": 0.23690046382239258,
+        "competeRisk": 0.21035620912949335,
+        "selfThresh": 23.582981522213185,
+        "selfRisk": 0.06549989680076114,
+        "trumpLead": 2.8186820618566504,
+        "jokerLeadMid": 4.154060309412621,
+        "costLead": 0.24222778668389372,
+        "ptsValue": 2.054342747776167,
+        "trickBase": 0.13186580668932743,
+        "overtakeAvoid": 4.655910785965212,
+        "defendPts": 0.945040402917441,
+        "costWin": 0.6013239368423896,
+        "riskPenalty": 0.3891455082261266,
+        "feed": 3.135603378836411,
+        "feedSafe": 0.41792725309085216,
+        "dumpPtsPenalty": 1.8442013754684794,
+        "costDump": 0.4758724166880102,
+        "runProtect": 2.46579981028894,
+        "runBlock": 2.306911875873542,
+        "beatRisk": 0.06227040720860776,
+        "friendGuard": 2.075528471995328,
+        "mightyGate": 0.10793620357177368
+      }
+    },
+    {
+      "fitness": 38.7,
+      "genome": {
+        "risk": 0.204914783779441,
+        "friendCoop": 0.5203257217652502,
+        "defCoop": 0.753152391014498,
+        "bidMargin": 0.4307545218385489,
+        "bidRiskScale": 1.7311625749633193,
+        "competeBase": 0.2647327938596401,
+        "competeRisk": 0.2097828566078997,
+        "selfThresh": 23.40581311186826,
+        "selfRisk": 0.0498181864840062,
+        "trumpLead": 2.9316282082420413,
+        "jokerLeadMid": 4.1262924282402915,
+        "costLead": 0.25359291475769036,
+        "ptsValue": 2.019028496607875,
+        "trickBase": 0.14532141846324648,
+        "overtakeAvoid": 4.529332540711166,
+        "defendPts": 0.9126473958419202,
+        "costWin": 0.5968001932491381,
+        "riskPenalty": 0.47092382474518124,
+        "feed": 3.4374166416788126,
+        "feedSafe": 0.4002512244708525,
+        "dumpPtsPenalty": 1.7503666211663411,
+        "costDump": 0.4808217345162231,
+        "runProtect": 2.4721295299412804,
+        "runBlock": 2.4304253563260896,
+        "beatRisk": 0.06555238566881504,
+        "friendGuard": 2.085013761083105,
+        "mightyGate": 0.25873642543958375
+      }
+    },
+    {
+      "fitness": 28,
+      "genome": {
+        "risk": 0.2639585662835736,
+        "friendCoop": 0.47980988428330157,
+        "defCoop": 0.7604742976581422,
+        "bidMargin": 0.4632708642245185,
+        "bidRiskScale": 1.5872770491892394,
+        "competeBase": 0.27368910131447843,
+        "competeRisk": 0.2040879770337265,
+        "selfThresh": 23.356972400012943,
+        "selfRisk": 0.03146311680364968,
+        "trumpLead": 2.2744510906771302,
+        "jokerLeadMid": 3.946882844242242,
+        "costLead": 0.24278970174049544,
+        "ptsValue": 2.1820151588732224,
+        "trickBase": 0.16250220318124542,
+        "overtakeAvoid": 4.705755234545434,
+        "defendPts": 0.9527167936393386,
+        "costWin": 0.5594787092413325,
+        "riskPenalty": 0.3387340284330712,
+        "feed": 3.4361609318434967,
+        "feedSafe": 0.41742218006707144,
+        "dumpPtsPenalty": 1.5174987634364607,
+        "costDump": 0.4647124198228044,
+        "runProtect": 2.473906763100993,
+        "runBlock": 2.3562070213568513,
+        "beatRisk": 0.07588058123053851,
+        "friendGuard": 2.0481152128554414,
+        "mightyGate": 0.1601958002565961
+      }
+    },
+    {
+      "fitness": 21,
+      "genome": {
+        "risk": 0.25571250560018355,
+        "friendCoop": 0.5059708411396688,
+        "defCoop": 0.7097914564548701,
+        "bidMargin": 0.42597157672935015,
+        "bidRiskScale": 1.6238032800186621,
+        "competeBase": 0.25245103279581343,
+        "competeRisk": 0.19804932866989833,
+        "selfThresh": 23.414043914786,
+        "selfRisk": 0.15337288968246898,
+        "trumpLead": 2.573240507751834,
+        "jokerLeadMid": 3.7188264105240494,
+        "costLead": 0.277164383064845,
+        "ptsValue": 2.101149013596184,
+        "trickBase": 0.136955693013155,
+        "overtakeAvoid": 4.5987023912555385,
+        "defendPts": 0.9591869550296522,
+        "costWin": 0.584801496702195,
+        "riskPenalty": 0.49944707596490423,
+        "feed": 3.049877243664252,
+        "feedSafe": 0.4240266278618708,
+        "dumpPtsPenalty": 1.7696098006825463,
+        "costDump": 0.4621449127870848,
+        "runProtect": 2.544536418953934,
+        "runBlock": 2.36109600352495,
+        "beatRisk": 0.07091543942226045,
+        "friendGuard": 2.2082102003310444,
+        "mightyGate": 0.060247292409703126
+      }
+    },
+    {
+      "fitness": 8.4,
+      "genome": {
+        "risk": 0.27194783669982725,
+        "friendCoop": 0.5035685012626343,
+        "defCoop": 0.7353341033071703,
+        "bidMargin": 0.4283686667055084,
+        "bidRiskScale": 1.6232561317929775,
+        "competeBase": 0.2547476485423902,
+        "competeRisk": 0.2125384418707015,
+        "selfThresh": 23.46535095234266,
+        "selfRisk": 0.2058568829537475,
+        "trumpLead": 2.7999615886597775,
+        "jokerLeadMid": 3.7916506391823797,
+        "costLead": 0.20996531421308287,
+        "ptsValue": 2.0532005731508107,
+        "trickBase": 0.10731620073658486,
+        "overtakeAvoid": 4.570654596158121,
+        "defendPts": 0.9247055009181837,
+        "costWin": 0.5064103866654627,
+        "riskPenalty": 0.47696374749344483,
+        "feed": 3.0720004521510966,
+        "feedSafe": 0.4021383880699283,
+        "dumpPtsPenalty": 1.9967209512528628,
+        "costDump": 0.5296991291933748,
+        "runProtect": 2.486595318038424,
+        "runBlock": 2.3290471756589657,
+        "beatRisk": 0.08062370659728149,
+        "friendGuard": 2.2109284212365923,
+        "mightyGate": 0.11674769131662872
+      }
+    },
+    {
+      "fitness": -3.7,
+      "genome": {
+        "risk": 0.25436275562848815,
+        "friendCoop": 0.5080430204583674,
+        "defCoop": 0.7485546577838463,
+        "bidMargin": 0.36239446040684303,
+        "bidRiskScale": 1.6910379694223745,
+        "competeBase": 0.25112467754152773,
+        "competeRisk": 0.20144463959491984,
+        "selfThresh": 23.313675454367743,
+        "selfRisk": 0.14990988135141003,
+        "trumpLead": 2.656950523115998,
+        "jokerLeadMid": 4.138287004139129,
+        "costLead": 0.23664710729864757,
+        "ptsValue": 2.016789337186151,
+        "trickBase": 0.14363490609818663,
+        "overtakeAvoid": 4.678181943065908,
+        "defendPts": 0.9262557244254224,
+        "costWin": 0.5898148588461104,
+        "riskPenalty": 0.4348377982997881,
+        "feed": 3.2438024369884775,
+        "feedSafe": 0.3906890656703827,
+        "dumpPtsPenalty": 1.868955670129565,
+        "costDump": 0.517011134801934,
+        "runProtect": 2.471575034496362,
+        "runBlock": 2.296701127031783,
+        "beatRisk": 0.07212308149874717,
+        "friendGuard": 2.1415829586725126,
+        "mightyGate": 0.08499346127051387
+      }
+    },
+    {
+      "fitness": -9.4,
+      "genome": {
+        "risk": 0.25548509523013974,
+        "friendCoop": 0.49869209954295124,
+        "defCoop": 0.7588697644558029,
+        "bidMargin": 0.4584056301730438,
+        "bidRiskScale": 1.7887005907963196,
+        "competeBase": 0.2540581521341788,
+        "competeRisk": 0.19502780867491137,
+        "selfThresh": 23.40622737896082,
+        "selfRisk": 0.21172742654729715,
+        "trumpLead": 2.7092053375699474,
+        "jokerLeadMid": 4.342362459868782,
+        "costLead": 0.28499826854557514,
+        "ptsValue": 2.1332264397341643,
+        "trickBase": 0.12310711786445801,
+        "overtakeAvoid": 4.537197104352536,
+        "defendPts": 0.9549899941019329,
+        "costWin": 0.537238931562821,
+        "riskPenalty": 0.5028178887816442,
+        "feed": 3.199442149479986,
+        "feedSafe": 0.42436098654137244,
+        "dumpPtsPenalty": 1.6712771687679833,
+        "costDump": 0.48567905908032183,
+        "runProtect": 2.2786509943032915,
+        "runBlock": 2.3273026268169126,
+        "beatRisk": 0.08299480042766348,
+        "friendGuard": 2.4854068248479657,
+        "mightyGate": 0.054015988277615584
+      }
+    },
+    {
+      "fitness": -15.5,
+      "genome": {
+        "risk": 0.24222167825090057,
+        "friendCoop": 0.4942934777448907,
+        "defCoop": 0.7318423683276536,
+        "bidMargin": 0.3758440315906492,
+        "bidRiskScale": 1.5634497465959007,
+        "competeBase": 0.2510114463891467,
+        "competeRisk": 0.20714111545835076,
+        "selfThresh": 23.51417999355789,
+        "selfRisk": 0.004644964626316729,
+        "trumpLead": 2.450807800662346,
+        "jokerLeadMid": 3.859508380047882,
+        "costLead": 0.2654921731524428,
+        "ptsValue": 2.127004377183228,
+        "trickBase": 0.13125234016301832,
+        "overtakeAvoid": 4.704059029608548,
+        "defendPts": 0.9117412096287713,
+        "costWin": 0.5856191075351865,
+        "riskPenalty": 0.32154668872460096,
+        "feed": 3.141202089906626,
+        "feedSafe": 0.4361793221213379,
+        "dumpPtsPenalty": 1.519027613868694,
+        "costDump": 0.45757506720096003,
+        "runProtect": 2.455075851268437,
+        "runBlock": 2.305077965068999,
+        "beatRisk": 0.06571677953969836,
+        "friendGuard": 2.0603018174715952,
+        "mightyGate": 0
+      }
+    },
+    {
+      "fitness": -27.1,
+      "genome": {
+        "risk": 0.25518675550570236,
+        "friendCoop": 0.5139886737007733,
+        "defCoop": 0.7346988835309919,
+        "bidMargin": 0.46067057992101806,
+        "bidRiskScale": 1.7319570367394779,
+        "competeBase": 0.2533975324565092,
+        "competeRisk": 0.18856017628707536,
+        "selfThresh": 23.448527192940105,
+        "selfRisk": 0.1743068973307795,
+        "trumpLead": 2.801702113855856,
+        "jokerLeadMid": 3.8926150046400396,
+        "costLead": 0.2926675592437958,
+        "ptsValue": 2.0917107098658465,
+        "trickBase": 0.14820419494567064,
+        "overtakeAvoid": 4.5114010924915995,
+        "defendPts": 0.9610332277712077,
+        "costWin": 0.5396499702773878,
+        "riskPenalty": 0.4950109873973171,
+        "feed": 3.1116220631156395,
+        "feedSafe": 0.42473750064744487,
+        "dumpPtsPenalty": 1.619298566592608,
+        "costDump": 0.49409439031254,
+        "runProtect": 2.4679535288304604,
+        "runBlock": 2.2365387232340312,
+        "beatRisk": 0.08324798792042176,
+        "friendGuard": 2.3407321750482306,
+        "mightyGate": 0.029383198879864295
+      }
+    },
+    {
+      "fitness": -29.3,
+      "genome": {
+        "risk": 0.2467284926913072,
+        "friendCoop": 0.5188009218412857,
+        "defCoop": 0.7228744539925616,
+        "bidMargin": 0.380799405999891,
+        "bidRiskScale": 1.6148570910162718,
+        "competeBase": 0.2602701378943566,
+        "competeRisk": 0.22652659009918943,
+        "selfThresh": 23.3388804517665,
+        "selfRisk": 0.07213682449452335,
+        "trumpLead": 2.5575340905738972,
+        "jokerLeadMid": 3.5770633220185784,
+        "costLead": 0.20957929790575536,
+        "ptsValue": 2.047117258975575,
+        "trickBase": 0.10437581949056965,
+        "overtakeAvoid": 4.758425087177997,
+        "defendPts": 0.8594666506776436,
+        "costWin": 0.5038488901947095,
+        "riskPenalty": 0.31230704247520547,
+        "feed": 3.225597786762384,
+        "feedSafe": 0.4064083151156237,
+        "dumpPtsPenalty": 1.5293816481812532,
+        "costDump": 0.49387295510281765,
+        "runProtect": 2.461987358983691,
+        "runBlock": 2.4286460481066428,
+        "beatRisk": 0.05486292989357024,
+        "friendGuard": 2.000631210402716,
+        "mightyGate": 0
+      }
+    },
+    {
+      "fitness": -29.7,
+      "genome": {
+        "risk": 0.23972028277163715,
+        "friendCoop": 0.4879807267432516,
+        "defCoop": 0.7271728342499176,
+        "bidMargin": 0.5382232944258875,
+        "bidRiskScale": 1.764926610431717,
+        "competeBase": 0.2506915253054101,
+        "competeRisk": 0.2386409785242662,
+        "selfThresh": 23.385616516484884,
+        "selfRisk": 0.09368595658704826,
+        "trumpLead": 2.341131251046974,
+        "jokerLeadMid": 3.9362287168701617,
+        "costLead": 0.2534107858008782,
+        "ptsValue": 1.9746257835821417,
+        "trickBase": 0.0690523295635509,
+        "overtakeAvoid": 4.74751027368838,
+        "defendPts": 0.9670846483451339,
+        "costWin": 0.5720500395045526,
+        "riskPenalty": 0.47036174312247503,
+        "feed": 3.4234426580981214,
+        "feedSafe": 0.4172318842613903,
+        "dumpPtsPenalty": 1.6832884742885332,
+        "costDump": 0.4892272635183978,
+        "runProtect": 2.5255153451329657,
+        "runBlock": 2.192834766200722,
+        "beatRisk": 0.06033354467200115,
+        "friendGuard": 2.2821297104816782,
+        "mightyGate": 0.08300519448055502
+      }
+    },
+    {
+      "fitness": -31.9,
+      "genome": {
+        "risk": 0.2781526699292532,
+        "friendCoop": 0.4955420951919479,
+        "defCoop": 0.7262749850549348,
+        "bidMargin": 0.4247642607255698,
+        "bidRiskScale": 1.654689257214164,
+        "competeBase": 0.27291217540887613,
+        "competeRisk": 0.197939111319259,
+        "selfThresh": 23.537873858344923,
+        "selfRisk": 0.1524056929350089,
+        "trumpLead": 2.6903712124253247,
+        "jokerLeadMid": 3.9961436328377085,
+        "costLead": 0.2685301376328997,
+        "ptsValue": 2.140650907029081,
+        "trickBase": 0.14976451260594548,
+        "overtakeAvoid": 4.567362187654587,
+        "defendPts": 0.9400366285866365,
+        "costWin": 0.5515809015231077,
+        "riskPenalty": 0.4981109923796444,
+        "feed": 3.2512680139224956,
+        "feedSafe": 0.41801509928621194,
+        "dumpPtsPenalty": 1.7366048582677265,
+        "costDump": 0.5142926949758989,
+        "runProtect": 2.56222056377703,
+        "runBlock": 2.3576873151026936,
+        "beatRisk": 0.07452822652678324,
+        "friendGuard": 2.246210403360993,
+        "mightyGate": 0.07183999177390948
+      }
+    },
+    {
+      "fitness": -33.9,
+      "genome": {
+        "risk": 0.28917745178950083,
+        "friendCoop": 0.5163915227497797,
+        "defCoop": 0.7460921260473067,
+        "bidMargin": 0.4520257309341801,
+        "bidRiskScale": 1.523446130261469,
+        "competeBase": 0.2719405902376573,
+        "competeRisk": 0.19759634326917644,
+        "selfThresh": 23.698912554106638,
+        "selfRisk": 0.06942405468017093,
+        "trumpLead": 2.8268307953521896,
+        "jokerLeadMid": 4.017749138995771,
+        "costLead": 0.260686240766114,
+        "ptsValue": 1.9984148333454244,
+        "trickBase": 0.1773263154022022,
+        "overtakeAvoid": 4.714948189307055,
+        "defendPts": 0.9891598396389903,
+        "costWin": 0.5268720981366655,
+        "riskPenalty": 0.49720664583043095,
+        "feed": 3.5313513798902965,
+        "feedSafe": 0.39765973354354045,
+        "dumpPtsPenalty": 1.7168932838012092,
+        "costDump": 0.4829956203549379,
+        "runProtect": 2.4929792127596393,
+        "runBlock": 2.3574243257124485,
+        "beatRisk": 0.07542183637578384,
+        "friendGuard": 2.073732103706595,
+        "mightyGate": 0.11804356839041238
+      }
+    },
+    {
+      "fitness": -44.5,
+      "genome": {
+        "risk": 0.26219990102733776,
+        "friendCoop": 0.49829237068300153,
+        "defCoop": 0.7250912364510095,
+        "bidMargin": 0.36813074507135424,
+        "bidRiskScale": 1.6667425920225005,
+        "competeBase": 0.2564119730391031,
+        "competeRisk": 0.22075393699275514,
+        "selfThresh": 23.448886453363674,
+        "selfRisk": 0.10522743125871327,
+        "trumpLead": 2.7746460335150602,
+        "jokerLeadMid": 4.080024650305744,
+        "costLead": 0.271322851774435,
+        "ptsValue": 1.9993228228779538,
+        "trickBase": 0.08744727428251799,
+        "overtakeAvoid": 4.678469803106706,
+        "defendPts": 0.9778062162974847,
+        "costWin": 0.5670352734900233,
+        "riskPenalty": 0.46763114010032214,
+        "feed": 3.2972629352912084,
+        "feedSafe": 0.4100511029946987,
+        "dumpPtsPenalty": 1.8807429238587674,
+        "costDump": 0.535702994795402,
+        "runProtect": 2.5227114133002715,
+        "runBlock": 2.254562152583115,
+        "beatRisk": 0.08158441308745078,
+        "friendGuard": 2.2236785023579113,
+        "mightyGate": 0.0055778978220428705
+      }
+    },
+    {
+      "fitness": -46.7,
+      "genome": {
+        "risk": 0.2630772383273657,
+        "friendCoop": 0.5080987637685979,
+        "defCoop": 0.7460351559977844,
+        "bidMargin": 0.4421937287965315,
+        "bidRiskScale": 1.5085985932703336,
+        "competeBase": 0.2820036825615149,
+        "competeRisk": 0.19789878472129624,
+        "selfThresh": 23.726351091198044,
+        "selfRisk": 0.2270421749477091,
+        "trumpLead": 2.790844631969059,
+        "jokerLeadMid": 3.9359625441869137,
+        "costLead": 0.25862024646245146,
+        "ptsValue": 1.9845151243662862,
+        "trickBase": 0.10572196314817013,
+        "overtakeAvoid": 4.768491561256474,
+        "defendPts": 0.9634496892360374,
+        "costWin": 0.5101232697996296,
+        "riskPenalty": 0.5540157119877366,
+        "feed": 3.241878170265395,
+        "feedSafe": 0.3985900368017357,
+        "dumpPtsPenalty": 1.7456748564591351,
+        "costDump": 0.5006751540181942,
+        "runProtect": 2.4871582294416235,
+        "runBlock": 2.418626633178683,
+        "beatRisk": 0.08017070055055503,
+        "friendGuard": 2.1486539262165234,
+        "mightyGate": 0.09904610585918061
+      }
+    },
+    {
+      "fitness": -48.7,
+      "genome": {
+        "risk": 0.2578079544536073,
+        "friendCoop": 0.4921072317202167,
+        "defCoop": 0.7312696324739176,
+        "bidMargin": 0.4431780695303227,
+        "bidRiskScale": 1.641056694468323,
+        "competeBase": 0.2457485949281296,
+        "competeRisk": 0.19230337150369317,
+        "selfThresh": 23.50045836824661,
+        "selfRisk": 0.031496817442144304,
+        "trumpLead": 2.712349945819192,
+        "jokerLeadMid": 3.8227042410647187,
+        "costLead": 0.29771860518550103,
+        "ptsValue": 2.0684038994672456,
+        "trickBase": 0.1548626579793312,
+        "overtakeAvoid": 4.542537762140073,
+        "defendPts": 0.9302585555935243,
+        "costWin": 0.5272536419225295,
+        "riskPenalty": 0.44343130342336884,
+        "feed": 3.18282627982786,
+        "feedSafe": 0.41893962624939324,
+        "dumpPtsPenalty": 1.8474422756570323,
+        "costDump": 0.4878398477809066,
+        "runProtect": 2.374131185040277,
+        "runBlock": 2.2699440604531715,
+        "beatRisk": 0.08068648806246265,
+        "friendGuard": 2.254648895269655,
+        "mightyGate": 0.08051483773135298
+      }
+    },
+    {
+      "fitness": -50.6,
+      "genome": {
+        "risk": 0.27928167575564855,
+        "friendCoop": 0.5102003180039257,
+        "defCoop": 0.7227063236926072,
+        "bidMargin": 0.4599088160015956,
+        "bidRiskScale": 1.6163699204992348,
+        "competeBase": 0.2524916576287554,
+        "competeRisk": 0.21698183218587563,
+        "selfThresh": 23.56769752746873,
+        "selfRisk": 0.052813013895683894,
+        "trumpLead": 2.814571341977032,
+        "jokerLeadMid": 4.017770044646384,
+        "costLead": 0.26269534380046006,
+        "ptsValue": 1.9714641328697782,
+        "trickBase": 0.17238620866138746,
+        "overtakeAvoid": 4.710588296830189,
+        "defendPts": 0.9804876392269226,
+        "costWin": 0.5276583257476463,
+        "riskPenalty": 0.4975427551009134,
+        "feed": 3.0739372352748746,
+        "feedSafe": 0.42193329494167797,
+        "dumpPtsPenalty": 1.7245138296842957,
+        "costDump": 0.49112077776961743,
+        "runProtect": 2.537439229814117,
+        "runBlock": 2.3813319126703556,
+        "beatRisk": 0.09215646159541299,
+        "friendGuard": 2.106414188366831,
+        "mightyGate": 0.05243164522643239
+      }
+    },
+    {
+      "fitness": -58.9,
+      "genome": {
+        "risk": 0.24924460783936514,
+        "friendCoop": 0.5193957789326743,
+        "defCoop": 0.7373781603401761,
+        "bidMargin": 0.34156699072809205,
+        "bidRiskScale": 1.7019224535588704,
+        "competeBase": 0.2542117348247316,
+        "competeRisk": 0.18277117521643346,
+        "selfThresh": 23.463812819001255,
+        "selfRisk": 0.2209136697669854,
+        "trumpLead": 2.804432900917518,
+        "jokerLeadMid": 3.9986755185349905,
+        "costLead": 0.28623818096158654,
+        "ptsValue": 2.1253672132444956,
+        "trickBase": 0.13655451139189306,
+        "overtakeAvoid": 4.543926993596908,
+        "defendPts": 0.8866860828533175,
+        "costWin": 0.5676063769507571,
+        "riskPenalty": 0.46392920247126035,
+        "feed": 3.271935547463848,
+        "feedSafe": 0.4206292871518499,
+        "dumpPtsPenalty": 1.7407671558741442,
+        "costDump": 0.4750051837640926,
+        "runProtect": 2.466363594341927,
+        "runBlock": 2.198691557629594,
+        "beatRisk": 0.06497642188705649,
+        "friendGuard": 2.007294111268244,
+        "mightyGate": 0.09377919167949908
+      }
+    },
+    {
+      "fitness": -60.2,
+      "genome": {
+        "risk": 0.26113229984624253,
+        "friendCoop": 0.5018980029635285,
+        "defCoop": 0.7444272596855872,
+        "bidMargin": 0.47372130580405136,
+        "bidRiskScale": 1.7202616132686144,
+        "competeBase": 0.25418281362577066,
+        "competeRisk": 0.23138014706192467,
+        "selfThresh": 23.56728186561879,
+        "selfRisk": 0.09070186088742292,
+        "trumpLead": 2.757796135801077,
+        "jokerLeadMid": 4.312154720082964,
+        "costLead": 0.26545398433303874,
+        "ptsValue": 2.07766457715103,
+        "trickBase": 0.19122391128183885,
+        "overtakeAvoid": 4.548715147122549,
+        "defendPts": 0.9709500754390858,
+        "costWin": 0.5281520935014913,
+        "riskPenalty": 0.4565255510245664,
+        "feed": 3.18366428809466,
+        "feedSafe": 0.4187853702298283,
+        "dumpPtsPenalty": 1.756665977793743,
+        "costDump": 0.47218589848694553,
+        "runProtect": 2.393646003235942,
+        "runBlock": 2.311611574013605,
+        "beatRisk": 0.06964069489786938,
+        "friendGuard": 2.2044356938954595,
+        "mightyGate": 0.07152983547357816
+      }
+    },
+    {
+      "fitness": -70.3,
+      "genome": {
+        "risk": 0.247091909280181,
+        "friendCoop": 0.5114772011987975,
+        "defCoop": 0.7348494201502502,
+        "bidMargin": 0.44499744673425745,
+        "bidRiskScale": 1.7175153244500325,
+        "competeBase": 0.24533736291955646,
+        "competeRisk": 0.2073907348510612,
+        "selfThresh": 23.458762667700782,
+        "selfRisk": 0.20476516307167095,
+        "trumpLead": 3.0344025697214723,
+        "jokerLeadMid": 3.89201138729136,
+        "costLead": 0.23787207063072865,
+        "ptsValue": 2.0869278751992715,
+        "trickBase": 0.08514719322973929,
+        "overtakeAvoid": 4.507868743894414,
+        "defendPts": 0.9545800144780361,
+        "costWin": 0.5098865303233258,
+        "riskPenalty": 0.4825383797015048,
+        "feed": 3.1761948973215492,
+        "feedSafe": 0.41354177737893644,
+        "dumpPtsPenalty": 1.9498943441267569,
+        "costDump": 0.5111241858321808,
+        "runProtect": 2.5477255409251356,
+        "runBlock": 2.4026558371054723,
+        "beatRisk": 0.09555283408199075,
+        "friendGuard": 2.3010709333044237,
+        "mightyGate": 0.04845112154154328
+      }
+    },
+    {
+      "fitness": -95.5,
+      "genome": {
+        "risk": 0.250171726658227,
+        "friendCoop": 0.5357065604735336,
+        "defCoop": 0.725540790516795,
+        "bidMargin": 0.5072009418739528,
+        "bidRiskScale": 1.5783513814005534,
+        "competeBase": 0.26068850906349134,
+        "competeRisk": 0.2081128629359534,
+        "selfThresh": 23.69778919269582,
+        "selfRisk": 0.14197512876714588,
+        "trumpLead": 2.5812325511292773,
+        "jokerLeadMid": 3.8162607832405655,
+        "costLead": 0.2504072885760895,
+        "ptsValue": 2.1193360163905934,
+        "trickBase": 0.11106173423796581,
+        "overtakeAvoid": 4.662351540596314,
+        "defendPts": 0.9414948927021587,
+        "costWin": 0.5581110114555341,
+        "riskPenalty": 0.4851341501471987,
+        "feed": 3.452238093987828,
+        "feedSafe": 0.42989508742239735,
+        "dumpPtsPenalty": 1.6310896176395138,
+        "costDump": 0.4826025490709548,
+        "runProtect": 2.624404258040924,
+        "runBlock": 2.30604366584455,
+        "beatRisk": 0.05830942300106101,
+        "friendGuard": 2.1893114628885813,
+        "mightyGate": 0.04564744649129713
+      }
+    }
+  ]
+}

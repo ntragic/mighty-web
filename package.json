@@ -1,0 +1,26 @@
+{
+  "name": "mighty-web",
+  "version": "1.2.3",
+  "private": true,
+  "description": "혼자 즐기는 5인 마이티 카드게임 — 단일 HTML 정적 배포",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "check": "node tools/build.mjs --check",
+    "test": "node tests/mighty-engine.test.js && node tests/smoke.test.js && node tests/replay-resume.test.js",
+    "test:engine": "node tests/mighty-engine.test.js",
+    "test:ui": "node tests/smoke.test.js",
+    "serve": "node tools/serve.mjs",
+    "release": "bash tools/release.sh",
+    "bench": "node tools/bench-tiers.js 1200",
+    "accept": "node tools/accept-v4.js 900 advanced",
+    "profile": "node tools/profile-v4.js 700",
+    "league": "node tools/league-v4.js 700",
+    "sim": "node tools/sim.js",
+    "parity": "node tools/dump-traces.js 400 && cd training && python3 parity_test.py",
+    "test:replay": "node tests/replay-resume.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0",
+    "onnxruntime-node": "^1.20.0"
+  }
+}
