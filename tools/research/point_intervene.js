@@ -1,0 +1,138 @@
+/**
+ * 점수카드 규율 개입 실험 — 지표 차이가 실제 승률로 이어지는지 본다.
+ *
+ * 조건부 지표는 정책이 그 부분집합을 스스로 만들기 때문에 단독으로는 결함 근거가
+ * 못 된다. 같은 시드·같은 상대(공통 난수)로 개입/무개입을 짝지어 상금 차이를 잰다.
+ *
+ *   add  : 아군이 잠근 트릭에서 탑 아닌 점수카드 중 가장 낮은 것을 강제로 낸다
+ *   feed : 야당이 잠근 트릭에서 점수 아닌 카드를 강제로 낸다
+ *   both : 둘 다
+ *
+ * 사용: node tools/research/point_intervene.js [판수] [add|feed|both]
+ *   env MODEL=경로 · KEY_GUARD=off
+ */
+'use strict';
+const path = require('path');
+const P = p => path.join(__dirname, p);
+const ort = require('onnxruntime-node');
+const E = require(P('../../src/mighty-engine.js'));
+const AI = require(P('../../src/mighty-ai.js'));
+const MODEL = process.env.MODEL || P('../../web/model/mighty_master_v4.onnx');
+const GUARD = process.env.KEY_GUARD !== 'off';
+const PER = ['gambler', 'balanced', 'careful'];
+
+const strength = (g, e, pl) => g._cardStrength(e, pl);
+const stronger = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+
+function lockedTrick(g, seat) {
+  const pl = g.play;
+  if (!pl || pl.table.length === 0) return null;
+  const decl = g.declarer, fr = g.friend;
+  if (decl == null) return null;
+  const team = p => (p === decl || (fr !== null && p === fr)) ? 'R' : 'O';
+  let best = null, bk = [-2, -1];
+  for (const e of pl.table) { const k = strength(g, e, pl); if (stronger(k, bk)) { bk = k; best = e; } }
+  if (!best || best.player === seat) return null;
+  const acted = new Set(pl.table.map(e => e.player)); acted.add(seat);
+  for (let p = 0; p < E.NUM_PLAYERS; p++) {
+    if (acted.has(p)) continue;
+    for (const m of g._legalPlays(p)) {
+      const k = strength(g, { player: p, card: m.card, jokerSuit: m.jokerSuit, jokerCall: m.jokerCall }, pl);
+      if (stronger(k, bk)) return null;
+    }
+  }
+  return { allyWins: team(best.player) === team(seat) };
+}
+
+function isTopOfSuit(g, seat, card) {
+  if (E.isJoker(card)) return true;
+  for (let p = 0; p < E.NUM_PLAYERS; p++) {
+    for (const x of g.hands[p]) {
+      if (p === seat && E.sameCard(x, card)) continue;
+      if (E.isJoker(x) || x.suit !== card.suit) continue;
+      if (x.rank > card.rank) return false;
+    }
+  }
+  return true;
+}
+
+/** 개입 액션을 돌려준다. 개입할 상황이 아니면 null. */
+function override(g, seat, mode) {
+  const lock = lockedTrick(g, seat);
+  if (!lock) return null;
+  const isKey = c => E.isJoker(c) || E.sameCard(c, g.mightyCard);
+  const legal = g._legalPlays(seat).filter(m => !m.jokerCall);
+  if (lock.allyWins) {
+    if (mode !== 'add' && mode !== 'both') return null;
+    const safe = legal.filter(m => E.isPointCard(m.card) && !isKey(m.card) && !isTopOfSuit(g, seat, m.card));
+    const nonPts = legal.filter(m => !E.isPointCard(m.card) && !isKey(m.card));
+    if (!safe.length || !nonPts.length) return null;
+    safe.sort((a, b) => (a.card.rank || 0) - (b.card.rank || 0));
+    return { type: 'play', card: safe[0].card };
+  }
+  if (mode !== 'feed' && mode !== 'both') return null;
+  const pts = legal.filter(m => E.isPointCard(m.card) && !isKey(m.card));
+  const nonPts = legal.filter(m => !E.isPointCard(m.card) && !isKey(m.card));
+  if (!pts.length || !nonPts.length) return null;
+  nonPts.sort((a, b) => (a.card.rank || 0) - (b.card.rank || 0));
+  return { type: 'play', card: nonPts[0].card };
+}
+
+async function run(N, mode, sess) {
+  const per = [];
+  let seat = 0, hits = 0;
+  for (let i = 0; i < N; i++) {
+    const rng = E.makeRng(900000 + i);
+    const g = new E.MightyGame({ seed: 900000 + i });
+    const ag = [];
+    for (let s = 0; s < E.NUM_PLAYERS; s++) ag.push(s === seat
+      ? await AI.createAgent({ tier: 'master', session: sess, ort, keyGuard: GUARD })
+      : await AI.createAgent({ tier: 'advanced', persona: PER[s % 3], rng }));
+    g.start(Math.floor(rng() * E.NUM_PLAYERS));
+    let guard = 0;
+    while (g.phase !== 'done' && g.phase !== 'redeal') {
+      const p = g.currentPlayer;
+      let act = null;
+      if (mode !== 'none' && g.phase === 'play' && p === seat) {
+        const o = override(g, p, mode);
+        if (o) { act = o; hits++; }
+      }
+      if (!act) act = await ag[p].act(g, p);
+      g.act(act);
+      if (++guard > 900) break;
+    }
+    per.push(g.phase === 'done' ? { seed: 900000 + i, seat, prize: g.result.prizes[seat] } : null);
+    if (g.phase === 'done') seat = (seat + 1) % E.NUM_PLAYERS;
+  }
+  return { per, hits };
+}
+
+(async () => {
+  const N = parseInt(process.argv[2] || '600', 10);
+  const modes = (process.argv[3] || 'add,feed,both').split(',');
+  const sess = await ort.InferenceSession.create(MODEL);
+
+  const base = await run(N, 'none', sess);
+  const key = r => r && `${r.seed}:${r.seat}`;
+  const bm = new Map(base.per.filter(Boolean).map(r => [key(r), r.prize]));
+  const bMean = [...bm.values()].reduce((a, b) => a + b, 0) / bm.size;
+  console.log(`\n${path.basename(MODEL)} 가드${GUARD ? 'ON' : 'OFF'} · 무개입 판당 상금 ${bMean.toFixed(0)} (${bm.size}판)`);
+
+  for (const mode of modes) {
+    const iv = await run(N, mode, sess);
+    const diffs = [];
+    for (const r of iv.per.filter(Boolean)) {
+      const b = bm.get(key(r));
+      if (b !== undefined) diffs.push(r.prize - b);
+    }
+    const n = diffs.length;
+    const mean = diffs.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(diffs.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1));
+    const ci = 1.96 * sd / Math.sqrt(n);
+    console.log(`\n개입 ${mode} · 짝지은 판 ${n} · 개입 ${iv.hits}회 (판당 ${(iv.hits / n).toFixed(2)})`);
+    console.log(`  판당 상금 차이  ${mean >= 0 ? '+' : ''}${mean.toFixed(1)} ± ${ci.toFixed(1)}`);
+    console.log(mean - ci > 0 ? '  → 유의하게 이득. 학습 대상으로 확정.'
+      : mean + ci < 0 ? '  → 유의하게 손해. 현재 정책이 옳다.'
+      : '  → 유의차 없음.');
+  }
+})();
