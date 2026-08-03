@@ -42,7 +42,10 @@ const _sec = [['phase5',5],['hand53',53],['giruda6',6],['count8',8],['declarer_r
   // v5: 룰 파라미터 블록. 관측 끝에 붙였으므로 앞 688만 쓰는 v4 모델은 그대로 동작한다.
   // v5: 키카드 판단 근거 (현재 트릭 상태 · 무늬별 바깥 최고 · 키카드 소재 추론)
   ['trick_ctx20',20],['top_out8',8],['key_cand9',9],
-  ['rule_ctx14',14]];
+  ['rule_ctx14',14],
+  // Phase B: 트릭 토큰 시퀀스(완료10+진행1, 토큰당 81) — v6 어텐션 모델 전용.
+  // 앞 739만 읽는 v5 이하 모델은 그대로 동작한다. python encode와 반드시 동일.
+  ['trick_tok891',891]];
 const O = {}; let _d = 0;
 for (const [name, n] of _sec) { O[name] = _d; _d += n; }
 const OBS_DIM = _d;   // 702 (v4 모델은 앞 688)
@@ -308,6 +311,32 @@ function encodeObs(game, me, pickBuffer) {
       o[O.key_cand9 + 4 + (r - 1)] = jSeen ? 0 : 1;
     }
     o[O.key_cand9 + 8] = game.hands[me].length / 10;
+  }
+
+  // ---- Phase B: 트릭 토큰 (python encode의 트릭 토큰 절과 반드시 동일) ----
+  if (ph === 'play') {
+    const pl3 = game.play;
+    const gir2 = ct ? ct.giruda : null;
+    const toks = pl3.history.slice(0, 10).map(t => [t.plays, t.winner]);
+    toks.push([pl3.table, null]);
+    for (let ti = 0; ti < toks.length; ti++) {
+      const base = O.trick_tok891 + ti * 81;
+      const plays = toks[ti][0], winner = toks[ti][1];
+      for (let j = 0; j < Math.min(5, plays.length); j++) {
+        const eb = base + j * 15, e = plays[j], c = e.card;
+        o[eb + 0] = 1;
+        o[eb + 1 + rel(e.player)] = 1;
+        if (!isJoker(c)) {
+          o[eb + 6 + SUIT_IDX[c.suit]] = 1;
+          o[eb + 10] = c.rank / 14;
+        } else o[eb + 11] = 1;
+        if (ct && sameCard(c, game.mightyCard)) o[eb + 12] = 1;
+        if (isPoint(c)) o[eb + 13] = 1;
+        if (gir2 && gir2 !== 'N' && !isJoker(c) && c.suit === gir2) o[eb + 14] = 1;
+      }
+      if (winner !== null && winner !== undefined) o[base + 75 + rel(winner)] = 1;
+      o[base + 80] = (ti + 1) / 10;
+    }
   }
 
   const rv = encodeRules(game.config);

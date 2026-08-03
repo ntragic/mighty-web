@@ -106,6 +106,14 @@ O_TCTX    = L.add('trick_ctx20', 20)      # 뒤에 남은 인원5 + 최강 rel6 
 O_TOPOUT  = L.add('top_out8', 8)          # 무늬별 바깥 최고 랭크/14 ×4 + 내가 그 위 보유 ×4
 O_KCAND   = L.add('key_cand9', 9)         # rel1..4 마이티 가능 ×4 + 조커 가능 ×4 + 내 남은 장수/10
 O_RULE    = L.add('rule_ctx14', 14)
+# --- Phase B: 트릭 토큰 시퀀스 (완료 10 + 진행중 1, 토큰당 81) ---
+# 관측 끝에 평탄화해 붙인다 — 수집기·ONNX 입출력·파리티 체계 무변경.
+# 네트워크(--attn)만 이 블록을 [11,81]로 reshape해 트랜스포머로 인코딩한다.
+# 앞 739만 읽는 v5 이하 모델은 그대로 동작한다.
+# 토큰 구성: 낸 순서 j=0..4 × [present1 + 좌석rel5 + 무늬4 + 랭크1 + 조커/마이티/점수/기루다4]
+#            = 15×5 = 75, + 승자rel5 + 트릭번호1 = 81
+TOK_N, TOK_D = 11, 81
+O_TOK     = L.add('trick_tok891', TOK_N * TOK_D)
 OBS_DIM = L.dim
 
 RULE_DIM = 14
@@ -388,6 +396,34 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
     rv = encode_rules(game.config)
     for i, v in enumerate(rv):
         o[O_RULE + i] = v
+
+    # ---- Phase B: 트릭 토큰 (플레이 순서 보존 — 손패 추론·다단계 계획의 재료) ----
+    if ph == 'play':
+        pl = game.play
+        gir2 = ct['giruda'] if ct else None
+        toks = [(t['plays'], t['winner']) for t in pl['history'][:10]]
+        toks.append((pl['table'], None))                  # 진행 중 트릭 = 마지막 토큰
+        for ti, (plays, winner) in enumerate(toks):
+            base = O_TOK + ti * TOK_D
+            for j, e in enumerate(plays[:5]):
+                eb = base + j * 15
+                c = e['card']
+                o[eb + 0] = 1.0
+                o[eb + 1 + rel(e['player'])] = 1.0
+                if not is_joker(c):
+                    o[eb + 6 + SUIT_IDX[c[0]]] = 1.0
+                    o[eb + 10] = c[1] / 14.0
+                else:
+                    o[eb + 11] = 1.0
+                if ct and same(c, game.mighty_card):
+                    o[eb + 12] = 1.0
+                if is_point(c):
+                    o[eb + 13] = 1.0
+                if gir2 and gir2 != 'N' and (not is_joker(c)) and c[0] == gir2:
+                    o[eb + 14] = 1.0
+            if winner is not None:
+                o[base + 75 + rel(winner)] = 1.0
+            o[base + 80] = (ti + 1) / 10.0
     return o
 
 
