@@ -13,7 +13,7 @@ from mighty_encode import OBS_DIM, ACTION_DIM
 from mixed_collector import MixedCollector, derive_rates
 
 
-def _worker(wid, n_envs, seed, budget_q, out_q, req_c, shm_names, sync_every, feed_coef):
+def _worker(wid, n_envs, seed, budget_q, out_q, req_c, shm_names, sync_every, feed_coef, conv):
     from multiprocessing import shared_memory
     bufs, keep = {}, []
     for key, name, shape, dt in shm_names:
@@ -35,7 +35,7 @@ def _worker(wid, n_envs, seed, budget_q, out_q, req_c, shm_names, sync_every, fe
         return (act_b[:n].copy(), logp_b[:n].copy(), val_b[:n].copy())
 
     col = MixedCollector(n_envs, seed, 'cpu', sync_every=sync_every,
-                         feed_coef=feed_coef, infer_fn=infer_fn)
+                         feed_coef=feed_coef, infer_fn=infer_fn, conv=conv)
     while True:
         job = budget_q.get()
         if job is None:
@@ -53,7 +53,7 @@ def _worker(wid, n_envs, seed, budget_q, out_q, req_c, shm_names, sync_every, fe
 
 
 class MPCollector:
-    def __init__(self, n_envs, seed, device, n_workers=6, sync_every=200, feed_coef=0.0):
+    def __init__(self, n_envs, seed, device, n_workers=6, sync_every=200, feed_coef=0.0, conv=0.0):
         from multiprocessing import shared_memory
         ctx = mp.get_context('fork')
         self.device = device
@@ -79,7 +79,7 @@ class MPCollector:
             p = ctx.Process(target=_worker,
                             args=(w, self.per, seed + w * 7919, bq, self.out_q, child_c,
                                   names,
-                                  sync_every, feed_coef),
+                                  sync_every, feed_coef, conv),
                             daemon=True)
             p.start()
             self.procs.append(p)

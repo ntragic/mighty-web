@@ -391,6 +391,103 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
     return o
 
 
+def conv_target(game, me):
+    """E2 관례 증류 교사 — 개입 인증을 통과한 클래스에서만 목표 카드를 돌려준다.
+
+    좌석 가시 정보만 쓴다(전지적 판정 금지 — 잠금 판정은 배포 가드와 같은
+    '미출현 카드 위협' 논리). 클래스와 인증치(2026-08-03, 페어드 개입):
+      addL : 공개 후·여당·아군 가시확정승·트릭6+ → 최저 점수카드 보태기 (−7.3±8.4 중립)
+      feedP: 공개 후·여당·야당 가시확정승 → 비점수·비기루다 최저로 회피 (+12.8±19.2 중립)
+      sigW : 공개 후 프렌드가, 주공이 현재 이기고 있는 주공의 기루다 리드에
+             최저 점수카드로 응답 (−4.8±5.9 중립; 무조건 응답 sig는 −6.4±5.9 유의손해로 탈락)
+    반환: 목표 카드 또는 None.
+    """
+    if game.phase != 'play' or not game.friend_revealed:
+        return None
+    decl, fr = game.declarer, game.friend
+    if decl is None or me not in (decl, fr):
+        return None
+    pl = game.play
+    if not pl['table']:
+        return None
+    gi = game.contract['giruda'] if game.contract else 'N'
+    best, bk = None, (-2, -1)
+    for e in pl['table']:
+        k = game.card_strength(e, pl)
+        if k > bk:
+            bk, best = k, e
+    if best is None or best['player'] == me:
+        return None
+    key = lambda c: is_joker(c) or same(c, game.mighty_card)
+    # sigW — 프렌드이고, 주공이 기루다를 리드해 현재 이기고 있으면 점수로 응답
+    if me == fr and gi != 'N' and best['player'] == decl:
+        lead = pl['table'][0]
+        if (lead['player'] == decl and not is_joker(lead['card'])
+                and lead['card'][0] == gi):
+            legal0 = [m['card'] for m in game.legal_plays(me) if not m.get('jokerCall')]
+            pts0 = [c for c in legal0 if is_point(c) and not key(c)]
+            non0 = [c for c in legal0 if not is_point(c) and not key(c)]
+            if pts0 and non0:
+                return min(pts0, key=lambda c: c[1])
+    # 가시 확정승 — 남은 사람이 낼 수 있는 위협 중 bk를 넘는 게 없는가
+    seen = set()
+    for t in pl['history']:
+        for e in t['plays']:
+            seen.add(card_id(e['card']))
+    for e in pl['table']:
+        seen.add(card_id(e['card']))
+    for c in game.hands[me]:
+        seen.add(card_id(c))
+    if me == decl and game.discard:
+        for c in game.discard:
+            seen.add(card_id(c))
+    acted = set(e['player'] for e in pl['table'])
+    acted.add(me)
+    rem = sum(1 for p in range(NUM_PLAYERS) if p not in acted)
+    if rem > 0:
+        cfg = game.config or {}
+        last = pl['trickNo'] >= 10
+        joker_win = (not pl['jokerCallActive']
+                     and not (pl['trickNo'] == 1 and cfg.get('firstTrickJokerWeak', True))
+                     and not (last and cfg.get('lastTrickJokerWeak', True)))
+        ruff = True
+        if pl['ledSuit'] and gi != 'N' and pl['ledSuit'] != gi:
+            unseen_led = sum(1 for r in range(2, 15)
+                             if pl['ledSuit'] + str(r) not in seen)
+            if unseen_led >= rem:
+                ruff = False
+        threats = []
+        if card_id(game.mighty_card) not in seen:
+            threats.append((4, 0))
+        if joker_win and JOKER not in seen:
+            threats.append((3, 0))
+        if gi != 'N' and ruff:
+            for r in range(2, 15):
+                if gi + str(r) not in seen:
+                    threats.append((2, r))
+        if pl['ledSuit']:
+            for r in range(2, 15):
+                if pl['ledSuit'] + str(r) not in seen:
+                    threats.append((1, r))
+        if any(t > bk for t in threats):
+            return None
+    ally = (best['player'] == decl) or (fr is not None and best['player'] == fr)
+    legal = [m['card'] for m in game.legal_plays(me) if not m.get('jokerCall')]
+    pts = [c for c in legal if is_point(c) and not key(c)]
+    if ally:
+        if pl['trickNo'] < 6:
+            return None                                  # addL 클래스만 인증됨
+        non = [c for c in legal if not is_point(c) and not key(c)]
+        if not pts or not non:
+            return None
+        return min(pts, key=lambda c: c[1])
+    non = [c for c in legal if not is_point(c) and not key(c)
+           and not ((not is_joker(c)) and gi != 'N' and c[0] == gi)]
+    if not pts or not non:
+        return None
+    return min(non, key=lambda c: c[1])
+
+
 def aux_labels(game, me):
     """보조 손실용 정답 (엔진 truth, 상대좌석 rel1..4 기준).
     suit16: 그 좌석이 해당 무늬를 아직 들고 있는가

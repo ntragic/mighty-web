@@ -64,6 +64,46 @@ function isTopOfSuit(g, seat, card) {
  * 원래 행동이 옳았다는 증거로 오독된다.
  */
 function override(g, seat, mode, actual) {
+  // 좁힌 클래스 접미사: P=공개 후+여당 한정, L=P+종반(트릭 6 이후)
+  const narrow = mode.endsWith('P') || mode.endsWith('L');
+  const late = mode.endsWith('L');
+  const base = narrow ? mode.slice(0, -1) : mode;
+  if (narrow) {
+    if (!g.friendRevealed) return null;
+    const ruling = seat === g.declarer || seat === g.friend;
+    if (!ruling) return null;
+    if (late && g.play.trickNo < 6) return null;
+  }
+  mode = base;
+
+  // sig: 공개 후 프렌드가 주공의 기루다 리드에 점수카드로 응답하지 않은 결정을 교정
+  // sigW: 같되 주공이 현재 그 트릭 최강일 때만 (지는 트릭에 점수 강제 제외)
+  if (mode === 'sig' || mode === 'sigW') {
+    if (mode === 'sigW') {
+      const pl0 = g.play;
+      let bk0 = [-2, -1], bp = -1;
+      for (const e of pl0.table) {
+        const k = strength(g, e, pl0);
+        if (stronger(k, bk0)) { bk0 = k; bp = e.player; }
+      }
+      if (bp !== g.declarer) return null;
+    }
+    if (!g.friendRevealed || seat !== g.friend) return null;
+    const pl = g.play;
+    if (!pl.table.length) return null;
+    const lead = pl.table[0], gi2 = g.contract ? g.contract.giruda : 'N';
+    if (lead.player !== g.declarer || E.isJoker(lead.card) || gi2 === 'N'
+        || lead.card.suit !== gi2) return null;
+    const isKey2 = c => E.isJoker(c) || E.sameCard(c, g.mightyCard);
+    const legal2 = g._legalPlays(seat).filter(m => !m.jokerCall);
+    const pts = legal2.filter(m => E.isPointCard(m.card) && !isKey2(m.card));
+    const non = legal2.filter(m => !E.isPointCard(m.card) && !isKey2(m.card));
+    if (!pts.length || !non.length) return null;
+    if (E.isPointCard(actual) && !isKey2(actual)) return null;   // 이미 응답
+    pts.sort((a, b) => (a.card.rank || 0) - (b.card.rank || 0));
+    return { type: 'play', card: pts[0].card };
+  }
+
   const lock = lockedTrick(g, seat);
   if (!lock) return null;
   const isKey = c => E.isJoker(c) || E.sameCard(c, g.mightyCard);

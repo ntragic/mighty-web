@@ -69,10 +69,10 @@ const se = (a, b) => b ? (100 * Math.sqrt((a / b) * (1 - a / b) / b)).toFixed(2)
   const sess = TIER === 'master' ? await ort.InferenceSession.create(MODEL) : null;
 
   let rounds = 0, seat = 0;
-  // A) 헌납
-  let feedOpp = 0, feedBad = 0;
-  // B) 보태기
-  let addOpp = 0, addGood = 0, addTop = 0;
+  // A) 헌납  B) 보태기 — 프렌드 공개 전/후 분리
+  const C = () => ({ pre: 0, post: 0 });
+  const feedOpp = C(), feedBad = C(), addOpp = C(), addGood = C();
+  let addTop = 0;
   const addByTrick = {}, missByTrick = {};
   const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
 
@@ -90,7 +90,7 @@ const se = (a, b) => b ? (100 * Math.sqrt((a / b) * (1 - a / b) / b)).toFixed(2)
     let guard = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal') {
       const p = g.currentPlayer;
-      let mode = null, trickNo = 0;
+      let mode = null, trickNo = 0, rev = 'pre';
       if (g.phase === 'play' && p === seat) {
         const lock = lockedTrick(g, p);
         if (lock) {
@@ -99,12 +99,13 @@ const se = (a, b) => b ? (100 * Math.sqrt((a / b) * (1 - a / b) / b)).toFixed(2)
           const pts = legal.filter(m => E.isPointCard(m.card) && !isKey(m.card));
           const nonPts = legal.filter(m => !E.isPointCard(m.card) && !isKey(m.card));
           trickNo = g.play.trickNo;
+          rev = g.friendRevealed ? 'post' : 'pre';
           if (lock.allyWins) {
             // 탑이 아닌 점수카드를 들고 있고, 안 낼 선택지도 있을 때만 기회
             const safe = pts.filter(m => !isTopOfSuit(g, p, m.card));
-            if (safe.length && nonPts.length) { mode = 'add'; addOpp++; }
+            if (safe.length && nonPts.length) { mode = 'add'; addOpp[rev]++; }
           } else {
-            if (pts.length && nonPts.length) { mode = 'feed'; feedOpp++; }
+            if (pts.length && nonPts.length) { mode = 'feed'; feedOpp[rev]++; }
           }
         }
       }
@@ -113,10 +114,10 @@ const se = (a, b) => b ? (100 * Math.sqrt((a / b) * (1 - a / b) / b)).toFixed(2)
         const c = act.card;
         const isKey = E.isJoker(c) || E.sameCard(c, g.mightyCard);
         const gave = E.isPointCard(c) && !isKey;
-        if (mode === 'feed' && gave) feedBad++;
+        if (mode === 'feed' && gave) feedBad[rev]++;
         if (mode === 'add') {
           if (gave) {
-            addGood++;
+            addGood[rev]++;
             bump(addByTrick, trickNo);
             if (isTopOfSuit(g, p, c)) addTop++;   // 탑을 줘버린 경우 (과잉)
           } else bump(missByTrick, trickNo);
@@ -131,12 +132,15 @@ const se = (a, b) => b ? (100 * Math.sqrt((a / b) * (1 - a / b) / b)).toFixed(2)
   }
 
   const who = TIER === 'master' ? `${path.basename(MODEL)} 가드${GUARD ? 'ON' : 'OFF'}` : `${TIER}(휴리스틱 기준선)`;
+  const tot = o => o.pre + o.post;
+  const line = (b, o) => `${pct(tot(b), tot(o))} ± ${se(tot(b), tot(o))}  ` +
+    `(공개 전 ${pct(b.pre, o.pre)} [${b.pre}/${o.pre}] · 공개 후 ${pct(b.post, o.post)} [${b.post}/${o.post}])`;
   console.log(`\n${who} · ${rounds}판 · 상대 ${oppTier}`);
   console.log(`\n(A) 헌납 — 야당이 잠근 트릭에 점수카드를 태움 [낮을수록 좋음]`);
-  console.log(`    기회 ${feedOpp} · 헌납 ${feedBad}  →  ${pct(feedBad, feedOpp)} ± ${se(feedBad, feedOpp)}`);
+  console.log(`    ${line(feedBad, feedOpp)}`);
   console.log(`\n(B) 보태기 — 아군이 잠근 트릭에 탑 아닌 점수카드를 얹음 [높을수록 좋음]`);
-  console.log(`    기회 ${addOpp} · 보탬 ${addGood}  →  ${pct(addGood, addOpp)} ± ${se(addGood, addOpp)}`);
-  console.log(`    그중 탑 카드를 줘버린 과잉: ${addTop} (${pct(addTop, addGood)})`);
+  console.log(`    ${line(addGood, addOpp)}`);
+  console.log(`    그중 탑 카드를 줘버린 과잉: ${addTop} (${pct(addTop, tot(addGood))})`);
   const tricks = [...new Set([...Object.keys(addByTrick), ...Object.keys(missByTrick)])]
     .map(Number).sort((a, b) => a - b);
   console.log(`\n    트릭별 보태기 성공률`);
