@@ -56,26 +56,40 @@ function isTopOfSuit(g, seat, card) {
   return true;
 }
 
-/** 개입 액션을 돌려준다. 개입할 상황이 아니면 null. */
-function override(g, seat, mode) {
+/**
+ * 개입 액션을 돌려준다. 개입할 상황이 아니면 null.
+ * 정책이 실제로 낸 카드(actual)를 받아, 지표가 '실패'로 센 결정에만 개입한다.
+ * 잘한 결정까지 덮어쓰면 개입이 다른 것을 바꿔버려 인과가 흐려진다.
+ * 대체 카드에서 기루다는 제외한다 — 기루다를 버려 생기는 손실이 결과에 섞이면
+ * 원래 행동이 옳았다는 증거로 오독된다.
+ */
+function override(g, seat, mode, actual) {
   const lock = lockedTrick(g, seat);
   if (!lock) return null;
   const isKey = c => E.isJoker(c) || E.sameCard(c, g.mightyCard);
+  const gi = g.contract ? g.contract.giruda : 'N';
+  const isTrump = c => gi !== 'N' && !E.isJoker(c) && c.suit === gi;
   const legal = g._legalPlays(seat).filter(m => !m.jokerCall);
+  const playedPoint = E.isPointCard(actual) && !isKey(actual);
+
   if (lock.allyWins) {
     if (mode !== 'add' && mode !== 'both') return null;
     const safe = legal.filter(m => E.isPointCard(m.card) && !isKey(m.card) && !isTopOfSuit(g, seat, m.card));
     const nonPts = legal.filter(m => !E.isPointCard(m.card) && !isKey(m.card));
     if (!safe.length || !nonPts.length) return null;
+    if (playedPoint) return null;                 // 이미 보탰다 — 개입 불필요
     safe.sort((a, b) => (a.card.rank || 0) - (b.card.rank || 0));
     return { type: 'play', card: safe[0].card };
   }
+
   if (mode !== 'feed' && mode !== 'both') return null;
   const pts = legal.filter(m => E.isPointCard(m.card) && !isKey(m.card));
-  const nonPts = legal.filter(m => !E.isPointCard(m.card) && !isKey(m.card));
-  if (!pts.length || !nonPts.length) return null;
-  nonPts.sort((a, b) => (a.card.rank || 0) - (b.card.rank || 0));
-  return { type: 'play', card: nonPts[0].card };
+  // 기루다·키카드를 건드리지 않는 대체재만 인정한다
+  const safeAlt = legal.filter(m => !E.isPointCard(m.card) && !isKey(m.card) && !isTrump(m.card));
+  if (!pts.length || !safeAlt.length) return null;
+  if (!playedPoint) return null;                  // 이미 안 태웠다 — 개입 불필요
+  safeAlt.sort((a, b) => (a.card.rank || 0) - (b.card.rank || 0));
+  return { type: 'play', card: safeAlt[0].card };
 }
 
 async function run(N, mode, sess) {
@@ -92,12 +106,11 @@ async function run(N, mode, sess) {
     let guard = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal') {
       const p = g.currentPlayer;
-      let act = null;
-      if (mode !== 'none' && g.phase === 'play' && p === seat) {
-        const o = override(g, p, mode);
+      let act = await ag[p].act(g, p);
+      if (mode !== 'none' && g.phase === 'play' && p === seat && act.type === 'play') {
+        const o = override(g, p, mode, act.card);
         if (o) { act = o; hits++; }
       }
-      if (!act) act = await ag[p].act(g, p);
       g.act(act);
       if (++guard > 900) break;
     }
