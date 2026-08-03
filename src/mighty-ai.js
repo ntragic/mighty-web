@@ -42,11 +42,12 @@ const TIER_LABEL = { intermediate: '중급', advanced: '고급', master: '마스
  * 낭비를 막는다. 대안이 있을 때만 발동하며, 아군이 이미 확정승이므로 트릭 손실이 없다.
  * (v3 모델이 드물게 파트너의 조커 선에 마이티를 얹던 사례 대응)
  */
-function keyCardGuard(game, seat, action) {
+function keyCardGuard(game, seat, action, trace) {
+  const T = (why, extra) => { if (trace) Object.assign(trace, { why }, extra); };
   try {
-    if (!action || action.type !== 'play' || game.phase !== 'play') return action;
+    if (!action || action.type !== 'play' || game.phase !== 'play') { T('not-play'); return action; }
     const pl = game.play;
-    if (!pl || pl.table.length === 0) return action;
+    if (!pl || pl.table.length === 0) { T('lead'); return action; }
     const c = action.card;
     const g = game.contract ? game.contract.giruda : 'N';
     const cfg = game.config || {};
@@ -59,7 +60,7 @@ function keyCardGuard(game, seat, action) {
       const k = game._cardStrength(e, pl);
       if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
     }
-    if (!best) return action;
+    if (!best) { T('no-best'); return action; }
     const beats = (card, jokerSuit) => {
       const k = game._cardStrength({ player: seat, card, jokerSuit }, pl);
       return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
@@ -119,23 +120,33 @@ function keyCardGuard(game, seat, action) {
     //  A) 아군이 확정으로 이기는 트릭을 내가 덮는 경우 — 마이티·조커·기루다를 태운다
     //  B) 어차피 못 이기는 트릭에 비싼 카드를 내는 경우 — 승패와 무관하게 손해
     const keyOrTrump = x => isKey(x) || isTrump(x);
+    // 진단용 상태 — 판정에는 쓰지 않는다
+    if (trace) Object.assign(trace, {
+      iWin, protective, winnerIsOpp, lockedForOthers, remaining,
+      threatKinds: realThreats.map(t => t[0]),
+    });
     let wasteful;
     if (iWin) {
-      if (protective || winnerIsOpp !== false) return action;
+      if (protective) { T('iWin-protective'); return action; }
+      if (winnerIsOpp !== false) {
+        T(winnerIsOpp === null ? 'iWin-team-unknown' : 'iWin-over-opponent');
+        return action;
+      }
       wasteful = keyOrTrump;                      // 점수 카드는 아군 트릭이라 문제없다
     } else {
       wasteful = x => keyOrTrump(x) ||
         (lockedForOthers && winnerIsOpp === true && E.isPointCard(x));
     }
-    if (!wasteful(c)) return action;
+    if (!wasteful(c)) { T('not-wasteful-by-guard'); return action; }
 
     const alts = game._legalPlays(seat).filter(m =>
       !m.jokerCall && !wasteful(m.card) && !beats(m.card, m.jokerSuit));
-    if (!alts.length) return action;
+    if (!alts.length) { T('no-cheap-alt'); return action; }
     const cost = m => (m.card.rank || 0) + (E.isPointCard(m.card) ? 30 : 0);
     alts.sort((a, b) => cost(a) - cost(b));
+    T('intervened');
     return { type: 'play', card: alts[0].card };
-  } catch (e) { return action; }
+  } catch (e) { T('error'); return action; }
 }
 
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
@@ -161,7 +172,8 @@ async function createAgent(opts = {}) {
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
-        const guarded = a => (opts.keyGuard === false ? a : keyCardGuard(game, seat, a));
+        const guarded = a => (opts.keyGuard === false ? a
+          : keyCardGuard(game, seat, a, opts.guardTrace));
         for (let guard = 0; guard < 8; guard++) {
           const a = await M.chooseAction(session, ort, game, seat, pick);
           const act = M.actionToEngine(a, game, pick);
@@ -216,7 +228,8 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, TIERS, TIER_LABEL, PERSONA_KEYS };
+const api = { createAgent, createTable, loadMaster, keyCardGuard,
+              TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
 

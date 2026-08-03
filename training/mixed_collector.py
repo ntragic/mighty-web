@@ -11,7 +11,7 @@ import torch
 
 from mighty_engine import MightyGame, parse_card, is_point, same, is_joker
 import mighty_encode
-from mighty_encode import MightyEnv, aux_labels
+from mighty_encode import MightyEnv, aux_labels, conv_target, A_PLAY0, cidx
 
 PERSONAS = ('gambler', 'balanced', 'careful')
 TIERS = ('intermediate', 'advanced')
@@ -63,7 +63,9 @@ def derive_rates(c):
 
 class MixedCollector:
     def __init__(self, n_envs, seed, device, sync_every=50, feed_coef=0.0,
-                 infer_fn=None):
+                 infer_fn=None, conv=0.0):
+        # conv: E2 관례 증류 — 인증 클래스 결정에 교사 액션을 라벨로 남긴다
+        self.conv = conv
         self.n = n_envs
         self.device = device
         self.rng = np.random.default_rng(seed)
@@ -292,8 +294,13 @@ class MixedCollector:
                 cp = tuple(g_.play['capturedPoints']) if is_play else (0,) * 5
                 sl, tl = aux_labels(g_, p)
                 tno = g_.play['trickNo'] if is_play else -1
+                ca = -1
+                if self.conv and is_play:
+                    tc = conv_target(g_, p)
+                    if tc is not None:
+                        ca = A_PLAY0 + cidx(tc)
                 self.open[i][p].append([o, m, int(acts_np[j]), float(logps_np[j]),
-                                        float(vals_np[j]), (cp, sl, tl, tno)])
+                                        float(vals_np[j]), (cp, sl, tl, tno, ca)])
                 steps += 1
                 no, nm, np_, rew, done = env.step(int(acts_np[j]))
                 if done:
@@ -377,10 +384,10 @@ class MixedCollector:
                     if role == 1 and self.feed_coef and played_pts:
                         R += self.feed_coef * fed / played_pts
                     for rec in segs:
-                        _, sl, tl, tno = rec.pop()
+                        _, sl, tl, tno, ca = rec.pop()
                         w = winners.get(tno)
                         lw = -1 if w is None else (w - seat) % 5
-                        traj.append(rec + [R, role, lab, sl, tl, lw])
+                        traj.append(rec + [R, role, lab, sl, tl, lw, ca])
                 fresh.append(self._reset_env(i))
             if fresh:
                 self._rpc({'new': fresh})   # 같은 env id로 덮어쓴다 (drop 불필요)

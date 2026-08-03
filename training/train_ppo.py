@@ -21,7 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from mighty_encode import (MightyEnv, OBS_DIM, ACTION_DIM, O_FDMODE, O_PHASE,
-                           O_GIRUDA, aux_labels)
+                           O_GIRUDA, aux_labels, conv_target, A_PLAY0, cidx)
 
 
 # ---------------- 모델 ----------------
@@ -67,7 +67,9 @@ def team_diff(cp, decl, fr):
 class Collector:
     """N개 환경 병렬(단일 프로세스 배치 추론). Spark에선 --workers로 멀티프로세스 확장."""
 
-    def __init__(self, n_envs, seed, device, config=None, shape=0.0, rule_random=False, alloc=0.0):
+    def __init__(self, n_envs, seed, device, config=None, shape=0.0, rule_random=False,
+                 alloc=0.0, conv=0.0):
+        self.conv = conv
         self.envs = [MightyEnv(config=config, seed=seed + i * 1_000_000,
                               rule_random=rule_random, rule_seed=seed + i)
                      for i in range(n_envs)]
@@ -107,8 +109,13 @@ class Collector:
                 cp = tuple(g_.play['capturedPoints']) if is_play else (0,) * 5
                 sl, tl = aux_labels(g_, p)
                 tno = g_.play['trickNo'] if is_play else -1
+                ca = -1
+                if self.conv and is_play:
+                    tc = conv_target(g_, p)
+                    if tc is not None:
+                        ca = A_PLAY0 + cidx(tc)
                 rec_i = [o, m, int(acts_np[i]), float(logps_np[i]),
-                         float(vals_np[i]), (cp, sl, tl, tno)]
+                         float(vals_np[i]), (cp, sl, tl, tno, ca)]
                 self.open[i][p].append(rec_i)
                 no, nm, np_, rew, done = env.step(int(acts_np[i]))
                 # Phase A: 이 결정이 '아군 확정승 트릭에 비싼 카드' 였는가
@@ -142,7 +149,7 @@ class Collector:
                                    for t in (pl_T['history'] if pl_T else [])}
                         for rec in segs:
                             wflag = rec.pop() if self.alloc else False
-                            cp_t, sl, tl, tno = rec.pop()
+                            cp_t, sl, tl, tno, ca = rec.pop()
                             phi_t = (sign * team_diff(cp_t, decl, fr)
                                      if decl is not None else 0.0)
                             w = winners.get(tno)
@@ -150,7 +157,7 @@ class Collector:
                             # 종단보상 + 잠재함수 셰이핑(텔레스코핑 → 최적정책 불변)
                             traj.append(rec + [R + self.shape * (phi_T - phi_t)
                                                - (self.alloc if wflag else 0.0),
-                                               role, lab, sl, tl, lw])
+                                               role, lab, sl, tl, lw, ca])
                         self.open[i][seat] = []
                     self.states[i] = env.reset()
                 else:
@@ -160,7 +167,8 @@ class Collector:
 
 # ---------------- PPO 업데이트 ----------------
 def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
-               vf_coef=0.5, ent_coef=0.05, bf16=False, aux_coef=0.1, role_norm=False):
+               vf_coef=0.5, ent_coef=0.05, bf16=False, aux_coef=0.1, role_norm=False,
+               conv_coef=0.0):
     obs = torch.as_tensor(np.stack([t[0] for t in traj]), device=device)
     mask = torch.as_tensor(np.stack([t[1] for t in traj]), device=device)
     act = torch.as_tensor([t[2] for t in traj], device=device)
@@ -172,6 +180,8 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
     lab_suit = torch.as_tensor(np.stack([t[8] for t in traj]), device=device)
     lab_trump = torch.as_tensor(np.stack([t[9] for t in traj]), device=device)
     lab_win = torch.as_tensor([t[10] for t in traj], device=device)
+    # E2: 관례 교사 액션 (인증 클래스 밖은 -1)
+    conv_a = torch.as_tensor([t[11] if len(t) > 11 else -1 for t in traj], device=device)
     # 프렌드 선언 이전 스텝은 예측 대상이 없음 → 보조손실에서 제외
     aux_ok = obs[:, O_FDMODE] < 0.5
     play_ok = obs[:, O_PHASE + 4] > 0.5                    # 플레이 페이즈만
@@ -238,6 +248,15 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                         loss = loss + 0.5 * aux_coef * wl
                         auxsub['win'] = (auxlog['win'][wk].argmax(-1)
                                          == lab_win[idx][wk]).float().mean().item()
+                # E2: 인증 클래스 관례 증류 — 클래스 밖(-1)은 계수 0, 승률 최적화 불변
+                if conv_coef:
+                    ck = conv_a[idx] >= 0
+                    if bool(ck.any()):
+                        cl = F.cross_entropy(logits[ck].float(), conv_a[idx][ck])
+                        loss = loss + conv_coef * cl
+                        auxsub['conv'] = (logits[ck].argmax(-1)
+                                          == conv_a[idx][ck]).float().mean().item()
+                        auxsub['conv_n'] = int(ck.sum())
             opt.zero_grad(set_to_none=True)
             loss.backward()
             nn.utils.clip_grad_norm_(net.parameters(), 1.0)
@@ -245,7 +264,8 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
             stats = {'pg': pg.item(), 'v': vloss.item(), 'ent': ent.item(),
                      'aux': auxl.item(), 'auxacc': auxacc,
                      'suit': auxsub.get('suit', 0.0), 'trump': auxsub.get('trump', 0.0),
-                     'win': auxsub.get('win', 0.0)}
+                     'win': auxsub.get('win', 0.0),
+                     'conv': auxsub.get('conv', 0.0), 'conv_n': auxsub.get('conv_n', 0)}
     return stats
 
 
@@ -284,6 +304,8 @@ def main():
                     help='에피소드마다 룰을 무작위 샘플 (지역룰 일반화)')
     ap.add_argument('--aux', type=float, default=0.1,
                     help='프렌드 좌석 예측 보조손실 계수 (0이면 헤드 없음)')
+    ap.add_argument('--conv', type=float, default=0.0,
+                    help='E2 관례 증류 계수 — 개입 인증 클래스에서만 교사 CE를 더한다')
     args = ap.parse_args()
 
     if args.smoke:
@@ -307,13 +329,15 @@ def main():
     if args.partners and args.workers > 0:
         from mp_collector import MPCollector
         col = MPCollector(args.envs, args.seed * 1000, device,
-                          n_workers=args.workers, feed_coef=args.feed)
+                          n_workers=args.workers, feed_coef=args.feed,
+                          conv=args.conv)
     elif args.partners:
         from mixed_collector import MixedCollector
-        col = MixedCollector(args.envs, args.seed * 1000, device, feed_coef=args.feed)
+        col = MixedCollector(args.envs, args.seed * 1000, device, feed_coef=args.feed,
+                             conv=args.conv)
     else:
         col = Collector(args.envs, args.seed * 1000, device, shape=args.shape,
-                        rule_random=args.rule_random, alloc=args.alloc)
+                        rule_random=args.rule_random, alloc=args.alloc, conv=args.conv)
     print(f'device={device} bf16={bf16} | obs {OBS_DIM} act {ACTION_DIM} | '
           f'params {sum(p.numel() for p in net.parameters()):,}')
 
@@ -343,7 +367,7 @@ def main():
             print(f'upd {u:4d} | empty traj (no completed episodes) — skip update')
             continue
         st = ppo_update(net, opt, traj, device, bf16=bf16, aux_coef=args.aux,
-                        role_norm=args.role_norm)
+                        role_norm=args.role_norm, conv_coef=args.conv)
         t2 = time.time()
         if prizes:
             P = np.stack(prizes)
@@ -356,6 +380,7 @@ def main():
                   f'dcl {cstat["decl_rate"]:.2f}/{cstat["decl_win"]:.2f} '
                   f'kw {cstat["key_waste"]*100:.1f}% fb {fb:.2f} '
                   f'sui {st["suit"]:.2f} trp {st["trump"]:.3f} win {st["win"]:.2f} '
+                  f'cv {st["conv"]:.2f}/{st["conv_n"]} '
                   f'| env {t1-t0:.1f}s gpu {t2-t1:.1f}s '
                   f'({len(traj)/(t1-t0):.0f} steps/s)')
         if u % 25 == 0 or u == args.updates:
