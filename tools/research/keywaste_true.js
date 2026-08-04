@@ -50,8 +50,9 @@ function lockedTrick(g, seat){
   let opp=0, waste=0, oppB=0, wasteB=0, rounds=0, seat=0, prize=0, n=0;
   const t0=Date.now();
   for (let i=0;i<N;i++){
-    const rng=E.makeRng(900000+i);
-    const g=new E.MightyGame({seed:900000+i});
+    const SB=parseInt(process.env.SEED_BASE||'900000',10);
+    const rng=E.makeRng(SB+i);
+    const g=new E.MightyGame({seed:SB+i});
     const ag=[];
     for (let s=0;s<E.NUM_PLAYERS;s++) ag.push(s===seat
       ? await AI.createAgent({tier:'master', session:sess, ort, keyGuard:GUARD})

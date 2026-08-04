@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>lat</title>
+<script src="./ort/ort.wasm.min.js"></script>
+<script>
+(async () => {
+  const out = [];
+  for (const [name, dim] of [['mighty_master_v5.onnx', 739], ['mighty_master_v6.onnx', 1630]]) {
+    const s = await ort.InferenceSession.create('./model/' + name);
+    const obs = new ort.Tensor('float32', new Float32Array(dim), [1, dim]);
+    const mask = new ort.Tensor('bool', new Uint8Array(209).fill(1), [1, 209]);
+    await s.run({obs, mask});                       // 워밍업
+    const t0 = performance.now();
+    for (let i = 0; i < 100; i++) await s.run({obs, mask});
+    out.push(name + ' ' + ((performance.now() - t0) / 100).toFixed(2) + 'ms');
+  }
+  document.title = 'DONE';
+  document.body.textContent = out.join(' | ');
+})().catch(e => { document.title = 'ERR'; document.body.textContent = String(e); });
+</script>

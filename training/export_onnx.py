@@ -40,7 +40,8 @@ if __name__ == '__main__':
     assert ck['obs_dim'] == OBS_DIM and ck['action_dim'] == ACTION_DIM
     hidden = ck.get('hidden', args.hidden)
     depth = ck.get('depth', args.depth)
-    net = PolicyValueNet(hidden, depth, aux_head=ck.get('aux_head', False))
+    net = PolicyValueNet(hidden, depth, aux_head=ck.get('aux_head', False),
+                         attn=ck.get('attn', False))
     net.load_state_dict(ck['net']); net.eval()
     print(f'hidden {hidden} depth {depth} aux_head {ck.get("aux_head", False)}')
     model = PolicyOnly(net).eval()

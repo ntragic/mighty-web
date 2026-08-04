@@ -21,14 +21,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from mighty_encode import (MightyEnv, OBS_DIM, ACTION_DIM, O_FDMODE, O_PHASE,
-                           O_GIRUDA, aux_labels, conv_target, A_PLAY0, cidx)
+                           O_GIRUDA, aux_labels, conv_target, A_PLAY0, cidx,
+                           O_TOK, TOK_N, TOK_D)
 
 
 # ---------------- 모델 ----------------
 class PolicyValueNet(nn.Module):
-    def __init__(self, hidden=512, depth=3, aux_head=False):
+    def __init__(self, hidden=512, depth=3, aux_head=False, attn=False):
         super().__init__()
-        layers, d = [], OBS_DIM
+        # Phase B: 관측 끝의 트릭 토큰 블록을 [11,81]로 세워 소형 트랜스포머로
+        # 인코딩하고, 풀링 벡터를 관측에 concat해 트렁크에 넣는다.
+        self.use_attn = attn
+        d_in = OBS_DIM
+        if attn:
+            dm = 64
+            self.tok_proj = nn.Linear(TOK_D, dm)
+            el = nn.TransformerEncoderLayer(dm, nhead=4, dim_feedforward=128,
+                                            dropout=0.0, batch_first=True)
+            self.tok_enc = nn.TransformerEncoder(el, num_layers=2)
+            d_in = OBS_DIM + dm
+        layers, d = [], d_in
         for _ in range(depth):
             layers += [nn.Linear(d, hidden), nn.ReLU()]
             d = hidden
@@ -41,14 +53,21 @@ class PolicyValueNet(nn.Module):
         self.aux_trump = nn.Linear(d, 4) if aux_head else None
         self.aux_win = nn.Linear(d, 5) if aux_head else None
 
+    def _feat(self, obs):
+        if not self.use_attn:
+            return obs
+        tok = obs[:, O_TOK:O_TOK + TOK_N * TOK_D].reshape(-1, TOK_N, TOK_D)
+        h = self.tok_enc(self.tok_proj(tok)).mean(dim=1)
+        return torch.cat([obs, h], dim=-1)
+
     def forward(self, obs, mask):
-        h = self.trunk(obs)
+        h = self.trunk(self._feat(obs))
         logits = self.pi(h)
         logits = logits.masked_fill(~mask, -1e9)
         return logits, self.v(h).squeeze(-1)
 
     def forward_aux(self, obs, mask):
-        h = self.trunk(obs)
+        h = self.trunk(self._feat(obs))
         logits = self.pi(h).masked_fill(~mask, -1e9)
         if self.aux is None:
             return logits, self.v(h).squeeze(-1), None
@@ -306,6 +325,8 @@ def main():
                     help='프렌드 좌석 예측 보조손실 계수 (0이면 헤드 없음)')
     ap.add_argument('--conv', type=float, default=0.0,
                     help='E2 관례 증류 계수 — 개입 인증 클래스에서만 교사 CE를 더한다')
+    ap.add_argument('--attn', action='store_true',
+                    help='Phase B: 트릭 토큰 트랜스포머 인코더')
     args = ap.parse_args()
 
     if args.smoke:
@@ -317,7 +338,8 @@ def main():
     torch.manual_seed(args.seed)
     os.makedirs(args.ckpt, exist_ok=True)
 
-    net = PolicyValueNet(args.hidden, args.depth, aux_head=args.aux > 0).to(device)
+    net = PolicyValueNet(args.hidden, args.depth, aux_head=args.aux > 0,
+                         attn=args.attn).to(device)
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr)
     start = 0
     if args.resume:
@@ -388,7 +410,8 @@ def main():
                         'update': u, 'obs_dim': OBS_DIM, 'action_dim': ACTION_DIM,
                         'aux_head': args.aux > 0, 'hidden': args.hidden,
                         'depth': args.depth, 'shape': args.shape, 'alloc': args.alloc,
-                        'partners': args.partners, 'feed': args.feed},
+                        'partners': args.partners, 'feed': args.feed,
+                        'conv': args.conv, 'attn': args.attn},
                        f'{args.ckpt}/latest.pt')
     if hasattr(col, 'close'):
         col.close()

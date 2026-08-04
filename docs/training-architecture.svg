@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1010" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR',sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5f6b7a"/>
+    </marker>
+    <marker id="arb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2383e2"/>
+    </marker>
+  </defs>
+  <rect width="1440" height="1010" fill="#ffffff"/>
+
+  <!-- 제목 -->
+  <text x="40" y="46" font-size="24" font-weight="700" fill="#1c2733">마이티 RL 학습 시스템 개념도</text>
+  <text x="40" y="70" font-size="13" fill="#5f6b7a">v5 관례 증류 + Phase B 어텐션 (2026-08) · 학습 매트릭스 · 역할 · 판단 흐름</text>
+  <line x1="40" y1="84" x2="1400" y2="84" stroke="#e3e8ee" stroke-width="1"/>
+
+  <!-- ================= A. 롤아웃 수집 ================= -->
+  <text x="40" y="116" font-size="15" font-weight="700" fill="#2383e2">① 롤아웃 수집 — 파트너 혼합 자가대전</text>
+  <rect x="40" y="128" width="360" height="332" rx="8" fill="#f7f9fb" stroke="#d7dee6"/>
+
+  <text x="60" y="154" font-size="12.5" font-weight="600" fill="#1c2733">좌석 배치 모드 (경매 후 역할 확정 시 전환)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="72" y="176">여당 학습(주공+프렌드 동시)</text><text x="330" y="176" text-anchor="end">35%</text>
+    <text x="72" y="196">야당 학습(3석 공진화)</text><text x="330" y="196" text-anchor="end">30%</text>
+    <text x="72" y="216">혼합 2석 / 1석 (사람과 뛰는 상황)</text><text x="330" y="216" text-anchor="end">20 / 15%</text>
+  </g>
+  <line x1="60" y1="228" x2="380" y2="228" stroke="#e3e8ee"/>
+  <text x="60" y="250" font-size="12.5" font-weight="600" fill="#1c2733">파트너 좌석 (학습 주체 아님)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="72" y="272">휴리스틱 — 성향3 × 티어2 랜덤 (mirror-bridge)</text>
+    <text x="72" y="292">과거 자신 스냅샷 풀 (과적합 방지, 35%)</text>
+    <text x="72" y="312">경매엔 휴리스틱 입찰자 상시 ≥2석 (패스붕괴 방지)</text>
+  </g>
+  <line x1="60" y1="324" x2="380" y2="324" stroke="#e3e8ee"/>
+  <text x="60" y="346" font-size="12.5" font-weight="600" fill="#1c2733">환경</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="72" y="368">Python 엔진(권위) 480 env × 10 워커</text>
+    <text x="72" y="388">강제입찰 커리큘럼 1→0 (1500 upd 감쇠)</text>
+    <text x="72" y="408">보상 = 종단 제로섬 상금/2000 (좌석별)</text>
+    <text x="72" y="428">JS 엔진과 락스텝 동기 검증 (파리티 0)</text>
+  </g>
+
+  <!-- 역할 미니 박스 -->
+  <rect x="40" y="480" width="360" height="120" rx="8" fill="#ffffff" stroke="#d7dee6"/>
+  <text x="60" y="506" font-size="12.5" font-weight="600" fill="#1c2733">역할 (파라미터 공유 1정책이 5좌석 전부 플레이)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="72" y="528">주공 — 공약 달성 주도, 바닥패 교환·프렌드 지정</text>
+    <text x="72" y="548">프렌드 — 공개 전 은닉 / 공개 후 협력 (관례 증류 대상)</text>
+    <text x="72" y="568">야당 3석 — 공약 저지 공조</text>
+    <text x="72" y="588" fill="#5f6b7a">역할 라벨은 보상·증류 클래스 판정에만 쓰임</text>
+  </g>
+
+  <!-- ================= B. 관측/네트워크 ================= -->
+  <text x="470" y="116" font-size="15" font-weight="700" fill="#2383e2">② 관측 인코딩 · 정책 네트워크</text>
+
+  <rect x="470" y="128" width="430" height="150" rx="8" fill="#f7f9fb" stroke="#d7dee6"/>
+  <text x="490" y="154" font-size="12.5" font-weight="600" fill="#1c2733">관측 1,630차원 — 좌석 가시 정보만 (은닉 정보 비유출)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="502" y="176">기본 739 : 손패·계약·테이블·이력 요약·보이드 추론</text>
+    <text x="502" y="196">+ 추론 블록(트릭 상태·바깥 최고·키카드 소재) + 룰 14</text>
+    <text x="502" y="218">트릭 토큰 891 = 11토큰 × 81 (Phase B)</text>
+    <text x="502" y="238">낸 순서·좌석·무늬·랭크·키카드·승자 — 순서 보존</text>
+    <text x="502" y="258" fill="#5f6b7a">JS↔Python 동일 구현, 파리티 5,435건 오차 0</text>
+  </g>
+
+  <rect x="470" y="308" width="430" height="176" rx="8" fill="#eef5fd" stroke="#a9cdf3"/>
+  <text x="490" y="334" font-size="12.5" font-weight="600" fill="#1c2733">정책망 (파라미터 공유 · GPU bf16)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="502" y="356">트릭 토큰 [11×81] → 트랜스포머 2층 d64 → 풀링 64</text>
+    <text x="502" y="376">concat(관측 1630 + 64) → MLP 512 × 3층</text>
+  </g>
+  <line x1="490" y1="390" x2="880" y2="390" stroke="#c6dcf5"/>
+  <text x="490" y="412" font-size="12.5" font-weight="600" fill="#1c2733">출력 헤드</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="502" y="434">정책 209 (마스킹) · 가치 1</text>
+    <text x="502" y="454">보조 4종: 프렌드 좌석 · 좌석×무늬 보유 · 잔여 기루다 ·</text>
+    <text x="502" y="472">트릭 승자 — 파트너 모델링(팀 개념)의 표현 학습</text>
+  </g>
+
+  <!-- ================= C. 학습 신호 ================= -->
+  <text x="470" y="536" font-size="15" font-weight="700" fill="#2383e2">③ 학습 신호 — 무엇이 정책을 움직이나</text>
+  <rect x="470" y="548" width="430" height="180" rx="8" fill="#f7f9fb" stroke="#d7dee6"/>
+  <g font-size="12" fill="#3a4653">
+    <text x="490" y="574" font-weight="600" fill="#1c2733">PPO-clip + GAE</text>
+    <text x="502" y="594">승률의 유일한 원천. 종단 제로섬 보상 — 중간 보상 없음</text>
+    <text x="490" y="618" font-weight="600" fill="#1c2733">보조 CE/MSE (aux)</text>
+    <text x="502" y="638">보상 불변 표현 학습 — 무늬 보유 0.83 · 승자 0.72</text>
+    <text x="490" y="662" font-weight="600" fill="#1c2733">관례 증류 CE (conv=0.05)</text>
+    <text x="502" y="682">인증 클래스에서만 교사 카드 모방 — 클래스 밖 계수 0</text>
+    <text x="502" y="702" fill="#5f6b7a">λ 보상 벌점(전지적 판정) 방식은 3값 실험으로 폐기</text>
+  </g>
+
+  <!-- 인증 파이프라인 -->
+  <rect x="470" y="758" width="430" height="200" rx="8" fill="#fffdf2" stroke="#e8ddb0"/>
+  <text x="490" y="784" font-size="12.5" font-weight="600" fill="#1c2733">증류 클래스 인증 파이프라인 (오진 방지 관문)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="502" y="808">조건부 지표 격차 발견 (예: 보태기 52% vs 96%)</text>
+    <text x="502" y="830">→ 같은 딜 페어드 개입: 강제로 바꿔보고 상금 차 측정</text>
+    <text x="502" y="852">→ 승률 중립이면 승격 · 손해면 탈락</text>
+    <text x="514" y="876">통과: 공개후 확정승 보태기 · 야당 확정승 점수회피 ·</text>
+    <text x="514" y="894">        주공이 이기는 기루다 리드 점수응답</text>
+    <text x="514" y="916" fill="#b0483c">탈락: 무조건 기루다 응답(−6.4 유의손해) · 광역 보태기</text>
+    <text x="502" y="940" fill="#5f6b7a">클래스 판정도 좌석 가시 정보만 — 전지적 판정은 채점 전용</text>
+  </g>
+
+  <!-- ================= D. 배포 판단 flow ================= -->
+  <text x="970" y="116" font-size="15" font-weight="700" fill="#2383e2">④ 배포 — 브라우저 판단 흐름 (마스터 티어)</text>
+
+  <g>
+    <rect x="970" y="128" width="430" height="56" rx="8" fill="#f7f9fb" stroke="#d7dee6"/>
+    <text x="990" y="151" font-size="12.5" font-weight="600" fill="#1c2733">게임 상태 (좌석 가시)</text>
+    <text x="990" y="170" font-size="12" fill="#3a4653">손패 · 테이블 · 공개 이력 · 계약 · 룰 설정</text>
+
+    <rect x="970" y="212" width="430" height="56" rx="8" fill="#f7f9fb" stroke="#d7dee6"/>
+    <text x="990" y="235" font-size="12.5" font-weight="600" fill="#1c2733">관측 인코딩 (JS, 학습과 동일 코드 구조)</text>
+    <text x="990" y="254" font-size="12" fill="#3a4653">모델 입력 차원에 맞춰 앞부분 슬라이스 (v4 688 / v5 739 / v6 1630)</text>
+
+    <rect x="970" y="296" width="430" height="56" rx="8" fill="#eef5fd" stroke="#a9cdf3"/>
+    <text x="990" y="319" font-size="12.5" font-weight="600" fill="#1c2733">ONNX 추론 (onnxruntime-web, 단일 파일 4MB)</text>
+    <text x="990" y="338" font-size="12" fill="#3a4653">불법 수 마스킹 → 정책 argmax (~0.1ms대)</text>
+
+    <rect x="970" y="380" width="430" height="72" rx="8" fill="#f7f9fb" stroke="#d7dee6"/>
+    <text x="990" y="403" font-size="12.5" font-weight="600" fill="#1c2733">키카드 가드 (후처리 안전망)</text>
+    <text x="990" y="422" font-size="12" fill="#3a4653">결판난 트릭에 마이티·조커·기루다 태우는 명백 낭비만 차단</text>
+    <text x="990" y="440" font-size="12" fill="#3a4653">보수적 위협 계산 — 대안 없으면 개입 안 함</text>
+
+    <rect x="970" y="480" width="430" height="40" rx="8" fill="#1c2733"/>
+    <text x="990" y="505" font-size="13" font-weight="600" fill="#ffffff">액션 실행</text>
+  </g>
+
+  <path d="M1185 184 V206" stroke="#5f6b7a" stroke-width="1.5" marker-end="url(#ar)"/>
+  <path d="M1185 268 V290" stroke="#5f6b7a" stroke-width="1.5" marker-end="url(#ar)"/>
+  <path d="M1185 352 V374" stroke="#5f6b7a" stroke-width="1.5" marker-end="url(#ar)"/>
+  <path d="M1185 452 V474" stroke="#5f6b7a" stroke-width="1.5" marker-end="url(#ar)"/>
+
+  <!-- 학습된 성향 요약 -->
+  <rect x="970" y="548" width="430" height="180" rx="8" fill="#f2faf4" stroke="#bfe3c8"/>
+  <text x="990" y="574" font-size="12.5" font-weight="600" fill="#1c2733">v1.3.0 마스터의 학습된 관례 (검증 수치)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="1002" y="598">프렌드 공개 전 — 은닉: 관전자 식별률 무작위 수준</text>
+    <text x="1002" y="620">공개 후 — 주공 기루다 리드 점수응답 23→89%</text>
+    <text x="1002" y="642">공개 후 — 확정승 트릭 점수 보태기 52→72%</text>
+    <text x="1002" y="664">야당 확정승 트릭 헌납 감소 — 낭비 17.1→14.5%</text>
+    <text x="1002" y="686">승률 유지 — 판당 +446 · 주공 승률 78.3%</text>
+    <text x="1002" y="708" fill="#5f6b7a">지는 리드에 점수 아끼기는 인증 탈락 → 의도적 유지</text>
+  </g>
+
+  <!-- 평가 게이트 -->
+  <rect x="970" y="758" width="430" height="200" rx="8" fill="#f7f9fb" stroke="#d7dee6"/>
+  <text x="990" y="784" font-size="12.5" font-weight="600" fill="#1c2733">릴리스 게이트 (이원 수용 기준)</text>
+  <g font-size="12" fill="#3a4653">
+    <text x="1002" y="808">승률 하한 — 판당 상금 +150↑ · 주공 승률 70%↑ ·</text>
+    <text x="1002" y="826">                주공 비율 20~35% · 주공 딜미스 0</text>
+    <text x="1002" y="850">경험 지표 — 은닉 식별률 · 공개후 밀어주기 ·</text>
+    <text x="1002" y="868">                신호 일관성 (휴리스틱 격차로 표기)</text>
+    <text x="1002" y="892">ONNX 내보내기 argmax 200/200 일치 · 파리티 0</text>
+    <text x="1002" y="914">엔진 59건 · UI 스모크 · 복기 재개 테스트</text>
+    <text x="1002" y="938" fill="#5f6b7a">최종 심판은 배포 리플레이 로그 (E4)</text>
+  </g>
+
+  <!-- ============ 큰 흐름 화살표 ============ -->
+  <!-- 수집 → 네트워크 -->
+  <path d="M400 240 H436 V200 H464" stroke="#2383e2" stroke-width="2" fill="none" marker-end="url(#arb)"/>
+  <text x="408" y="228" font-size="11" fill="#2383e2">궤적·관측</text>
+  <!-- 네트워크 → 수집 (행동) -->
+  <path d="M470 396 H436 V360 H406" stroke="#5f6b7a" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+  <text x="410" y="350" font-size="11" fill="#5f6b7a">행동 샘플</text>
+  <!-- 네트워크 ↔ 학습신호 -->
+  <path d="M830 484 V542" stroke="#2383e2" stroke-width="2" marker-end="url(#arb)"/>
+  <text x="795" y="516" font-size="11" fill="#2383e2" text-anchor="end">예측·로짓</text>
+  <path d="M872 548 V490" stroke="#5f6b7a" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="882" y="522" font-size="11" fill="#5f6b7a">그래디언트</text>
+  <!-- 인증 → 학습신호 -->
+  <path d="M685 758 V734" stroke="#5f6b7a" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="695" y="750" font-size="11" fill="#5f6b7a">승격된 클래스만</text>
+  <!-- 네트워크 → 배포 -->
+  <path d="M900 324 H964" stroke="#2383e2" stroke-width="2" marker-end="url(#arb)"/>
+  <text x="906" y="314" font-size="11" fill="#2383e2">ONNX export</text>
+
+  <line x1="40" y1="978" x2="1400" y2="978" stroke="#e3e8ee"/>
+  <text x="40" y="998" font-size="11" fill="#8a94a0">Mighty_game · 학습 키트 training/ · 판정 도구 tools/research/ · 정본 계획 docs/TRAINING-PLAN.md</text>
+  <text x="1400" y="998" font-size="11" fill="#8a94a0" text-anchor="end">2026-08-04</text>
+</svg>
