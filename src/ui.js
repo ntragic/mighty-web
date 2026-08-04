@@ -289,8 +289,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v1.3.0';
-const APP_BUILD = '2026-08-04 빌드 — 마스터 협력 관례 학습';
+const APP_VERSION = 'v1.4.0';
+const APP_BUILD = '2026-08-04 빌드 — 마스터 어텐션 인코더';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -568,7 +568,7 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v5.onnx';
+const MASTER_MODEL='./model/mighty_master_v6.onnx';
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
 function loadScript(src){
