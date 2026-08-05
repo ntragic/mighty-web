@@ -14,7 +14,8 @@ const E = IS_NODE ? require('./mighty-engine.js') : window.MightyEngine;
 const M = IS_NODE ? require('./mighty-master.js') : window.MightyMaster;
 
 const GRADE = { CRITICAL: '결정적', LOSS: '손해', SLIP: '부정확' };
-const TH = { LOSS: 100, SLIP: 60, FLIP_HI: 2 / 3, FLIP_LO: 1 / 3 };
+// SLIP 80: 정밀도 벤치에서 60은 검증 통과율이 낮았다(표본 4건 중 1건) — 더 극단만 표시
+const TH = { LOSS: 100, SLIP: 80, FLIP_HI: 2 / 3, FLIP_LO: 1 / 3 };
 
 function rebuild(rec, upto) {
   const g = new E.MightyGame(rec.cfg);

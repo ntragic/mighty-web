@@ -14,7 +14,7 @@ const ort = require('onnxruntime-node');
 const E = require(P('../../src/mighty-engine.js'));
 const AI = require(P('../../src/mighty-ai.js'));
 const A = require(P('../../src/mighty-analysis.js'));
-const MODEL = process.env.MODEL || P('../../web/model/mighty_master_v6.onnx');
+const MODEL = process.env.MODEL || P('../../web/model/mighty_master_v6b.onnx');
 const PER = ['gambler', 'balanced', 'careful'];
 
 (async () => {

@@ -4,7 +4,7 @@ const path=require('path'), ort=require('onnxruntime-node');
 const E=require(path.join(__dirname,'../../src/mighty-engine.js'));
 const AI=require(path.join(__dirname,'../../src/mighty-ai.js'));
 const M=require(path.join(__dirname,'../../src/mighty-master.js'));
-const MODEL=path.join(__dirname,'../../web/model/mighty_master_v6.onnx');
+const MODEL=path.join(__dirname,'../../web/model/mighty_master_v6b.onnx');
 (async()=>{
   const sess=await ort.InferenceSession.create(MODEL);
   const PER=['gambler','balanced','careful'];

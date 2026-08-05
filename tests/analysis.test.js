@@ -6,7 +6,7 @@ const ort = require('onnxruntime-node');
 const E = require(P('../src/mighty-engine.js'));
 const AI = require(P('../src/mighty-ai.js'));
 const A = require(P('../src/mighty-analysis.js'));
-const MODEL = P('../web/model/mighty_master_v6.onnx');
+const MODEL = P('../web/model/mighty_master_v6b.onnx');
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL:', m); } };

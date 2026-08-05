@@ -2416,7 +2416,8 @@ const E = IS_NODE ? require('./mighty-engine.js') : window.MightyEngine;
 const M = IS_NODE ? require('./mighty-master.js') : window.MightyMaster;
 
 const GRADE = { CRITICAL: '결정적', LOSS: '손해', SLIP: '부정확' };
-const TH = { LOSS: 100, SLIP: 60, FLIP_HI: 2 / 3, FLIP_LO: 1 / 3 };
+// SLIP 80: 정밀도 벤치에서 60은 검증 통과율이 낮았다(표본 4건 중 1건) — 더 극단만 표시
+const TH = { LOSS: 100, SLIP: 80, FLIP_HI: 2 / 3, FLIP_LO: 1 / 3 };
 
 function rebuild(rec, upto) {
   const g = new E.MightyGame(rec.cfg);
@@ -3181,8 +3182,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v1.4.0';
-const APP_BUILD = '2026-08-04 빌드 — 마스터 어텐션 인코더';
+const APP_VERSION = 'v2.0.0';
+const APP_BUILD = '2026-08-05 빌드 — AI 복기';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -3466,7 +3467,7 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v6.onnx';
+const MASTER_MODEL='./model/mighty_master_v6b.onnx';
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
 function loadScript(src){
