@@ -133,14 +133,16 @@ const aggAI = newAgg(), aggHU = newAgg();
 const meta = {};
 for (const f of files) {
   const txt = fs.readFileSync(f, 'utf8');
-  const m = txt.split('```json')[1];
-  if (!m) { console.error(`JSON 블록 없음: ${f}`); continue; }
-  const rec = JSON.parse(m.split('```')[0]);
-  const g = measure(rec, aggAI, aggHU);
-  const ok = g.phase === 'done';
-  meta[rec.version] = (meta[rec.version] || 0) + 1;
-  console.log(`${path.basename(f)}  v=${rec.version} tier=${rec.tier} → ${ok ? '재구성 완료' : '미완주:' + g.phase}` +
-    (ok ? ` · 상금 ${g.result.prizes.join('/')}` : ''));
+  const blocks = txt.split('```json').slice(1);          // 전체 내보내기 = 라운드당 1블록
+  if (!blocks.length) { console.error(`JSON 블록 없음: ${f}`); continue; }
+  blocks.forEach((b, bi) => {
+    const rec = JSON.parse(b.split('```')[0]);
+    const g = measure(rec, aggAI, aggHU);
+    const ok = g.phase === 'done';
+    meta[rec.version] = (meta[rec.version] || 0) + 1;
+    console.log(`${path.basename(f)}#${bi + 1}  v=${rec.version} seed=${rec.seed} → ` +
+      `${ok ? '재구성 완료' : '미완주:' + g.phase}` + (ok ? ` · 상금 ${g.result.prizes.join('/')}` : ''));
+  });
 }
 console.log(`\n버전 구성: ${Object.entries(meta).map(([k, v]) => `${k}×${v}`).join(', ')}`);
 report('AI 좌석(마스터) 1~4', aggAI);
