@@ -347,7 +347,7 @@ function defaultSettings(){
     _tierV:2,
     names:['나','서준','하린','도윤','유나'],
     engine:{
-      minBid:14, noGirudaBidDiscount:0,
+      minBid:14, noGirudaBidDiscount:0, bidStartsAtDealer:true,
       allowBidRevise:true, girudaChangeCost:2, toNoGirudaChangeCost:1,
       dealMissEnabled:true, dealMissThreshold:0.5,
       jokerCallEnabled:true, jokerCallBaseSuit:'C', jokerCallAltSuit:'H',

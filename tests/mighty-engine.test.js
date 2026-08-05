@@ -216,5 +216,15 @@ console.log('== 5. 딜미스 선택제 테스트 ==');
 }
 
 // -----------------------------------------------------------------
+// 비딩 시작 좌석 — 기본은 딜러+1(구 리플레이 재현 보존), 옵션 켜면 딜러부터
+{
+  const a = new E.MightyGame({ seed: 42 }); a.start(2);
+  eq(a.currentPlayer, 3, '기본: 비딩은 딜러+1부터');
+  const b = new E.MightyGame({ seed: 42, bidStartsAtDealer: true }); b.start(2);
+  eq(b.currentPlayer, 2, '옵션: 비딩은 딜러부터');
+  const c = new E.MightyGame({ seed: 42, bidStartsAtDealer: true }); c.start(4);
+  eq(c.currentPlayer, 4, '옵션: 딜러 4도 자기부터');
+}
+
 console.log(`\n결과: ${passCnt} passed, ${failCnt} failed`);
 process.exit(failCnt ? 1 : 0);
