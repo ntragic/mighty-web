@@ -64,15 +64,17 @@ function isTopOfSuit(g, seat, card) {
  * 원래 행동이 옳았다는 증거로 오독된다.
  */
 function override(g, seat, mode, actual) {
-  // 좁힌 클래스 접미사: P=공개 후+여당 한정, L=P+종반(트릭 6 이후)
-  const narrow = mode.endsWith('P') || mode.endsWith('L');
+  // 좁힌 클래스 접미사: P=공개 후+여당 한정, L=P+종반(트릭 6+), M=P+중반(트릭 4~5)
+  const narrow = mode.endsWith('P') || mode.endsWith('L') || mode.endsWith('M');
   const late = mode.endsWith('L');
+  const mid = mode.endsWith('M');
   const base = narrow ? mode.slice(0, -1) : mode;
   if (narrow) {
     if (!g.friendRevealed) return null;
     const ruling = seat === g.declarer || seat === g.friend;
     if (!ruling) return null;
     if (late && g.play.trickNo < 6) return null;
+    if (mid && (g.play.trickNo < 4 || g.play.trickNo > 5)) return null;
   }
   mode = base;
 

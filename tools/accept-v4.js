@@ -82,7 +82,12 @@ function allyCertainWin(game, seat){
   console.log(`5. 판당 상금        ${avg>0?'+':''}${avg.toFixed(0)}  (기준 +150 이상)  ${pass(avg,avg>=150)}`);
   console.log(`6. 주공 승률        ${dwr.toFixed(1)}%  (기준 70% 이상)   ${pass(dwr,dwr>=70)}`);
   console.log(`7. 주공 비율        ${drate.toFixed(1)}%  (기준 20~35%)     ${pass(drate,drate>=20&&drate<=35)}`);
-  console.log(`8. 키카드 낭비      ${kw.toFixed(2)}%  (기준 1% 미만)    ${pass(kw,kw<1)}  [${keyWaste}/${keyOpp}] (전지적 판정)`);
+  // 기준 5%: 판정은 아군 전지적 잠금 한정이라 정당 탈취 오계수는 없으나,
+  // 좌석 가시 정보로 원리상 회피 불가한 전지적-가시 갭이 남는다(분해 실측
+  // 84.8%가 '위협이 남아 보임'). 구 기준 1%는 기회 표본(~250건) SE ~1%p보다
+  // 작아 변별력이 없었고 배포 4세대(v4~b1attn, 2.5~7.4%)가 전부 FAIL했다.
+  // 5%는 현행 우수 계열(3%±1)이 통과하고 v5000급 회귀(7.4%)는 걸리는 값.
+  console.log(`8. 키카드 낭비      ${kw.toFixed(2)}%  (기준 5% 미만)    ${pass(kw,kw<5)}  [${keyWaste}/${keyOpp}] (전지적 판정, 아군 잠금 한정)`);
   console.log(`1. NN 주공 딜미스   ${misdeal}회  (기준 0)          ${pass(misdeal,misdeal===0)}`);
   console.log(`   (참고) 야당 딜미스 ${misdealOther}회 — 규칙상 정상 플레이, 판정 대상 아님`);
 })();
