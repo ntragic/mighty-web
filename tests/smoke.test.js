@@ -109,6 +109,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const ranks = w.document.querySelectorAll('.rank-row').length;
   console.log('final ranking rows:', ranks, '(expect 5)');
   if (ranks !== 5) { console.error('final modal missing'); process.exit(1); }
+  // v2 P4: 매치 AI 요약 버튼 + 누적 통계 반영
+  if (!w.document.querySelector('#final-ai')) { console.error('match summary button missing'); process.exit(1); }
+  if (!MUI.lifeStats || MUI.lifeStats.rounds < 1) { console.error('life stats not updated'); process.exit(1); }
+  if (!w.document.body.textContent.includes('누적')) { console.error('stats line missing in final'); process.exit(1); }
+  console.log('match summary button + life stats present (rounds=' + MUI.lifeStats.rounds + ')');
   w.document.querySelector('#rematch-btn').click();
   await sleep(300);
   console.log('rematch: phase =', MUI.game.phase, '/ human acts =', humanActs);
