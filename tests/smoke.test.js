@@ -92,6 +92,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const btnLabel = w.document.querySelector('#next-btn').textContent;
   console.log('settlement button:', btnLabel, '(expect 최종 결과 보기)');
   if (!MUI.matchOver) { console.error('match should be over after 1 round'); process.exit(1); }
+  // v2: AI 복기 버튼·분석 모듈·코칭 토글 존재 확인
+  if (!w.document.querySelector('#ai-rv-btn')) { console.error('AI review button missing'); process.exit(1); }
+  if (!w.MightyAnalysis || typeof w.MightyAnalysis.analyzeRound !== 'function') {
+    console.error('MightyAnalysis missing'); process.exit(1);
+  }
+  console.log('AI review button + analysis module present');
+  // v2: 코칭 토글이 설정에 있고 기본 OFF, 손패에 코칭 마킹용 data-cid 존재
+  if (MUI.settings.ui.coach !== false) { console.error('coach should default off'); process.exit(1); }
+  MUI.openSettings();
+  await sleep(80);
+  if (!w.document.body.textContent.includes('코칭')) { console.error('coach toggle missing in settings'); process.exit(1); }
+  console.log('coach toggle present, default off');
   w.document.querySelector('#next-btn').click();
   await sleep(200);
   const ranks = w.document.querySelectorAll('.rank-row').length;

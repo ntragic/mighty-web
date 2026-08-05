@@ -56,6 +56,17 @@ const I18N_EN = {
   '프리셋':'Preset', '마이티리그 룰':'Mighty League rules', '표준 룰 (공약 13)':'Standard rules (min bid 13)',
   '커스텀':'Custom', '플레이어':'Players', '내 이름':'Your name', '난이도':'Difficulty',
   '중급':'Intermediate', '고급':'Advanced', '마스터':'Master',
+  // v2 AI 복기·코칭
+  'AI 복기':'AI Review', '분석 중':'Analyzing', '분석 실패':'Analysis failed',
+  '분석은 마스터 모델이 필요합니다':'Analysis requires the Master model',
+  '결정적':'Critical', '손해':'Loss', '부정확':'Inaccuracy',
+  '표시할 실수가 없습니다 — 좋은 판이었습니다':'No mistakes to show — well played',
+  '대안 라인':'Alt line', '실제 라인':'Actual line', '보기':'View', '닫기':'Close',
+  '대안 라인(가정)':'alt line (hypothetical)',
+  '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
+  '코칭 (마스터 추천 카드)':'Coaching (Master hint)',
+  '플레이 중 마스터가 낼 카드를 손패에 표시합니다':'Marks the card Master would play during your turn',
+  '끔':'Off', '켬':'On', '기대상금':'EV',
   '중급·고급은 규칙 기반, 마스터는 신경망(16MB 다운로드)':
     'Intermediate/Advanced are rule-based; Master uses a neural network (16 MB)',
   '마스터 AI 로드 실패 — 고급 전략으로 진행합니다':'Master AI unavailable — falling back to Advanced',
@@ -199,6 +210,7 @@ const TF = {
   jokerDemand:(s)=> LANG==='en' ? ` (${s} demanded)` : ` (${s} 요구)`,
   suitFollow:()=> LANG==='en' ? 'Other players must follow this suit' : '다른 플레이어는 이 무늬를 따라야 합니다',
   seatMeta:(tk,pt)=> LANG==='en' ? `${tk} tricks · ${pt} pts` : `트릭 ${tk} · ${pt}점`,
+  trickN:(n)=> LANG==='en' ? `Trick ${n}` : `트릭 ${n}`,
   hudRounds:(r,m)=> LANG==='en' ? `<b>${r}</b>/${m} rounds` : `<b>${r}</b>/${m}판`,
   hudTarget:(r,tg)=> LANG==='en' ? `<b>${r}</b> rounds · target +${num(tg)}` : `<b>${r}</b>판 · 목표 +${num(tg)}`,
   hudPlain:(r)=> LANG==='en' ? `<b>${r}</b> rounds` : `<b>${r}</b>판`,
@@ -289,8 +301,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v1.4.0';
-const APP_BUILD = '2026-08-04 빌드 — 마스터 어텐션 인코더';
+const APP_VERSION = 'v2.0.0';
+const APP_BUILD = '2026-08-05 빌드 — AI 복기';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -317,7 +329,8 @@ function defaultSettings(){
   return {
     preset:'league',
     match:{ mode:'rounds', rounds:10, targetPrize:20000, dealerRule:'friend' },
-    ui:{ speed:'normal', difficulty:'intermediate', sound:true, lang:null, autoClaim:true, undo:true },
+    ui:{ speed:'normal', difficulty:'intermediate', sound:true, lang:null, autoClaim:true, undo:true,
+         coach:false },
     _tierV:2,
     names:['나','서준','하린','도윤','유나'],
     engine:{
@@ -442,6 +455,11 @@ function renderSetGeneral(b,S){
       : masterState==='loading' ? t('마스터 AI 로딩 중…')
       : masterState==='failed' ? t('마스터 AI를 불러오지 못했습니다. 고급 전략으로 대체 진행합니다.')
       : t('마스터 AI는 첫 사용 시 모델을 내려받습니다.')));
+  // v2 코칭 — 기본 OFF. 켜면 마스터 모델을 로드해 내 차례에 추천 카드를 표시한다
+  b.append(segRow(t('코칭 (마스터 추천 카드)'), t('플레이 중 마스터가 낼 카드를 손패에 표시합니다'),
+    [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
+    ()=>S.ui.coach?'on':'off',
+    v=>{ S.ui.coach=(v==='on'); if(S.ui.coach) ensureMaster(); coachUpdate(); }));
   // 사운드·속도
   b.append(el('div','set-sec',t('사운드')));
   b.append(segRow(t('컴퓨터 속도'),'', [{v:'fast',l:t('빠름')},{v:'normal',l:t('보통')},{v:'slow',l:t('느림')}],
@@ -568,7 +586,7 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v6.onnx';
+const MASTER_MODEL='./model/mighty_master_v6b.onnx';
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
 function loadScript(src){
@@ -846,6 +864,7 @@ function renderHand(){
   for(const c of sorted){
     const h=el('div','hcard'); h.append(cardEl(c));
     const id=E.cardId(c);
+    h.dataset.cid=id;                       // v2 코칭 마킹용
     if (phase==='floor' && game.currentPlayer===HUMAN){
       h.classList.add('legal');
       if (game.floorOriginal && game.floorOriginal.some(f=>E.sameCard(f,c)) &&
@@ -858,6 +877,7 @@ function renderHand(){
     }
     wrap.append(h);
   }
+  coachUpdate();                            // v2 코칭 — 켜져 있을 때만 동작
 }
 function toggleDiscard(c){
   const i=selDiscard.findIndex(s=>E.sameCard(s,c));
@@ -1492,6 +1512,142 @@ function replayableRecords(){
   if (roundRec && !roundRec.result && roundRec.actions.some(x=>x.ph==='play')) list.push(roundRec);
   return list;
 }
+/* ---------------- v2 AI 복기 (분석·하이라이트) ---------------- */
+let analysisBusy=false;
+
+async function openAnalysis(rec){
+  if (!rec){ toast(t('복기할 라운드가 없습니다')); return; }
+  const box=$('#modal-box');
+  box.innerHTML=`<h2>${t('AI 복기')}</h2><div class="sub" id="an-status">${t('분석 중')}…</div>
+    <div id="an-body"></div>
+    <div class="btnrow"><button class="btn ghost" id="an-close">${t('닫기')}</button></div>`;
+  $('#modal').classList.add('show');
+  // 닫으면 정산 화면으로 복귀 (정산 반영은 settledRound 가드로 중복 없음)
+  $('#an-close').onclick=()=>{ if (game && game.phase==='done') showSettlement();
+                               else $('#modal').classList.remove('show'); };
+  if (!rec.analysis){
+    if (analysisBusy) return;
+    analysisBusy=true;
+    try{
+      await ensureMaster();
+      if (masterState!=='ready'){ $('#an-status').textContent=t('분석은 마스터 모델이 필요합니다'); return; }
+      const tick=()=>new Promise(r=>setTimeout(r,0));   // 프레임 양보 (메인 스레드 청크 실행)
+      const st=()=>$('#an-status');
+      rec.analysis=await MightyAnalysis.analyzeRound(masterSess, ortLib, rec, HUMAN,
+        { topK:5, n:24, seed:(rec.seed>>>0)||7, tick,
+          onProgress:(d,n)=>{ const s=st(); if(s) s.textContent=`${t('분석 중')}… ${d}/${n}`; } });
+    }catch(e){
+      const s=$('#an-status'); if(s) s.textContent=t('분석 실패');
+      analysisBusy=false; return;
+    }
+    analysisBusy=false;
+  }
+  renderAnalysis(rec);
+}
+
+function renderAnalysis(rec){
+  const res=rec.analysis, body=$('#an-body'), st=$('#an-status');
+  if (!res || !body) return;
+  if (st) st.textContent='';
+  // EV 곡선 — 인간 결정 시점의 좌석 기대상금 (마스터 가치망 기준)
+  const W=560, H=96, pad=8;
+  const pts=res.evCurve;
+  let svg='';
+  if (pts.length>1){
+    const x=i=>pad+(W-2*pad)*i/(pts.length-1);
+    const y=v=>{ const c=Math.max(-1,Math.min(1,v)); return H/2-(H/2-pad)*c; };
+    const line=pts.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
+    const marks=res.highlights.map(h=>{
+      const i=pts.findIndex(p=>p.idx===h.idx); if(i<0) return '';
+      const cls=h.grade==='결정적'?'#ff8a80':h.grade==='손해'?'#ffcf7a':'#aeb6c0';
+      return `<circle cx="${x(i).toFixed(1)}" cy="${y(pts[i].v).toFixed(1)}" r="5" fill="${cls}"/>`;
+    }).join('');
+    svg=`<svg id="an-ev" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <line x1="${pad}" y1="${H/2}" x2="${W-pad}" y2="${H/2}" stroke="rgba(255,255,255,.15)"/>
+      <path d="${line}" fill="none" stroke="var(--gold)" stroke-width="2"/>
+      ${marks}</svg>
+      <div class="an-sub">${t('기대상금')} — ${t('마스터 기준')}</div>`;
+  }
+  const cards=res.highlights.length ? res.highlights.map((h,i)=>{
+    const cls=h.grade==='결정적'?'g-crit':h.grade==='손해'?'g-loss':'g-slip';
+    const wr=`${t('승률')} ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n} · ${h.flip.act.n}${t('회 시뮬')}`;
+    return `<div class="an-card"><span class="an-badge ${cls}">${t(h.grade)}</span>
+      <div class="an-main">${tf('trickN', h.trick)} · ${h.actual} → ${h.alt}<span class="an-d">+${num(h.dPrize)}</span>
+        <div class="an-sub">${wr}</div></div>
+      <button class="btn quiet" data-hl="${i}">${t('보기')}</button></div>`;
+  }).join('') : `<div class="an-sub" style="margin-top:10px">${t('표시할 실수가 없습니다 — 좋은 판이었습니다')}</div>`;
+  body.innerHTML=svg+cards;
+  body.querySelectorAll('button[data-hl]').forEach(b=>{
+    b.onclick=()=>openHighlight(rec, res.highlights[parseInt(b.dataset.hl,10)]);
+  });
+}
+/** 액션 인덱스 → 플레이 스텝 인덱스 */
+function stepIndexOfAction(rec, actIdx){
+  const ps=rec.actions.findIndex(x=>x.ph==='play');
+  let n=0;
+  for (let i=ps;i<actIdx;i++) if (rec.actions[i].ph==='play') n++;
+  return n;
+}
+
+function openHighlight(rec, h){
+  $('#modal').classList.remove('show');
+  startReplay(rec);
+  if (!replay) return;
+  toggleReplayPlay(false);
+  const ghostRec={ ...rec, actions:h.ghost.actions, result:h.ghost.result, analysis:null };
+  replay.hl={ h, rec, ghostRec, alt:false };
+  jumpToHighlight();
+}
+
+/** 현재 라인(실제/대안)에서 하이라이트 직전으로 이동 후, 잠깐 멈췄다 강조 재생 */
+function jumpToHighlight(){
+  const hl=replay && replay.hl; if(!hl) return;
+  const rec2=hl.alt ? hl.ghostRec : hl.rec;
+  if (replay.timer){ clearTimeout(replay.timer); replay.timer=null; }
+  replay.playing=false; replay.ghost=null;
+  replay.rec=rec2;
+  replay.playStart=rec2.actions.findIndex(x=>x.ph==='play');
+  replay.steps=rec2.actions.slice(replay.playStart).filter(x=>x.ph==='play');
+  replay.g=rebuildGame(rec2, replay.playStart);
+  replay.step=0;
+  const target=stepIndexOfAction(rec2, hl.h.idx);
+  while (replay.step<target && replay.step<replay.steps.length){
+    replay.g.act(replay.steps[replay.step].a); replay.step++;
+  }
+  replay.emphStep=target;                 // 이 스텝을 밟는 순간 강조
+  renderReplay();
+  setTimeout(()=>{
+    if (replay && replay.hl && replay.step===target) replayStepForward();
+  }, 900);
+}
+
+function toggleAltLine(){
+  const hl=replay && replay.hl; if(!hl) return;
+  hl.alt=!hl.alt;
+  jumpToHighlight();
+}
+
+/* ---------------- v2 코칭 (마스터 추천 카드) ---------------- */
+let coachGen=0;
+async function coachUpdate(){
+  const gen=++coachGen;
+  document.querySelectorAll('#hand .hcard.coach').forEach(e=>e.classList.remove('coach'));
+  if (!settings.ui.coach || !game || replay) return;
+  if (game.phase!=='play' || game.currentPlayer!==HUMAN || busy) return;
+  if (masterState!=='ready'){ ensureMaster(); return; }
+  try{
+    const { logits, mask }=await MightyAnalysis.infer(masterSess, ortLib, game, HUMAN);
+    if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
+    let best=-1, bv=-Infinity;
+    for (let i=0;i<mask.length;i++) if (mask[i]&&logits[i]>bv){ bv=logits[i]; best=i; }
+    const act=MightyMaster.actionToEngine(best, game, []);
+    if (!act || act.type!=='play') return;
+    const cid=E.cardId(act.card);
+    const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
+    if (elc) elc.classList.add('coach');
+  }catch(e){ /* 코칭은 조용히 실패 */ }
+}
+
 function openReplayPicker(){
   if (modalResolve){ toast(t('먼저 진행 중인 선택을 마쳐주세요')); return; }
   const list = replayableRecords();
@@ -1543,6 +1699,7 @@ function startReplay(rec){
 }
 function closeReplay(){
   if (replay && replay.timer) clearTimeout(replay.timer);
+  const ab=$('#rp-alt'); if (ab) ab.remove();
   replay = null;
   document.body.classList.remove('replaying');
   $('#replay-head').classList.remove('show');
@@ -1626,7 +1783,8 @@ function renderReplay(){
     : fd.mode==='first' ? (replay.friend===null? t('셀프') : NAMES[replay.friend])
     : (replay.friend===null ? `${cardLabel(fd.card)} (${t('셀프')})` : `${cardLabel(fd.card)} → ${NAMES[replay.friend]}`);
   $('#replay-head').innerHTML = tf('replayHead', replay.rec.round,
-    `${replay.contract.count}${gLabel(replay.contract.giruda)}`, NAMES[replay.declarer], fTxt);
+    `${replay.contract.count}${gLabel(replay.contract.giruda)}`, NAMES[replay.declarer], fTxt)
+    + (replay.hl && replay.hl.alt ? ` · <span class="alt-tag">${t('대안 라인(가정)')}</span>` : '');
   // 테이블 — 트릭이 막 끝났으면 그 트릭을 그대로 붙잡아 보여준다
   const tr = $('#trick'); tr.innerHTML='';
   const gh = replay.ghost;
@@ -1639,6 +1797,12 @@ function renderReplay(){
       const tag=el('div', suCls(e.jokerSuit), SUIT_GLYPH[e.jokerSuit]);
       tag.style.cssText='position:absolute;top:4px;right:6px;font-size:.75rem;font-weight:700;';
       c.append(tag);
+    }
+    // 하이라이트 강조 — 결정적 수를 밟은 직후, 그 카드를 확대·EV 표시
+    if (replay.hl && replay.step===replay.emphStep+1 && e.player===HUMAN){
+      c.classList.add('emph');
+      const d=replay.hl.h.dPrize;
+      slot.append(el('div','ev-chip', `${t('기대상금')} ${replay.hl.alt?'+':'−'}${num(d)}`));
     }
     slot.append(c);
     tr.append(slot);
@@ -1675,6 +1839,13 @@ function renderReplay(){
   const info = el('div','info', tf('replayProgress', Math.min(tn,10), replay.step, replay.steps.length));
   if (gh) info.innerHTML += `<br><span style="color:var(--gold)">${NAMES[gh.winner]}${gh.points?' +'+gh.points:''}</span>`;
   bar.append(info);
+  // 하이라이트 모드 — 라인 전환 버튼 (바 재구축 이후에 넣어야 살아남는다)
+  if (replay.hl){
+    const ab=mk(replay.hl.alt ? t('실제 라인') : t('대안 라인'), toggleAltLine,
+                replay.hl.alt ? '' : 'primary');
+    ab.id='rp-alt';
+    bar.append(ab);
+  }
   bar.append(mk(t('내보내기'), ()=>exportRound(replay.rec)));
   bar.append(mk(t('게임으로'), closeReplay, 'primary'));
 }
@@ -1988,14 +2159,15 @@ function showSettlement(){
         <td class="num ${d>0?'pos':d<0?'neg':''}">${d>0?'+':''}${num(d)}</td>
         <td class="num ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</td></tr>`;
     }).join('')}</table>
-    <div class="btnrow"><button class="btn quiet" id="rv-btn">${t('복기')}</button><button class="btn quiet" id="ex-btn">${t('내보내기')}</button><button class="btn primary" id="next-btn"></button></div>`;
+    <div class="btnrow"><button class="btn quiet" id="ai-rv-btn">${t('AI 복기')}</button><button class="btn quiet" id="rv-btn">${t('복기')}</button><button class="btn quiet" id="ex-btn">${t('내보내기')}</button><button class="btn primary" id="next-btn"></button></div>`;
   const M=settings.match;
   matchOver = (M.mode==='rounds' && roundNo>=M.rounds) ||
               (M.mode==='target' && Math.max(...totals)>=M.targetPrize);
   $('#next-btn').textContent = matchOver ? t('최종 결과 보기') : t('다음 판');
   $('#modal').classList.add('show');
-  const rvb=$('#rv-btn'), exb=$('#ex-btn');
+  const rvb=$('#rv-btn'), exb=$('#ex-btn'), arb=$('#ai-rv-btn');
   if (rvb) rvb.onclick=()=>{ $('#modal').classList.remove('show'); startReplay(matchLog[matchLog.length-1]); };
+  if (arb) arb.onclick=()=>openAnalysis(matchLog[matchLog.length-1]);
   if (exb) exb.onclick=()=>exportRound(matchLog[matchLog.length-1]);
   $('#next-btn').onclick=()=>{
     $('#modal').classList.remove('show');
@@ -2145,7 +2317,7 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings };
+globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
