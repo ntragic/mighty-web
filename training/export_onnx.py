@@ -7,12 +7,14 @@ from mighty_encode import MightyEnv, OBS_DIM, ACTION_DIM
 from train_ppo import PolicyValueNet
 
 class PolicyOnly(torch.nn.Module):
+    """logits + value 둘 다 내보낸다. 게임 본체는 logits만 쓰고(v1 호환),
+    v2 AI 복기가 value를 스크리닝에 쓴다. value는 좌석 관점 기대상금/2000."""
     def __init__(self, net):
         super().__init__()
         self.net = net
     def forward(self, obs, mask):
-        logits, _ = self.net(obs, mask)
-        return logits
+        logits, v = self.net(obs, mask)
+        return logits, v
 
 def real_states(n, seed=31337):
     """실게임 랜덤 롤아웃에서 관측/마스크 샘플 수집 (검증용)"""
@@ -49,8 +51,9 @@ if __name__ == '__main__':
     d_obs = torch.zeros(1, OBS_DIM)
     d_mask = torch.ones(1, ACTION_DIM, dtype=torch.bool)
     torch.onnx.export(model, (d_obs, d_mask), args.out,
-                      input_names=['obs', 'mask'], output_names=['logits'],
-                      dynamic_axes={'obs': {0: 'B'}, 'mask': {0: 'B'}, 'logits': {0: 'B'}},
+                      input_names=['obs', 'mask'], output_names=['logits', 'value'],
+                      dynamic_axes={'obs': {0: 'B'}, 'mask': {0: 'B'},
+                                    'logits': {0: 'B'}, 'value': {0: 'B'}},
                       opset_version=17)
 
     # 수치 검증: torch vs onnxruntime, 실게임 상태 200개
@@ -60,7 +63,7 @@ if __name__ == '__main__':
     maxdiff = 0.0; agree = 0
     for obs, mask in states:
         with torch.no_grad():
-            t = model(torch.as_tensor(obs)[None], torch.as_tensor(mask)[None])[0].numpy()
+            t = model(torch.as_tensor(obs)[None], torch.as_tensor(mask)[None])[0][0].numpy()
         r = sess.run(None, {'obs': obs[None], 'mask': mask[None]})[0][0]
         legal = np.flatnonzero(mask)
         maxdiff = max(maxdiff, float(np.abs(t[legal] - r[legal]).max()))

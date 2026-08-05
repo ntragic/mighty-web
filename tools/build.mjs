@@ -22,6 +22,7 @@ const template = read('web/index.template.html');
 const parts = {
   engine: read('src/mighty-engine.js'),
   master: read('src/mighty-master.js'),
+  analysis: read('src/mighty-analysis.js'),
   ai: read('src/mighty-ai.js'),
   ui: read('src/ui.js'),
 };
