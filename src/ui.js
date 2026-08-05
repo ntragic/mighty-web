@@ -67,6 +67,11 @@ const I18N_EN = {
   '코칭 (마스터 추천 카드)':'Coaching (Master hint)',
   '플레이 중 마스터가 낼 카드를 손패에 표시합니다':'Marks the card Master would play during your turn',
   '끔':'Off', '켬':'On', '기대상금':'EV',
+  '매치 AI 요약':'Match AI summary', '이번 매치 결정적 순간':'Key moments of this match',
+  '분석할 라운드가 없습니다':'No rounds to analyze',
+  '하이라이트가 없습니다 — 깔끔한 매치였습니다':'No highlights — a clean match',
+  '누적':'Lifetime', '내 승률':'my win rate', '주공일 때':'as declarer',
+  '분석':'analyzed', '실수':'mistakes',
   '중급·고급은 규칙 기반, 마스터는 신경망(16MB 다운로드)':
     'Intermediate/Advanced are rule-based; Master uses a neural network (16 MB)',
   '마스터 AI 로드 실패 — 고급 전략으로 진행합니다':'Master AI unavailable — falling back to Advanced',
@@ -211,6 +216,11 @@ const TF = {
   suitFollow:()=> LANG==='en' ? 'Other players must follow this suit' : '다른 플레이어는 이 무늬를 따라야 합니다',
   seatMeta:(tk,pt)=> LANG==='en' ? `${tk} tricks · ${pt} pts` : `트릭 ${tk} · ${pt}점`,
   trickN:(n)=> LANG==='en' ? `Trick ${n}` : `트릭 ${n}`,
+  roundTrick:(r,tn)=> LANG==='en' ? `R${r} · Trick ${tn}` : `${r}판 · 트릭 ${tn}`,
+  statsLine:(n,w,dn,dw,pz)=> LANG==='en'
+    ? `Lifetime ${n} rounds · win ${w}% · declarer ${dw}/${dn} · ${pz}/round`
+    : `누적 ${n}판 · 내 승률 ${w}% · 주공일 때 ${dw}/${dn} · 판당 ${pz}`,
+  statsMistakes:(m,a)=> LANG==='en' ? ` · ${m} mistakes / ${a} analyzed` : ` · 실수 ${m}건 / 분석 ${a}판`,
   hudRounds:(r,m)=> LANG==='en' ? `<b>${r}</b>/${m} rounds` : `<b>${r}</b>/${m}판`,
   hudTarget:(r,tg)=> LANG==='en' ? `<b>${r}</b> rounds · target +${num(tg)}` : `<b>${r}</b>판 · 목표 +${num(tg)}`,
   hudPlain:(r)=> LANG==='en' ? `<b>${r}</b> rounds` : `<b>${r}</b>판`,
@@ -1512,6 +1522,36 @@ function replayableRecords(){
   if (roundRec && !roundRec.result && roundRec.actions.some(x=>x.ph==='play')) list.push(roundRec);
   return list;
 }
+/* ---------------- v2 세션 통계 (localStorage 누적) ---------------- */
+const STATS_KEY='mighty_stats_v1';
+function loadStats(){
+  const d={rounds:0,wins:0,declR:0,declW:0,prize:0,crit:0,loss:0,anR:0};
+  try{ return {...d, ...JSON.parse(localStorage.getItem(STATS_KEY)||'{}')}; }
+  catch(e){ return d; }
+}
+let lifeStats=loadStats();
+function saveStats(){ try{ localStorage.setItem(STATS_KEY, JSON.stringify(lifeStats)); }catch(e){} }
+/** 분석 완료된 라운드의 하이라이트를 누적 통계에 1회만 반영 */
+function statsFromAnalysis(rec){
+  if (!rec.analysis || rec.statsCounted) return;
+  rec.statsCounted=true;
+  lifeStats.anR++;
+  for (const h of rec.analysis.highlights){
+    if (h.grade==='결정적') lifeStats.crit++;
+    else if (h.grade==='손해') lifeStats.loss++;
+  }
+  saveStats();
+}
+function statsLineHtml(){
+  const s2=lifeStats;
+  if (!s2.rounds) return '';
+  const w=(100*s2.wins/s2.rounds).toFixed(0);
+  const pz=(s2.prize/s2.rounds>=0?'+':'')+Math.round(s2.prize/s2.rounds);
+  let txt=tf('statsLine', s2.rounds, w, s2.declR, s2.declW, pz);
+  if (s2.anR) txt+=tf('statsMistakes', s2.crit+s2.loss, s2.anR);
+  return `<div class="an-sub" style="margin:2px 0 12px">${txt}</div>`;
+}
+
 /* ---------------- v2 AI 복기 (분석·하이라이트) ---------------- */
 let analysisBusy=false;
 
@@ -1541,6 +1581,7 @@ async function openAnalysis(rec){
       analysisBusy=false; return;
     }
     analysisBusy=false;
+    statsFromAnalysis(rec);
   }
   renderAnalysis(rec);
 }
@@ -1646,6 +1687,50 @@ async function coachUpdate(){
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
     if (elc) elc.classList.add('coach');
   }catch(e){ /* 코칭은 조용히 실패 */ }
+}
+
+/** 매치 전 라운드 통합 AI 요약 — 결정적 순간 상위 3선 */
+async function openMatchSummary(){
+  const recs=matchLog.filter(r=>r.result);
+  if (!recs.length){ toast(t('분석할 라운드가 없습니다')); return; }
+  const box=$('#modal-box');
+  box.innerHTML=`<h2>${t('매치 AI 요약')}</h2><div class="sub" id="an-status"></div><div id="an-body"></div>
+    <div class="btnrow"><button class="btn ghost" id="an-close">${t('닫기')}</button></div>`;
+  $('#modal').classList.add('show');
+  $('#an-close').onclick=()=>showFinal();
+  await ensureMaster();
+  if (masterState!=='ready'){ const st=$('#an-status'); if(st) st.textContent=t('분석은 마스터 모델이 필요합니다'); return; }
+  const tick=()=>new Promise(r=>setTimeout(r,0));
+  for (let i=0;i<recs.length;i++){
+    const rec=recs[i];
+    if (rec.analysis) continue;
+    const st=$('#an-status'); if(st) st.textContent=`${t('분석 중')}… ${i+1}/${recs.length}`;
+    try{
+      rec.analysis=await MightyAnalysis.analyzeRound(masterSess, ortLib, rec, HUMAN,
+        { topK:5, n:24, seed:(rec.seed>>>0)||7, tick });
+      statsFromAnalysis(rec);
+    }catch(e){ /* 한 라운드 실패는 건너뛴다 */ }
+  }
+  { const st=$('#an-status'); if(st) st.textContent=''; }
+  const rank={ '결정적':0, '손해':1, '부정확':2 };
+  const all=[];
+  for (const rec of recs)
+    for (const h of (rec.analysis ? rec.analysis.highlights : [])) all.push({ rec, h });
+  all.sort((a,b)=> (rank[a.h.grade]-rank[b.h.grade]) || (b.h.dPrize-a.h.dPrize));
+  const top=all.slice(0,3);
+  const body=$('#an-body'); if (!body) return;
+  body.innerHTML = top.length
+    ? `<div class="sub" style="margin-top:6px">${t('이번 매치 결정적 순간')}</div>` + top.map((x,i)=>{
+        const cls=x.h.grade==='결정적'?'g-crit':x.h.grade==='손해'?'g-loss':'g-slip';
+        return `<div class="an-card"><span class="an-badge ${cls}">${t(x.h.grade)}</span>
+          <div class="an-main">${tf('roundTrick', x.rec.round, x.h.trick)} · ${x.h.actual} → ${x.h.alt}<span class="an-d">+${num(x.h.dPrize)}</span>
+            <div class="an-sub">${t('승률')} ${x.h.flip.act.win}/${x.h.flip.act.n} → ${x.h.flip.alt.win}/${x.h.flip.alt.n} · ${x.h.flip.act.n}${t('회 시뮬')}</div></div>
+          <button class="btn quiet" data-ms="${i}">${t('보기')}</button></div>`;
+      }).join('')
+    : `<div class="an-sub" style="margin-top:10px">${t('하이라이트가 없습니다 — 깔끔한 매치였습니다')}</div>`;
+  body.querySelectorAll('button[data-ms]').forEach(b=>{
+    b.onclick=()=>{ const x=top[parseInt(b.dataset.ms,10)]; openHighlight(x.rec, x.h); };
+  });
 }
 
 function openReplayPicker(){
@@ -1902,6 +1987,13 @@ function buildReportMd(rec){
     L.push(`- ${r.win?'여당 승':'야당 승'}${r.run?' · 런':''}${r.backRun?' · 백런':''} · 점수 ${r.score} → 상금 ${r.prize}`);
     L.push(`- 배분: ` + r.prizes.map((v,i)=>`${nm(i)} ${v>0?'+':''}${v}`).join(' · '));
   }
+  if (rec.analysis && rec.analysis.highlights.length){
+    L.push('');
+    L.push('## AI 하이라이트 (마스터 기준)');
+    for (const h of rec.analysis.highlights)
+      L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 기대상금 +${h.dPrize} · ` +
+             `승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
+  }
   L.push('');
   L.push('## 재현용 원본');
   L.push('```json');
@@ -2144,6 +2236,10 @@ function showSettlement(){
     for(let p=0;p<5;p++) totals[p]+=r.prizes[p];
     matchHistory.push(totals.slice());
     if (humanWin) SFX.winJingle(); else SFX.loseJingle();
+    lifeStats.rounds++; if (humanWin) lifeStats.wins++;
+    if (HUMAN===r.declarer){ lifeStats.declR++; if (r.win) lifeStats.declW++; }
+    lifeStats.prize+=r.prizes[HUMAN];
+    saveStats();
   }
   const box=$('#modal-box');
   box.innerHTML=`
@@ -2254,13 +2350,15 @@ function showFinal(){
       <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):''}</div>
       <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
     </div>`).join('')}</div>
-    <div class="btnrow"><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>`;
+    ${statsLineHtml()}
+    <div class="btnrow"><button class="btn quiet" id="final-ai">${t('매치 AI 요약')}</button><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>`;
   $('#modal').classList.add('show');
   animateFinalChart();
   logLine(tf('logMatchEnd', NAMES[order[0]], totals[order[0]]));
   $('#rematch-btn').onclick=()=>{ $('#modal').classList.remove('show'); newMatch(); };
   $('#final-set').onclick=()=>openSettings();
   const fe=$('#final-exp'); if (fe) fe.onclick=()=>exportMatch();
+  const fa=$('#final-ai'); if (fa) fa.onclick=()=>openMatchSummary();
 }
 function newMatch(){
   matchHistory=[];
@@ -2317,7 +2415,7 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine };
+globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
