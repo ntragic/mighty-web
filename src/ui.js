@@ -314,8 +314,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.0';
-const APP_BUILD = '2026-08-05 빌드 — 매치 요약·세션 통계';
+const APP_VERSION = 'v2.1.1';
+const APP_BUILD = '2026-08-05 빌드 — 대안 라인 결과 비교';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
