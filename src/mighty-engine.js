@@ -39,6 +39,7 @@ const TOTAL_POINT_CARDS = 20;
 const DEFAULT_CONFIG = {
   // --- 비딩 ---
   minBid: 14,                 // 최소 공약 (리그 데이터 기준 14; 통상 13)
+  bidStartsAtDealer: false,   // true면 딜러부터 비딩 (기본 false — 구버전 리플레이 재현 보존)
   maxBid: 20,
   noGirudaBidDiscount: 0,     // 노기루다 최소공약 차감 (예: 1이면 13에 노기루다 가능)
   allowBidRevise: true,       // 바닥패 후 공약 수정 허용
@@ -198,7 +199,7 @@ class MightyGame {
     // 비딩 초기화 (딜러 왼쪽부터)
     this.phase = 'bidding';
     this.bidding = {
-      turn: (dealer + 1) % NUM_PLAYERS,
+      turn: (this.config.bidStartsAtDealer ? dealer : dealer + 1) % NUM_PLAYERS,
       active: new Array(NUM_PLAYERS).fill(true),
       best: null, // {player, count, giruda}
     };

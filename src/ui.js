@@ -314,8 +314,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.1';
-const APP_BUILD = '2026-08-05 빌드 — 대안 라인 결과 비교';
+const APP_VERSION = 'v2.1.2';
+const APP_BUILD = '2026-08-05 빌드 — 딜러 선비딩';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -347,7 +347,7 @@ function defaultSettings(){
     _tierV:2,
     names:['나','서준','하린','도윤','유나'],
     engine:{
-      minBid:14, noGirudaBidDiscount:0,
+      minBid:14, noGirudaBidDiscount:0, bidStartsAtDealer:true,
       allowBidRevise:true, girudaChangeCost:2, toNoGirudaChangeCost:1,
       dealMissEnabled:true, dealMissThreshold:0.5,
       jokerCallEnabled:true, jokerCallBaseSuit:'C', jokerCallAltSuit:'H',

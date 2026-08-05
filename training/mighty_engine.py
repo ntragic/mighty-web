@@ -16,6 +16,7 @@ TOTAL_POINT_CARDS = 20
 
 DEFAULT_CONFIG = {
     'minBid': 14, 'maxBid': 20, 'noGirudaBidDiscount': 0,
+    'bidStartsAtDealer': False,   # True면 딜러부터 비딩 (JS 엔진과 동일해야 함)
     'allowBidRevise': True, 'girudaChangeCost': 2, 'toNoGirudaChangeCost': 1,
     'redealOnAllPass': True,
     'dealMissEnabled': True, 'dealMissThreshold': 0.5,
@@ -152,7 +153,8 @@ class MightyGame:
 
         # 딜미스는 자동이 아닌 '선언 가능' 자격 (JS v0.8 파리티)
         self.phase = 'bidding'
-        self.bidding = {'turn': (dealer + 1) % NUM_PLAYERS,
+        self.bidding = {'turn': (dealer if self.config['bidStartsAtDealer']
+                                 else dealer + 1) % NUM_PLAYERS,
                         'active': [True] * NUM_PLAYERS, 'best': None}
         return self
 
