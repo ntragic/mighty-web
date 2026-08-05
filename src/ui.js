@@ -16,7 +16,7 @@ const I18N_EN = {
   '여당 승리':'Attackers win', '야당 승리':'Defenders win',
   '여당 (주공)':'Attacker (declarer)', '여당 (프렌드)':'Attacker (friend)',
   '여당 (숨은 프렌드)':'Attacker (hidden friend)', '미정 (초구 프렌드)':'Undecided (first-trick friend)',
-  '프렌드(비공개)':'Friend (hidden)',
+  '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
   // 기본 화면
   '마이티':'Mighty', '패스':'Pass', '취소':'Cancel', '없음':'None', '판':'Round',
   '다음 판':'Next round', '최종 결과 보기':'Final results', '시트':'Sheet', '시트 닫기':'Close sheet',
@@ -735,7 +735,7 @@ function renderSeats(){
     if (game && game.friendRevealed && game.friend===p) bd.append(el('span','badge friend',t('프렌드')));
     else if (p===HUMAN && game && game.friendDecl && game.friendDecl.mode==='card' && !game.friendRevealed
              && game.hands[HUMAN].some(c=>E.sameCard(c, game.friendDecl.card)))
-      bd.append(el('span','badge friend-secret',t('프렌드(비공개)')));
+      bd.append(el('span','badge friend-secret two', t('프렌드')+'<br>'+t('(비공개)')));
     const tot=totals[p];
     const tb=el('span','badge total'+(tot>0?' plus':tot<0?' minus':''), (tot>0?'+':'')+num(tot));
     bd.append(tb);
@@ -2271,7 +2271,7 @@ function showSettlement(){
         <td class="num ${d>0?'pos':d<0?'neg':''}">${d>0?'+':''}${num(d)}</td>
         <td class="num ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</td></tr>`;
     }).join('')}</table>
-    <div class="btnrow"><button class="btn quiet" id="ai-rv-btn">${t('AI 복기')}</button><button class="btn quiet" id="rv-btn">${t('복기')}</button><button class="btn quiet" id="ex-btn">${t('내보내기')}</button><button class="btn primary" id="next-btn"></button></div>`;
+    <div class="btnrow grid2"><button class="btn quiet" id="ai-rv-btn">${t('AI 복기')}</button><button class="btn quiet" id="rv-btn">${t('복기')}</button><button class="btn quiet" id="ex-btn">${t('내보내기')}</button><button class="btn primary" id="next-btn"></button></div>`;
   const M=settings.match;
   matchOver = (M.mode==='rounds' && roundNo>=M.rounds) ||
               (M.mode==='target' && Math.max(...totals)>=M.targetPrize);
@@ -2367,7 +2367,7 @@ function showFinal(){
       <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
     </div>`).join('')}</div>
     ${statsLineHtml()}
-    <div class="btnrow"><button class="btn quiet" id="final-ai">${t('매치 AI 요약')}</button><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>`;
+    <div class="btnrow grid2"><button class="btn quiet" id="final-ai">${t('매치 AI 요약')}</button><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>`;
   $('#modal').classList.add('show');
   animateFinalChart();
   logLine(tf('logMatchEnd', NAMES[order[0]], totals[order[0]]));
