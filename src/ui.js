@@ -217,6 +217,9 @@ const TF = {
   seatMeta:(tk,pt)=> LANG==='en' ? `${tk} tricks · ${pt} pts` : `트릭 ${tk} · ${pt}점`,
   trickN:(n)=> LANG==='en' ? `Trick ${n}` : `트릭 ${n}`,
   roundTrick:(r,tn)=> LANG==='en' ? `R${r} · Trick ${tn}` : `${r}판 · 트릭 ${tn}`,
+  altCmp:(aP,aZ,gP,gZ,dP,dZ)=> LANG==='en'
+    ? `actual ${aP} pts · ${aZ} → alt ${gP} pts · ${gZ} (${dP} point cards, ${dZ} prize)`
+    : `실제 점수카드 ${aP}장·상금 ${aZ} → 대안 ${gP}장·${gZ} (점수카드 ${dP}장 · 상금 ${dZ})`,
   statsLine:(n,w,dn,dw,pz)=> LANG==='en'
     ? `Lifetime ${n} rounds · win ${w}% · declarer ${dw}/${dn} · ${pz}/round`
     : `누적 ${n}판 · 내 승률 ${w}% · 주공일 때 ${dw}/${dn} · 판당 ${pz}`,
@@ -311,8 +314,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.0';
-const APP_BUILD = '2026-08-05 빌드 — 매치 요약·세션 통계';
+const APP_VERSION = 'v2.1.1';
+const APP_BUILD = '2026-08-05 빌드 — 대안 라인 결과 비교';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1636,7 +1639,16 @@ function openHighlight(rec, h){
   if (!replay) return;
   toggleReplayPlay(false);
   const ghostRec={ ...rec, actions:h.ghost.actions, result:h.ghost.result, analysis:null };
-  replay.hl={ h, rec, ghostRec, alt:false };
+  // 라인 결과 비교 — 인간 팀 점수카드 수와 내 상금 (대안 라인은 재생되는 한 판 기준)
+  let cmp=null;
+  const aR=rec.result, gR=h.ghost && h.ghost.result;
+  if (aR && gR){
+    const ruling=(HUMAN===replay.declarer || (replay.friend!==null && HUMAN===replay.friend));
+    cmp={ aPts: ruling?aR.yeodangPoints:aR.yadangPoints,
+          gPts: ruling?gR.yeodangPoints:gR.yadangPoints,
+          aPrize:aR.prizes[HUMAN], gPrize:gR.prizes[HUMAN] };
+  }
+  replay.hl={ h, rec, ghostRec, alt:false, cmp };
   jumpToHighlight();
 }
 
@@ -1869,7 +1881,11 @@ function renderReplay(){
     : (replay.friend===null ? `${cardLabel(fd.card)} (${t('셀프')})` : `${cardLabel(fd.card)} → ${NAMES[replay.friend]}`);
   $('#replay-head').innerHTML = tf('replayHead', replay.rec.round,
     `${replay.contract.count}${gLabel(replay.contract.giruda)}`, NAMES[replay.declarer], fTxt)
-    + (replay.hl && replay.hl.alt ? ` · <span class="alt-tag">${t('대안 라인(가정)')}</span>` : '');
+    + (replay.hl && replay.hl.alt ? ` · <span class="alt-tag">${t('대안 라인(가정)')}</span>` : '')
+    + (replay.hl && replay.hl.cmp ? (()=>{ const c=replay.hl.cmp;
+        const sg=v=>(v>0?'+':'')+num(v);
+        return `<br><span class="alt-cmp">${tf('altCmp', c.aPts, sg(c.aPrize), c.gPts, sg(c.gPrize),
+                sg(c.gPts-c.aPts), sg(c.gPrize-c.aPrize))}</span>`; })() : '');
   // 테이블 — 트릭이 막 끝났으면 그 트릭을 그대로 붙잡아 보여준다
   const tr = $('#trick'); tr.innerHTML='';
   const gh = replay.ghost;
