@@ -314,8 +314,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.3';
-const APP_BUILD = '2026-08-05 빌드 — 레이아웃 안정화';
+const APP_VERSION = 'v2.1.4';
+const APP_BUILD = '2026-08-06 빌드 — 복기·코칭 정합 수정';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -715,26 +715,30 @@ function buildSeats(){
   }
 }
 function renderSeats(){
-  const inPlay = game && game.phase==='play';
+  // 복기 중에는 라이브 게임이 아니라 복기 중인 라운드의 상태를 그린다.
+  // (매치 요약·복기에서 다른 판을 열람할 때 주공·프렌드 배지가 라이브 판의
+  //  것으로 남아 "역할이 밀려 보이는" 버그의 원인이었다)
+  const G = replay ? replay.g : game;
+  const inPlay = G && G.phase==='play';
   for(let p=0;p<5;p++){
     const seat=$('#seat-'+p);
-    seat.classList.toggle('turn', game && game.currentPlayer===p && game.phase!=='done');
+    seat.classList.toggle('turn', G && G.currentPlayer===p && G.phase!=='done');
     const meta=$('#meta-'+p);
     if (inPlay){
-      meta.textContent=tf('seatMeta', game.play.tricksWon[p], game.play.capturedPoints[p]);
+      meta.textContent=tf('seatMeta', G.play.tricksWon[p], G.play.capturedPoints[p]);
     } else meta.textContent = p!==HUMAN ? t(TIER_LABEL_KO[currentTier()]) : '';
     // 손패 백
     if (p!==HUMAN){
       const bk=$('#backs-'+p); bk.innerHTML='';
-      const n=game && game.hands[p] ? game.hands[p].length : 0;
+      const n=G && G.hands[p] ? G.hands[p].length : 0;
       for(let i=0;i<n;i++) bk.append(el('div','mini'));
     }
     // 배지
     const bd=$('#badges-'+p); bd.innerHTML='';
-    if (game && game.declarer===p && game.phase!=='bidding') bd.append(el('span','badge decl',t('주공')));
-    if (game && game.friendRevealed && game.friend===p) bd.append(el('span','badge friend',t('프렌드')));
-    else if (p===HUMAN && game && game.friendDecl && game.friendDecl.mode==='card' && !game.friendRevealed
-             && game.hands[HUMAN].some(c=>E.sameCard(c, game.friendDecl.card)))
+    if (G && G.declarer===p && G.phase!=='bidding') bd.append(el('span','badge decl',t('주공')));
+    if (G && G.friendRevealed && G.friend===p) bd.append(el('span','badge friend',t('프렌드')));
+    else if (p===HUMAN && G && G.friendDecl && G.friendDecl.mode==='card' && !G.friendRevealed
+             && G.hands[HUMAN].some(c=>E.sameCard(c, G.friendDecl.card)))
       bd.append(el('span','badge friend-secret two', t('프렌드')+'<br>'+t('(비공개)')));
     const tot=totals[p];
     const tb=el('span','badge total'+(tot>0?' plus':tot<0?' minus':''), (tot>0?'+':'')+num(tot));
@@ -742,9 +746,9 @@ function renderSeats(){
     // 획득 점수카드 더미
     const pile=$('#pile-'+p); pile.innerHTML='';
     if (inPlay){
-      const cards=game.play.capturedCards[p];
+      const cards=G.play.capturedCards[p];
       // 여당(주공·공개된 프렌드)의 더미는 본인에게도 덮어서 표시 (실제 룰)
-      const hidden = (p===game.declarer) || (game.friendRevealed && game.friend===p);
+      const hidden = (p===G.declarer) || (G.friendRevealed && G.friend===p);
       const showFaces = !hidden;
       for(const c of cards){
         if (showFaces){
@@ -1689,12 +1693,15 @@ async function coachUpdate(){
   if (game.phase!=='play' || game.currentPlayer!==HUMAN || busy) return;
   if (masterState!=='ready'){ ensureMaster(); return; }
   try{
-    const { logits, mask }=await MightyAnalysis.infer(masterSess, ortLib, game, HUMAN);
+    // 마스터 좌석의 실제 플레이 경로와 완전히 동일해야 한다:
+    // chooseAction(정책) → actionToEngine → keyCardGuard(낭비 차단 후처리).
+    // 이전 구현은 가드를 건너뛴 원시 argmax를 보여줘 실제 마스터가 내지 않을
+    // 낭비 수를 추천했다(실플레이 제보).
+    const a=await MightyMaster.chooseAction(masterSess, ortLib, game, HUMAN, []);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
-    let best=-1, bv=-Infinity;
-    for (let i=0;i<mask.length;i++) if (mask[i]&&logits[i]>bv){ bv=logits[i]; best=i; }
-    const act=MightyMaster.actionToEngine(best, game, []);
+    let act=MightyMaster.actionToEngine(a, game, []);
     if (!act || act.type!=='play') return;
+    act=MightyAI.keyCardGuard(game, HUMAN, act);
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
     if (elc) elc.classList.add('coach');
@@ -1874,6 +1881,7 @@ function toggleReplayPlay(on){
 function renderReplay(){
   if (!replay) return;
   const g = replay.g;
+  renderSeats();                    // 좌석 배지·트릭 수·더미를 복기 상태로
   // 헤드: 공약·주공·프렌드
   const fd = replay.friendDecl;
   const fTxt = !fd ? '-' : fd.mode==='none' ? t('노프렌드')
@@ -2431,7 +2439,7 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, get lifeStats(){return {...lifeStats}} };
+globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
