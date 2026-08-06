@@ -220,6 +220,9 @@ const TF = {
   altCmpNote:(d)=> LANG==='en'
     ? ` · sims still favor the alt by +${d} on average — this actual line ran above average`
     : ` · 시뮬 평균은 대안이 +${d} 우세 — 이 판의 실제 라인이 평균 이상으로 풀린 경우`,
+  altCmpTie:(d)=> LANG==='en'
+    ? ` · this line ends the same — the +${d} edge is the 24-sim average, not every line`
+    : ` · 이 라인은 결과가 같다 — +${d}는 24회 시뮬의 평균 우세이고, 모든 라인이 이기는 건 아니다`,
   altCmp:(aP,aZ,gP,gZ,dP,dZ)=> LANG==='en'
     ? `actual ${aP} pts · ${aZ} → alt ${gP} pts · ${gZ} (${dP} point cards, ${dZ} prize)`
     : `실제 점수카드 ${aP}장·상금 ${aZ} → 대안 ${gP}장·${gZ} (점수카드 ${dP}장 · 상금 ${dZ})`,
@@ -1515,6 +1518,8 @@ async function doUndo(){
   const idx = lastHumanIdx(gp);
   const g2 = rebuildGame(roundRec, idx);
   roundRec.actions.length = idx;
+  roundRec.analysis = null;          // 라인이 바뀌므로 분석 캐시 무효
+  roundRec.statsCounted = false;
   game = g2; instrument(game);
   undoUsed[gp]++;
   selDiscard = []; bidSel = {giruda:null,count:null}; reviseSel = {on:false,giruda:null,count:null};
@@ -1654,9 +1659,10 @@ function openHighlight(rec, h){
     cmp={ aPts: ruling?aR.yeodangPoints:aR.yadangPoints,
           gPts: ruling?gR.yeodangPoints:gR.yadangPoints,
           aPrize:aR.prizes[HUMAN], gPrize:gR.prizes[HUMAN] };
-    // 대표 라인조차 실제 결과보다 낮으면 — 실제 라인이 평균 이상으로 풀린 판.
-    // 카드의 기대상금(시뮬 평균)과 이 한 판의 결과가 다른 이유를 병기한다.
+    // 대표 라인이 실제보다 낮거나 같으면 — 카드의 기대상금(시뮬 평균)과
+    // 이 한 판의 결과가 왜 다른지/같은지 병기한다.
     cmp.note = (cmp.gPrize - cmp.aPrize) < 0;
+    cmp.tie  = (cmp.gPrize - cmp.aPrize) === 0;
   }
   replay.hl={ h, rec, ghostRec, alt:false, cmp };
   jumpToHighlight();
@@ -1900,7 +1906,8 @@ function renderReplay(){
         const sg=v=>(v>0?'+':'')+num(v);
         return `<br><span class="alt-cmp">${tf('altCmp', c.aPts, sg(c.aPrize), c.gPts, sg(c.gPrize),
                 sg(c.gPts-c.aPts), sg(c.gPrize-c.aPrize))
-                + (c.note ? tf('altCmpNote', num(replay.hl.h.dPrize)) : '')}</span>`; })() : '');
+                + (c.note ? tf('altCmpNote', num(replay.hl.h.dPrize))
+                   : c.tie ? tf('altCmpTie', num(replay.hl.h.dPrize)) : '')}</span>`; })() : '');
   // 테이블 — 트릭이 막 끝났으면 그 트릭을 그대로 붙잡아 보여준다
   const tr = $('#trick'); tr.innerHTML='';
   const gh = replay.ghost;
