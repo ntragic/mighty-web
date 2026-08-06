@@ -1969,7 +1969,10 @@ function renderReplay(){
     ab.id='rp-alt';
     bar.append(ab);
   }
-  bar.append(mk(t('내보내기'), ()=>exportRound(replay.rec)));
+  // 하이라이트 복기 중에는 항상 '실제' 기록을 내보낸다. 대안 라인(replay.rec가
+  // ghostRec인 상태)을 그대로 내보내면 시뮬 라인이 실제 기록처럼 저장된다 —
+  // 트릭 절반이 가상인데 겉보기 구분이 없어 제보 혼선의 원인이었다.
+  bar.append(mk(t('내보내기'), ()=>exportRound(replay.hl ? replay.hl.rec : replay.rec)));
   bar.append(mk(t('게임으로'), closeReplay, 'primary'));
 }
 function renderHandReplay(g){
