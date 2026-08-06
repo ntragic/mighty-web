@@ -217,6 +217,9 @@ const TF = {
   seatMeta:(tk,pt)=> LANG==='en' ? `${tk} tricks · ${pt} pts` : `트릭 ${tk} · ${pt}점`,
   trickN:(n)=> LANG==='en' ? `Trick ${n}` : `트릭 ${n}`,
   roundTrick:(r,tn)=> LANG==='en' ? `R${r} · Trick ${tn}` : `${r}판 · 트릭 ${tn}`,
+  altCmpNote:(d)=> LANG==='en'
+    ? ` · sims still favor the alt by +${d} on average — this actual line ran above average`
+    : ` · 시뮬 평균은 대안이 +${d} 우세 — 이 판의 실제 라인이 평균 이상으로 풀린 경우`,
   altCmp:(aP,aZ,gP,gZ,dP,dZ)=> LANG==='en'
     ? `actual ${aP} pts · ${aZ} → alt ${gP} pts · ${gZ} (${dP} point cards, ${dZ} prize)`
     : `실제 점수카드 ${aP}장·상금 ${aZ} → 대안 ${gP}장·${gZ} (점수카드 ${dP}장 · 상금 ${dZ})`,
@@ -1651,6 +1654,9 @@ function openHighlight(rec, h){
     cmp={ aPts: ruling?aR.yeodangPoints:aR.yadangPoints,
           gPts: ruling?gR.yeodangPoints:gR.yadangPoints,
           aPrize:aR.prizes[HUMAN], gPrize:gR.prizes[HUMAN] };
+    // 대표 라인조차 실제 결과보다 낮으면 — 실제 라인이 평균 이상으로 풀린 판.
+    // 카드의 기대상금(시뮬 평균)과 이 한 판의 결과가 다른 이유를 병기한다.
+    cmp.note = (cmp.gPrize - cmp.aPrize) < 0;
   }
   replay.hl={ h, rec, ghostRec, alt:false, cmp };
   jumpToHighlight();
@@ -1893,7 +1899,8 @@ function renderReplay(){
     + (replay.hl && replay.hl.cmp ? (()=>{ const c=replay.hl.cmp;
         const sg=v=>(v>0?'+':'')+num(v);
         return `<br><span class="alt-cmp">${tf('altCmp', c.aPts, sg(c.aPrize), c.gPts, sg(c.gPrize),
-                sg(c.gPts-c.aPts), sg(c.gPrize-c.aPrize))}</span>`; })() : '');
+                sg(c.gPts-c.aPts), sg(c.gPrize-c.aPrize))
+                + (c.note ? tf('altCmpNote', num(replay.hl.h.dPrize)) : '')}</span>`; })() : '');
   // 테이블 — 트릭이 막 끝났으면 그 트릭을 그대로 붙잡아 보여준다
   const tr = $('#trick'); tr.innerHTML='';
   const gh = replay.ghost;
