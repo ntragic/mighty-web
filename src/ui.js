@@ -317,8 +317,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.4';
-const APP_BUILD = '2026-08-06 빌드 — 복기·코칭 정합 수정';
+const APP_VERSION = 'v2.1.5';
+const APP_BUILD = '2026-08-06 빌드 — 대안 라인 정합';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
