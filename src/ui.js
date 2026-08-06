@@ -1693,12 +1693,15 @@ async function coachUpdate(){
   if (game.phase!=='play' || game.currentPlayer!==HUMAN || busy) return;
   if (masterState!=='ready'){ ensureMaster(); return; }
   try{
-    const { logits, mask }=await MightyAnalysis.infer(masterSess, ortLib, game, HUMAN);
+    // 마스터 좌석의 실제 플레이 경로와 완전히 동일해야 한다:
+    // chooseAction(정책) → actionToEngine → keyCardGuard(낭비 차단 후처리).
+    // 이전 구현은 가드를 건너뛴 원시 argmax를 보여줘 실제 마스터가 내지 않을
+    // 낭비 수를 추천했다(실플레이 제보).
+    const a=await MightyMaster.chooseAction(masterSess, ortLib, game, HUMAN, []);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
-    let best=-1, bv=-Infinity;
-    for (let i=0;i<mask.length;i++) if (mask[i]&&logits[i]>bv){ bv=logits[i]; best=i; }
-    const act=MightyMaster.actionToEngine(best, game, []);
+    let act=MightyMaster.actionToEngine(a, game, []);
     if (!act || act.type!=='play') return;
+    act=MightyAI.keyCardGuard(game, HUMAN, act);
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
     if (elc) elc.classList.add('coach');

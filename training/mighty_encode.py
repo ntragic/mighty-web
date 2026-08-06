@@ -432,7 +432,8 @@ def conv_target(game, me):
 
     좌석 가시 정보만 쓴다(전지적 판정 금지 — 잠금 판정은 배포 가드와 같은
     '미출현 카드 위협' 논리). 클래스와 인증치(2026-08-03, 페어드 개입):
-      addL : 공개 후·여당·아군 가시확정승·트릭6+ → 최저 점수카드 보태기 (−7.3±8.4 중립)
+      addL : 공개 후·여당·아군 가시확정승·트릭4+ → 최저 점수카드 보태기
+             (트릭6+ −7.3±8.4 중립, 트릭4~5 확장 −8.8±9.8 중립 — 2026-08-06 인증)
       feedP: 공개 후·여당·야당 가시확정승 → 비점수·비기루다 최저로 회피 (+12.8±19.2 중립)
       sigW : 공개 후 프렌드가, 주공이 현재 이기고 있는 주공의 기루다 리드에
              최저 점수카드로 응답 (−4.8±5.9 중립; 무조건 응답 sig는 −6.4±5.9 유의손해로 탈락)
@@ -511,8 +512,8 @@ def conv_target(game, me):
     legal = [m['card'] for m in game.legal_plays(me) if not m.get('jokerCall')]
     pts = [c for c in legal if is_point(c) and not key(c)]
     if ally:
-        if pl['trickNo'] < 6:
-            return None                                  # addL 클래스만 인증됨
+        if pl['trickNo'] < 4:
+            return None                                  # 트릭4+ 인증 (1~3은 미인증)
         non = [c for c in legal if not is_point(c) and not key(c)]
         if not pts or not non:
             return None
