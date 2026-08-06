@@ -12,6 +12,8 @@
 const IS_NODE = (typeof module !== 'undefined' && module.exports);
 const E = IS_NODE ? require('./mighty-engine.js') : window.MightyEngine;
 const M = IS_NODE ? require('./mighty-master.js') : window.MightyMaster;
+// 지연 해석 — 번들에서 analysis가 ai보다 먼저 로드되므로 즉시 참조하면 undefined
+const getAI = () => (IS_NODE ? require('./mighty-ai.js') : window.MightyAI);
 
 const GRADE = { CRITICAL: '결정적', LOSS: '손해', SLIP: '부정확' };
 // SLIP 80: 정밀도 벤치에서 60은 검증 통과율이 낮았다(표본 4건 중 1건) — 더 극단만 표시
@@ -72,8 +74,11 @@ async function playout(sess, ort, g, { rng = null, record = null, maxSteps = 400
     const p = g.currentPlayer;
     const { logits, mask } = await infer(sess, ort, g, p);
     const ai = rng ? sampleIdx(logits, mask, rng) : greedyIdx(logits, mask);
-    const act = M.actionToEngine(ai, g, []);
+    let act = M.actionToEngine(ai, g, []);
     if (!act) throw new Error('playout: 액션 변환 실패 idx=' + ai);
+    // 배포 마스터의 최종 경로와 동일하게 — 가드 미적용 시뮬은 실제로 나오지
+    // 않을 낭비 수를 라인에 섞는다 (코칭 정합 버그와 같은 계열)
+    if (act.type === 'play') act = getAI().keyCardGuard(g, p, act);
     if (record) record.push({ p, ph: g.phase, a: JSON.parse(JSON.stringify(act)) });
     g.act(act);
   }
@@ -135,18 +140,24 @@ async function screenRound(sess, ort, rec, seat, { tick } = {}) {
 }
 
 /** 2단계 — 같은 국면 페어드 롤아웃 (실제 수 vs 대안 수) */
-async function rolloutPair(sess, ort, rec, seat, idx, altIdx, { n = 24, seed = 7, tick } = {}) {
+async function rolloutPair(sess, ort, rec, seat, idx, altIdx, { n = 24, seed = 7, tick, keepLines = false } = {}) {
   const arms = { act: [], alt: [] };
+  const altLines = [];
   const actIdx = playActionIdx(rec.actions[idx].a);
   for (let r = 0; r < n; r++) {
     for (const [arm, ai] of [['act', actIdx], ['alt', altIdx]]) {
       const g = rebuild(rec, idx);
       const first = M.actionToEngine(ai, g, []);
       if (!first) { arms[arm].push(null); continue; }
+      const record = (keepLines && arm === 'alt')
+        ? [{ p: seat, ph: 'play', a: JSON.parse(JSON.stringify(first)) }] : null;
       g.act(first);
       if (g.phase !== 'done' && g.phase !== 'redeal')
-        await playout(sess, ort, g, { rng: E.makeRng(seed * 1000003 + r) });
-      arms[arm].push(g.phase === 'done' ? g.result.prizes[seat] : 0);
+        await playout(sess, ort, g, { rng: E.makeRng(seed * 1000003 + r), record });
+      const pz = g.phase === 'done' ? g.result.prizes[seat] : 0;
+      arms[arm].push(pz);
+      if (record) altLines.push({ prize: pz, actions: record,
+        result: g.phase === 'done' ? g.result : null });
     }
     if (tick) await tick();
   }
@@ -155,7 +166,7 @@ async function rolloutPair(sess, ort, rec, seat, idx, altIdx, { n = 24, seed = 7
     const mean = v.reduce((a, b) => a + b, 0) / v.length;
     return { mean, win: v.filter(x => x > 0).length, n: v.length };
   };
-  return { act: stat(arms.act), alt: stat(arms.alt) };
+  return { act: stat(arms.act), alt: stat(arms.alt), altLines };
 }
 
 function classify(ro) {
@@ -207,21 +218,32 @@ async function analyzeRound(sess, ort, rec, seat, opts = {}) {
   const highlights = [];
   let done = 0;
   for (const s of suspects) {
-    const ro = await rolloutPair(sess, ort, rec, seat, s.idx, s.altIdx, { n, seed, tick });
+    const ro = await rolloutPair(sess, ort, rec, seat, s.idx, s.altIdx, { n, seed, tick, keepLines: true });
     const cls = classify(ro);
     if (onProgress) onProgress(++done, suspects.length);
     if (!cls) continue;
     const g = rebuild(rec, s.idx);
+    // 고스트 = 가드 포함 argmax 반사실 라인 — "대안 수를 두고 실제 AI들이
+    // 그대로 이어갔다면"의 결정론 라인. 실제 라인(역시 argmax+가드 진행)과
+    // 같은 강도의 비교라 공정하다. 샘플링 롤아웃(T=1)은 양 팔 모두 실전보다
+    // 약하게 두므로 등급 판정(평균 비교)에만 쓰고 재생 라인으론 쓰지 않는다.
     const ghost = await ghostLine(sess, ort, rec, seat, s.idx, s.altIdx);
+    // 반사실 라인의 실제 이득 — 사용자에게 약속하는 수치는 이것이다.
+    // 시뮬 평균(dPrize)은 T=1 샘플링 세계의 페어드 차이라 등급 판정에는 옳지만
+    // "실제 대비 이득" 예측으로는 과대다(실플레이 캘리브레이션: 약속 +949 대
+    // 라인 실이득 +38). 라인이 실제보다 좋아지는 하이라이트만 노출한다.
+    const lineGain = (ghost && ghost.result && rec.result)
+      ? ghost.result.prizes[seat] - rec.result.prizes[seat] : null;
+    if (lineGain === null || lineGain <= 0) continue;
     highlights.push({
       idx: s.idx, trick: s.trick, grade: cls.grade,
-      dPrize: Math.round(cls.dPrize),
+      dPrize: Math.round(cls.dPrize), lineGain,
       actual: cardName(s.actual), alt: idxCardName(s.altIdx, g), altIdx: s.altIdx,
       flip: { act: ro.act, alt: ro.alt },
       ghost,
     });
   }
-  highlights.sort((a, b) => b.dPrize - a.dPrize);
+  highlights.sort((a, b) => b.lineGain - a.lineGain);
   return { evCurve, decisions, highlights };
 }
 

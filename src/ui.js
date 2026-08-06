@@ -66,7 +66,7 @@ const I18N_EN = {
   '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
   '코칭 (마스터 추천 카드)':'Coaching (Master hint)',
   '플레이 중 마스터가 낼 카드를 손패에 표시합니다':'Marks the card Master would play during your turn',
-  '끔':'Off', '켬':'On', '기대상금':'EV',
+  '끔':'Off', '켬':'On', '기대상금':'EV', '평균':'avg',
   '매치 AI 요약':'Match AI summary', '이번 매치 결정적 순간':'Key moments of this match',
   '분석할 라운드가 없습니다':'No rounds to analyze',
   '하이라이트가 없습니다 — 깔끔한 매치였습니다':'No highlights — a clean match',
@@ -217,6 +217,12 @@ const TF = {
   seatMeta:(tk,pt)=> LANG==='en' ? `${tk} tricks · ${pt} pts` : `트릭 ${tk} · ${pt}점`,
   trickN:(n)=> LANG==='en' ? `Trick ${n}` : `트릭 ${n}`,
   roundTrick:(r,tn)=> LANG==='en' ? `R${r} · Trick ${tn}` : `${r}판 · 트릭 ${tn}`,
+  altCmpNote:(d)=> LANG==='en'
+    ? ` · sims still favor the alt by +${d} on average — this actual line ran above average`
+    : ` · 시뮬 평균은 대안이 +${d} 우세 — 이 판의 실제 라인이 평균 이상으로 풀린 경우`,
+  altCmpTie:(d)=> LANG==='en'
+    ? ` · this line ends the same — the +${d} edge is the 24-sim average, not every line`
+    : ` · 이 라인은 결과가 같다 — +${d}는 24회 시뮬의 평균 우세이고, 모든 라인이 이기는 건 아니다`,
   altCmp:(aP,aZ,gP,gZ,dP,dZ)=> LANG==='en'
     ? `actual ${aP} pts · ${aZ} → alt ${gP} pts · ${gZ} (${dP} point cards, ${dZ} prize)`
     : `실제 점수카드 ${aP}장·상금 ${aZ} → 대안 ${gP}장·${gZ} (점수카드 ${dP}장 · 상금 ${dZ})`,
@@ -314,8 +320,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.4';
-const APP_BUILD = '2026-08-06 빌드 — 복기·코칭 정합 수정';
+const APP_VERSION = 'v2.1.6';
+const APP_BUILD = '2026-08-06 빌드 — 하이라이트 실이득 보장';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1512,6 +1518,8 @@ async function doUndo(){
   const idx = lastHumanIdx(gp);
   const g2 = rebuildGame(roundRec, idx);
   roundRec.actions.length = idx;
+  roundRec.analysis = null;          // 라인이 바뀌므로 분석 캐시 무효
+  roundRec.statsCounted = false;
   game = g2; instrument(game);
   undoUsed[gp]++;
   selDiscard = []; bidSel = {giruda:null,count:null}; reviseSel = {on:false,giruda:null,count:null};
@@ -1620,8 +1628,8 @@ function renderAnalysis(rec){
     const cls=h.grade==='결정적'?'g-crit':h.grade==='손해'?'g-loss':'g-slip';
     const wr=`${t('승률')} ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n} · ${h.flip.act.n}${t('회 시뮬')}`;
     return `<div class="an-card"><span class="an-badge ${cls}">${t(h.grade)}</span>
-      <div class="an-main">${tf('trickN', h.trick)} · ${h.actual} → ${h.alt}<span class="an-d">+${num(h.dPrize)}</span>
-        <div class="an-sub">${wr}</div></div>
+      <div class="an-main">${tf('trickN', h.trick)} · ${h.actual} → ${h.alt}<span class="an-d">+${num(h.lineGain)}</span>
+        <div class="an-sub">${wr} · ${t('평균')} +${num(h.dPrize)}</div></div>
       <button class="btn quiet" data-hl="${i}">${t('보기')}</button></div>`;
   }).join('') : `<div class="an-sub" style="margin-top:10px">${t('표시할 실수가 없습니다 — 좋은 판이었습니다')}</div>`;
   body.innerHTML=svg+cards;
@@ -1651,6 +1659,10 @@ function openHighlight(rec, h){
     cmp={ aPts: ruling?aR.yeodangPoints:aR.yadangPoints,
           gPts: ruling?gR.yeodangPoints:gR.yadangPoints,
           aPrize:aR.prizes[HUMAN], gPrize:gR.prizes[HUMAN] };
+    // 대표 라인이 실제보다 낮거나 같으면 — 카드의 기대상금(시뮬 평균)과
+    // 이 한 판의 결과가 왜 다른지/같은지 병기한다.
+    cmp.note = (cmp.gPrize - cmp.aPrize) < 0;
+    cmp.tie  = (cmp.gPrize - cmp.aPrize) === 0;
   }
   replay.hl={ h, rec, ghostRec, alt:false, cmp };
   jumpToHighlight();
@@ -1735,15 +1747,15 @@ async function openMatchSummary(){
   const all=[];
   for (const rec of recs)
     for (const h of (rec.analysis ? rec.analysis.highlights : [])) all.push({ rec, h });
-  all.sort((a,b)=> (rank[a.h.grade]-rank[b.h.grade]) || (b.h.dPrize-a.h.dPrize));
+  all.sort((a,b)=> (rank[a.h.grade]-rank[b.h.grade]) || (b.h.lineGain-a.h.lineGain));
   const top=all.slice(0,3);
   const body=$('#an-body'); if (!body) return;
   body.innerHTML = top.length
     ? `<div class="sub" style="margin-top:6px">${t('이번 매치 결정적 순간')}</div>` + top.map((x,i)=>{
         const cls=x.h.grade==='결정적'?'g-crit':x.h.grade==='손해'?'g-loss':'g-slip';
         return `<div class="an-card"><span class="an-badge ${cls}">${t(x.h.grade)}</span>
-          <div class="an-main">${tf('roundTrick', x.rec.round, x.h.trick)} · ${x.h.actual} → ${x.h.alt}<span class="an-d">+${num(x.h.dPrize)}</span>
-            <div class="an-sub">${t('승률')} ${x.h.flip.act.win}/${x.h.flip.act.n} → ${x.h.flip.alt.win}/${x.h.flip.alt.n} · ${x.h.flip.act.n}${t('회 시뮬')}</div></div>
+          <div class="an-main">${tf('roundTrick', x.rec.round, x.h.trick)} · ${x.h.actual} → ${x.h.alt}<span class="an-d">+${num(x.h.lineGain)}</span>
+            <div class="an-sub">${t('승률')} ${x.h.flip.act.win}/${x.h.flip.act.n} → ${x.h.flip.alt.win}/${x.h.flip.alt.n} · ${x.h.flip.act.n}${t('회 시뮬')} · ${t('평균')} +${num(x.h.dPrize)}</div></div>
           <button class="btn quiet" data-ms="${i}">${t('보기')}</button></div>`;
       }).join('')
     : `<div class="an-sub" style="margin-top:10px">${t('하이라이트가 없습니다 — 깔끔한 매치였습니다')}</div>`;
@@ -1893,7 +1905,9 @@ function renderReplay(){
     + (replay.hl && replay.hl.cmp ? (()=>{ const c=replay.hl.cmp;
         const sg=v=>(v>0?'+':'')+num(v);
         return `<br><span class="alt-cmp">${tf('altCmp', c.aPts, sg(c.aPrize), c.gPts, sg(c.gPrize),
-                sg(c.gPts-c.aPts), sg(c.gPrize-c.aPrize))}</span>`; })() : '');
+                sg(c.gPts-c.aPts), sg(c.gPrize-c.aPrize))
+                + (c.note ? tf('altCmpNote', num(replay.hl.h.dPrize))
+                   : c.tie ? tf('altCmpTie', num(replay.hl.h.dPrize)) : '')}</span>`; })() : '');
   // 테이블 — 트릭이 막 끝났으면 그 트릭을 그대로 붙잡아 보여준다
   const tr = $('#trick'); tr.innerHTML='';
   const gh = replay.ghost;
@@ -1910,7 +1924,7 @@ function renderReplay(){
     // 하이라이트 강조 — 결정적 수를 밟은 직후, 그 카드를 확대·EV 표시
     if (replay.hl && replay.step===replay.emphStep+1 && e.player===HUMAN){
       c.classList.add('emph');
-      const d=replay.hl.h.dPrize;
+      const d=replay.hl.h.lineGain;
       slot.append(el('div','ev-chip', `${t('기대상금')} ${replay.hl.alt?'+':'−'}${num(d)}`));
     }
     slot.append(c);
@@ -1955,7 +1969,10 @@ function renderReplay(){
     ab.id='rp-alt';
     bar.append(ab);
   }
-  bar.append(mk(t('내보내기'), ()=>exportRound(replay.rec)));
+  // 하이라이트 복기 중에는 항상 '실제' 기록을 내보낸다. 대안 라인(replay.rec가
+  // ghostRec인 상태)을 그대로 내보내면 시뮬 라인이 실제 기록처럼 저장된다 —
+  // 트릭 절반이 가상인데 겉보기 구분이 없어 제보 혼선의 원인이었다.
+  bar.append(mk(t('내보내기'), ()=>exportRound(replay.hl ? replay.hl.rec : replay.rec)));
   bar.append(mk(t('게임으로'), closeReplay, 'primary'));
 }
 function renderHandReplay(g){
@@ -2015,8 +2032,8 @@ function buildReportMd(rec){
     L.push('');
     L.push('## AI 하이라이트 (마스터 기준)');
     for (const h of rec.analysis.highlights)
-      L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 기대상금 +${h.dPrize} · ` +
-             `승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
+      L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 라인 이득 +${h.lineGain}` +
+             ` (시뮬 평균 +${h.dPrize}) · 승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
   }
   L.push('');
   L.push('## 재현용 원본');
