@@ -226,6 +226,28 @@ const TF = {
   altCmp:(aP,aZ,gP,gZ,dP,dZ)=> LANG==='en'
     ? `actual ${aP} pts · ${aZ} → alt ${gP} pts · ${gZ} (${dP} point cards, ${dZ} prize)`
     : `실제 점수카드 ${aP}장·상금 ${aZ} → 대안 ${gP}장·${gZ} (점수카드 ${dP}장 · 상금 ${dZ})`,
+  // v2.2 코칭 근거 버블 — 좌석 가시 정보로만 도출한 룰 기반 근거(전지적 판정 금지)
+  coachTrumpSweep:(n)=> LANG==='en' ? `Trump sweep — up to ${n} enemy trumps left` : `기루다 정리 — 상대 기루다 최대 ${n}장`,
+  coachTopCard:()=> LANG==='en' ? 'Highest live card — keeps the lead' : '현재 최강 — 리드 유지',
+  coachSafeLead:()=> LANG==='en' ? 'Safe lead — probe at low risk' : '안전 리드 — 낮은 위험으로 탐색',
+  coachMighty:()=> LANG==='en' ? 'Mighty — guaranteed trick' : '마이티 — 확정 트릭',
+  coachJoker:()=> LANG==='en' ? 'Joker — takes this trick' : '조커 — 트릭 확보',
+  coachJokerCall:()=> LANG==='en' ? 'Joker Call — force the Joker out' : '조커콜 — 상대 조커 강제 처리',
+  coachTake:(n)=> LANG==='en'
+    ? (n ? `Wins the trick — collects ${n} point card${n>1?'s':''}` : 'Wins the trick — last to play')
+    : (n ? `트릭 확보 — 점수카드 ${n}장 회수` : '트릭 확보 — 마지막 순서'),
+  coachBest:(n)=> LANG==='en' ? `Winning so far — ${n} still to play` : `현재 최고 — 뒤 ${n}명 남음`,
+  coachFeed:()=> LANG==='en' ? 'Ally is winning — feed points' : '아군 우세 — 점수 보태기',
+  coachDuck:()=> LANG==='en' ? 'Ally is winning — dump a low card' : '아군 우세 — 낮은 패 처리',
+  coachLose:()=> LANG==='en' ? 'Unlikely to win — minimize the loss' : '승산 낮음 — 손실 최소화',
+  coachThreats:(list)=> LANG==='en' ? `Still out: ${list}` : `위협 잔존: ${list}`,
+  coachNoThreat:()=> LANG==='en' ? 'No higher card left against this' : '위 서열 위협 없음',
+  coachHigher:(m)=> LANG==='en' ? `${m} higher in suit` : `위 서열 ${m}장`,
+  coachTrumpCut:()=> LANG==='en' ? 'trump cut' : '기루다 컷',
+  coachGuard:()=> LANG==='en' ? 'Key card saved — ally already has this trick' : '키카드 보존 — 아군 확보 트릭',
+  coachPts:(n,b)=> LANG==='en'
+    ? `${n} point card${n>1?'s':''} at stake${b?` · ${b} behind`:''}`
+    : `점수카드 ${n}장 걸림${b?` · 뒤 ${b}명`:''}`,
   statsLine:(n,w,dn,dw,pz)=> LANG==='en'
     ? `Lifetime ${n} rounds · win ${w}% · declarer ${dw}/${dn} · ${pz}/round`
     : `누적 ${n}판 · 내 승률 ${w}% · 주공일 때 ${dw}/${dn} · 판당 ${pz}`,
@@ -320,8 +342,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.6';
-const APP_BUILD = '2026-08-06 빌드 — 하이라이트 실이득 보장';
+const APP_VERSION = 'v2.2.0';
+const APP_BUILD = '2026-08-06 빌드 — 코칭 근거 버블';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1696,11 +1718,113 @@ function toggleAltLine(){
   jumpToHighlight();
 }
 
-/* ---------------- v2 코칭 (마스터 추천 카드) ---------------- */
+/* ---------------- v2 코칭 (마스터 추천 카드 + 근거 버블) ---------------- */
 let coachGen=0;
+let coachTipEl=null;
+function coachTipHide(){ if(coachTipEl){ coachTipEl.remove(); coachTipEl=null; } }
+function coachTipShow(anchor, lines){
+  coachTipHide();
+  if (!lines.length) return;
+  const d=el('div'); d.id='coach-tip';
+  d.innerHTML=lines.map(s=>`<div>${s}</div>`).join('');
+  document.body.append(d);
+  const r=anchor.getBoundingClientRect();
+  let x=r.left+r.width/2-d.offsetWidth/2;
+  x=Math.max(8, Math.min(window.innerWidth-d.offsetWidth-8, x));
+  d.style.left=x+'px';
+  d.style.top=Math.max(8, r.top-d.offsetHeight-26)+'px';
+  d._anchor=anchor;
+  coachTipEl=d;
+}
+window.addEventListener('resize', ()=>{
+  if (coachTipEl && coachTipEl._anchor && coachTipEl._anchor.isConnected)
+    coachTipShow(coachTipEl._anchor, [...coachTipEl.children].map(e=>e.innerHTML));
+  else coachTipHide();
+});
+
+/** 추천 수의 근거 — HUMAN 시점 가시 정보만 사용(출현 카드·내 손·주공이면 묻은 패).
+ *  상대 손패·비공개 프렌드 등 전지적 정보는 쓰지 않는다. */
+function coachReasons(g, act, guardFired){
+  const R=[];
+  const pl=g.play, gi=g.contract.giruda, c=act.card;
+  const isJk=E.isJoker(c), isMighty=!isJk && E.sameCard(c, g.mightyCard);
+  const seen=new Set();
+  for(const tr of pl.history) for(const e of tr.plays) seen.add(E.cardId(e.card));
+  for(const e of pl.table) seen.add(E.cardId(e.card));
+  for(const h of g.hands[HUMAN]) seen.add(E.cardId(h));
+  if (HUMAN===g.declarer && g.discard) for(const d of g.discard) seen.add(E.cardId(d));
+  const out=id=>!seen.has(id);
+  const jokerWeak = pl.jokerCallActive ||
+    (g.config.firstTrickJokerWeak && pl.trickNo===1) ||
+    (g.config.lastTrickJokerWeak && pl.trickNo===E.HAND_SIZE);
+  const behind=E.NUM_PLAYERS-1-pl.table.length;
+  const tablePts=pl.table.filter(e=>E.isPointCard(e.card)).length;
+  let trumpOut=0;
+  if (gi!=='N') for(let r=2;r<=14;r++) if(out(gi+r)) trumpOut++;
+
+  // 아군 판별(가시 정보만): 주공이면 공개된 프렌드, 내가 프렌드(카드 보유 또는 공개)면 주공
+  let ally=null;
+  if (HUMAN===g.declarer){ if (g.friendRevealed && g.friend!==null) ally=g.friend; }
+  else if ((g.friendRevealed && g.friend===HUMAN) ||
+           (g.friendDecl && g.friendDecl.mode==='card' && g.friendDecl.card &&
+            g.hands[HUMAN].some(h=>E.sameCard(h,g.friendDecl.card)))) ally=g.declarer;
+
+  // 현재 테이블 서열 비교 (엔진의 트릭 판정 로직 재사용)
+  const myStr=g._cardStrength({player:HUMAN, card:c, jokerSuit:act.jokerSuit}, pl);
+  let bestStr=[-2,-1], bestP=null;
+  for(const e of pl.table){
+    const k=g._cardStrength(e, pl);
+    if (k[0]>bestStr[0]||(k[0]===bestStr[0]&&k[1]>bestStr[1])){ bestStr=k; bestP=e.player; }
+  }
+  const beats=myStr[0]>bestStr[0]||(myStr[0]===bestStr[0]&&myStr[1]>bestStr[1]);
+
+  // 1줄: 판단
+  if (act.jokerCall) R.push(TF.coachJokerCall());
+  else if (isMighty) R.push(TF.coachMighty());
+  else if (isJk && !jokerWeak) R.push(TF.coachJoker());
+  else if (pl.table.length===0){
+    if (gi!=='N' && c.suit===gi && trumpOut>0) R.push(TF.coachTrumpSweep(trumpOut));
+    else {
+      let higher=0;
+      for(let r=c.rank+1;r<=14;r++) if(out(c.suit+r)) higher++;
+      R.push(higher===0 ? TF.coachTopCard() : TF.coachSafeLead());
+    }
+  } else if (beats){
+    R.push(behind===0 ? TF.coachTake(tablePts) : TF.coachBest(behind));
+  } else if (ally!==null && bestP===ally){
+    R.push(E.isPointCard(c) ? TF.coachFeed() : TF.coachDuck());
+  } else R.push(TF.coachLose());
+
+  // 2줄: 위협 (내 카드를 이길 수 있는 미출현 카드)
+  // 리드하거나 현재 이기는 중일 때만 — 버리는 패·마지막 순서엔 무의미라 생략
+  if (!isMighty && !(isJk && !jokerWeak) &&
+      (pl.table.length===0 || (beats && behind>0))){
+    const th=[];
+    if (out(E.cardId(g.mightyCard))) th.push(t('마이티'));
+    if (out(E.JOKER) && !jokerWeak) th.push(t('조커'));
+    if (!isJk){
+      let higher=0;
+      for(let r=c.rank+1;r<=14;r++) if(out(c.suit+r)) higher++;
+      if (higher>0) th.push(TF.coachHigher(higher));
+      if (gi!=='N' && c.suit!==gi && trumpOut>0 && (pl.table.length===0 || behind>0))
+        th.push(TF.coachTrumpCut());
+    }
+    R.push(th.length ? TF.coachThreats(th.join(' · ')) : TF.coachNoThreat());
+  }
+
+  // 3줄: 가드 발동 또는 걸린 점수
+  if (guardFired) R.push(TF.coachGuard());
+  else {
+    const pts=tablePts+(E.isPointCard(c)?1:0);
+    if (pts>0 && pl.table.length>0) R.push(TF.coachPts(pts, behind));
+  }
+  return R.slice(0,3);
+}
+
 async function coachUpdate(){
   const gen=++coachGen;
   document.querySelectorAll('#hand .hcard.coach').forEach(e=>e.classList.remove('coach'));
+  coachTipHide();
   if (!settings.ui.coach || !game || replay) return;
   if (game.phase!=='play' || game.currentPlayer!==HUMAN || busy) return;
   if (masterState!=='ready'){ ensureMaster(); return; }
@@ -1711,12 +1835,16 @@ async function coachUpdate(){
     // 낭비 수를 추천했다(실플레이 제보).
     const a=await MightyMaster.chooseAction(masterSess, ortLib, game, HUMAN, []);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
-    let act=MightyMaster.actionToEngine(a, game, []);
-    if (!act || act.type!=='play') return;
-    act=MightyAI.keyCardGuard(game, HUMAN, act);
+    const raw=MightyMaster.actionToEngine(a, game, []);
+    if (!raw || raw.type!=='play') return;
+    const act=MightyAI.keyCardGuard(game, HUMAN, raw);
+    const guardFired=!E.sameCard(raw.card, act.card);
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
-    if (elc) elc.classList.add('coach');
+    if (elc){
+      elc.classList.add('coach');
+      coachTipShow(elc, coachReasons(game, act, guardFired));
+    }
   }catch(e){ /* 코칭은 조용히 실패 */ }
 }
 
@@ -2456,7 +2584,7 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, get lifeStats(){return {...lifeStats}} };
+globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
