@@ -11,7 +11,7 @@ import torch
 
 from mighty_engine import MightyGame, parse_card, is_point, same, is_joker
 import mighty_encode
-from mighty_encode import MightyEnv, aux_labels, conv_target, A_PLAY0, cidx
+from mighty_encode import MightyEnv, aux_labels, conv_target, A_PLAY0, cidx, idx_card
 
 PERSONAS = ('gambler', 'balanced', 'careful')
 TIERS = ('intermediate', 'advanced')
@@ -296,7 +296,9 @@ class MixedCollector:
                 tno = g_.play['trickNo'] if is_play else -1
                 ca = -1
                 if self.conv and is_play:
-                    tc = conv_target(g_, p)
+                    ai_ = int(acts_np[j])
+                    tc = conv_target(g_, p, idx_card(ai_ - A_PLAY0)
+                                     if A_PLAY0 <= ai_ < A_PLAY0 + 52 else None)
                     if tc is not None:
                         ca = A_PLAY0 + cidx(tc)
                 self.open[i][p].append([o, m, int(acts_np[j]), float(logps_np[j]),

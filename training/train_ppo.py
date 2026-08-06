@@ -22,7 +22,7 @@ import torch.nn.functional as F
 
 from mighty_encode import (MightyEnv, OBS_DIM, ACTION_DIM, O_FDMODE, O_PHASE,
                            O_GIRUDA, aux_labels, conv_target, A_PLAY0, cidx,
-                           O_TOK, TOK_N, TOK_D)
+                           idx_card, O_TOK, TOK_N, TOK_D)
 
 
 # ---------------- 모델 ----------------
@@ -130,7 +130,9 @@ class Collector:
                 tno = g_.play['trickNo'] if is_play else -1
                 ca = -1
                 if self.conv and is_play:
-                    tc = conv_target(g_, p)
+                    ai_ = int(acts_np[i])
+                    tc = conv_target(g_, p, idx_card(ai_ - A_PLAY0)
+                                     if A_PLAY0 <= ai_ < A_PLAY0 + 52 else None)
                     if tc is not None:
                         ca = A_PLAY0 + cidx(tc)
                 rec_i = [o, m, int(acts_np[i]), float(logps_np[i]),
