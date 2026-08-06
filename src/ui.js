@@ -320,8 +320,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.1.5';
-const APP_BUILD = '2026-08-06 빌드 — 대안 라인 정합';
+const APP_VERSION = 'v2.1.6';
+const APP_BUILD = '2026-08-06 빌드 — 하이라이트 실이득 보장';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
