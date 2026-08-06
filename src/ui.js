@@ -66,7 +66,7 @@ const I18N_EN = {
   '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
   '코칭 (마스터 추천 카드)':'Coaching (Master hint)',
   '플레이 중 마스터가 낼 카드를 손패에 표시합니다':'Marks the card Master would play during your turn',
-  '끔':'Off', '켬':'On', '기대상금':'EV',
+  '끔':'Off', '켬':'On', '기대상금':'EV', '평균':'avg',
   '매치 AI 요약':'Match AI summary', '이번 매치 결정적 순간':'Key moments of this match',
   '분석할 라운드가 없습니다':'No rounds to analyze',
   '하이라이트가 없습니다 — 깔끔한 매치였습니다':'No highlights — a clean match',
@@ -1628,8 +1628,8 @@ function renderAnalysis(rec){
     const cls=h.grade==='결정적'?'g-crit':h.grade==='손해'?'g-loss':'g-slip';
     const wr=`${t('승률')} ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n} · ${h.flip.act.n}${t('회 시뮬')}`;
     return `<div class="an-card"><span class="an-badge ${cls}">${t(h.grade)}</span>
-      <div class="an-main">${tf('trickN', h.trick)} · ${h.actual} → ${h.alt}<span class="an-d">+${num(h.dPrize)}</span>
-        <div class="an-sub">${wr}</div></div>
+      <div class="an-main">${tf('trickN', h.trick)} · ${h.actual} → ${h.alt}<span class="an-d">+${num(h.lineGain)}</span>
+        <div class="an-sub">${wr} · ${t('평균')} +${num(h.dPrize)}</div></div>
       <button class="btn quiet" data-hl="${i}">${t('보기')}</button></div>`;
   }).join('') : `<div class="an-sub" style="margin-top:10px">${t('표시할 실수가 없습니다 — 좋은 판이었습니다')}</div>`;
   body.innerHTML=svg+cards;
@@ -1747,15 +1747,15 @@ async function openMatchSummary(){
   const all=[];
   for (const rec of recs)
     for (const h of (rec.analysis ? rec.analysis.highlights : [])) all.push({ rec, h });
-  all.sort((a,b)=> (rank[a.h.grade]-rank[b.h.grade]) || (b.h.dPrize-a.h.dPrize));
+  all.sort((a,b)=> (rank[a.h.grade]-rank[b.h.grade]) || (b.h.lineGain-a.h.lineGain));
   const top=all.slice(0,3);
   const body=$('#an-body'); if (!body) return;
   body.innerHTML = top.length
     ? `<div class="sub" style="margin-top:6px">${t('이번 매치 결정적 순간')}</div>` + top.map((x,i)=>{
         const cls=x.h.grade==='결정적'?'g-crit':x.h.grade==='손해'?'g-loss':'g-slip';
         return `<div class="an-card"><span class="an-badge ${cls}">${t(x.h.grade)}</span>
-          <div class="an-main">${tf('roundTrick', x.rec.round, x.h.trick)} · ${x.h.actual} → ${x.h.alt}<span class="an-d">+${num(x.h.dPrize)}</span>
-            <div class="an-sub">${t('승률')} ${x.h.flip.act.win}/${x.h.flip.act.n} → ${x.h.flip.alt.win}/${x.h.flip.alt.n} · ${x.h.flip.act.n}${t('회 시뮬')}</div></div>
+          <div class="an-main">${tf('roundTrick', x.rec.round, x.h.trick)} · ${x.h.actual} → ${x.h.alt}<span class="an-d">+${num(x.h.lineGain)}</span>
+            <div class="an-sub">${t('승률')} ${x.h.flip.act.win}/${x.h.flip.act.n} → ${x.h.flip.alt.win}/${x.h.flip.alt.n} · ${x.h.flip.act.n}${t('회 시뮬')} · ${t('평균')} +${num(x.h.dPrize)}</div></div>
           <button class="btn quiet" data-ms="${i}">${t('보기')}</button></div>`;
       }).join('')
     : `<div class="an-sub" style="margin-top:10px">${t('하이라이트가 없습니다 — 깔끔한 매치였습니다')}</div>`;
@@ -1924,7 +1924,7 @@ function renderReplay(){
     // 하이라이트 강조 — 결정적 수를 밟은 직후, 그 카드를 확대·EV 표시
     if (replay.hl && replay.step===replay.emphStep+1 && e.player===HUMAN){
       c.classList.add('emph');
-      const d=replay.hl.h.dPrize;
+      const d=replay.hl.h.lineGain;
       slot.append(el('div','ev-chip', `${t('기대상금')} ${replay.hl.alt?'+':'−'}${num(d)}`));
     }
     slot.append(c);
@@ -2032,8 +2032,8 @@ function buildReportMd(rec){
     L.push('');
     L.push('## AI 하이라이트 (마스터 기준)');
     for (const h of rec.analysis.highlights)
-      L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 기대상금 +${h.dPrize} · ` +
-             `승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
+      L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 라인 이득 +${h.lineGain}` +
+             ` (시뮬 평균 +${h.dPrize}) · 승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
   }
   L.push('');
   L.push('## 재현용 원본');

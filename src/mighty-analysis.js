@@ -223,25 +223,27 @@ async function analyzeRound(sess, ort, rec, seat, opts = {}) {
     if (onProgress) onProgress(++done, suspects.length);
     if (!cls) continue;
     const g = rebuild(rec, s.idx);
-    // 고스트 = 24회 시뮬 중 '평균에 가장 가까운' 대표 라인. 별도 argmax 라인은
-    // 카드의 기대상금(평균)과 어긋난 결과를 재생할 수 있어 폐기.
-    const lines = ro.altLines.filter(l => l.result);
-    let ghost = null;
-    if (lines.length) {
-      lines.sort((a, b) => (Math.abs(a.prize - ro.alt.mean) - Math.abs(b.prize - ro.alt.mean))
-                           || (b.prize - a.prize));
-      const rep = lines[0];
-      ghost = { actions: rec.actions.slice(0, s.idx).concat(rep.actions), result: rep.result };
-    } else ghost = await ghostLine(sess, ort, rec, seat, s.idx, s.altIdx);
+    // 고스트 = 가드 포함 argmax 반사실 라인 — "대안 수를 두고 실제 AI들이
+    // 그대로 이어갔다면"의 결정론 라인. 실제 라인(역시 argmax+가드 진행)과
+    // 같은 강도의 비교라 공정하다. 샘플링 롤아웃(T=1)은 양 팔 모두 실전보다
+    // 약하게 두므로 등급 판정(평균 비교)에만 쓰고 재생 라인으론 쓰지 않는다.
+    const ghost = await ghostLine(sess, ort, rec, seat, s.idx, s.altIdx);
+    // 반사실 라인의 실제 이득 — 사용자에게 약속하는 수치는 이것이다.
+    // 시뮬 평균(dPrize)은 T=1 샘플링 세계의 페어드 차이라 등급 판정에는 옳지만
+    // "실제 대비 이득" 예측으로는 과대다(실플레이 캘리브레이션: 약속 +949 대
+    // 라인 실이득 +38). 라인이 실제보다 좋아지는 하이라이트만 노출한다.
+    const lineGain = (ghost && ghost.result && rec.result)
+      ? ghost.result.prizes[seat] - rec.result.prizes[seat] : null;
+    if (lineGain === null || lineGain <= 0) continue;
     highlights.push({
       idx: s.idx, trick: s.trick, grade: cls.grade,
-      dPrize: Math.round(cls.dPrize),
+      dPrize: Math.round(cls.dPrize), lineGain,
       actual: cardName(s.actual), alt: idxCardName(s.altIdx, g), altIdx: s.altIdx,
       flip: { act: ro.act, alt: ro.alt },
       ghost,
     });
   }
-  highlights.sort((a, b) => b.dPrize - a.dPrize);
+  highlights.sort((a, b) => b.lineGain - a.lineGain);
   return { evCurve, decisions, highlights };
 }
 

@@ -82,6 +82,7 @@ async function recordRound(seed, agents, g) {
   ok(res.highlights.every(h => [A.GRADE.CRITICAL, A.GRADE.LOSS, A.GRADE.SLIP].includes(h.grade)),
      '하이라이트 등급 값');
   ok(res.highlights.every(h => h.ghost && h.ghost.actions.length > h.idx), '하이라이트마다 고스트 라인');
+  ok(res.highlights.every(h => h.lineGain > 0), '노출 하이라이트는 라인 실이득 양수');
 
   console.log(`\n분석 테스트: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
