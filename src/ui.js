@@ -342,8 +342,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.2.0';
-const APP_BUILD = '2026-08-06 빌드 — 코칭 근거 버블';
+const APP_VERSION = 'v2.3.0';
+const APP_BUILD = '2026-08-07 빌드 — 기루다 탑 리드 가드';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1837,8 +1837,9 @@ async function coachUpdate(){
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const raw=MightyMaster.actionToEngine(a, game, []);
     if (!raw || raw.type!=='play') return;
-    const act=MightyAI.keyCardGuard(game, HUMAN, raw);
-    const guardFired=!E.sameCard(raw.card, act.card);
+    const kg=MightyAI.keyCardGuard(game, HUMAN, raw);
+    const act=MightyAI.topLeadGuard(game, HUMAN, kg);
+    const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
     if (elc){
