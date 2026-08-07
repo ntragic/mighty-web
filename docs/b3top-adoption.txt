@@ -1,0 +1,2 @@
+b3top_single.onnx · 191판 · 채택 99.5% ± 1.0 [196/197]
+mighty_master_v6b.onnx · 182판 · 채택 59.3% ± 6.9 [115/194]
