@@ -106,6 +106,34 @@ function override(g, seat, mode, actual) {
     return { type: 'play', card: pts[0].card };
   }
 
+  // dfeed: 공개 후 야당이, 여당이 '현재 최강'인 트릭(잠금 불요)에 점수카드를
+  // 태운 결정을 최저 비점수·비기루다 버림으로 교정 (2026-08-07 제보 클래스 —
+  // keyCardGuard는 가시확정 잠금만 커버, 미잠금 헌납이 잔여 축)
+  if (mode === 'dfeed') {
+    if (!g.friendRevealed) return null;
+    if (seat === g.declarer || seat === g.friend) return null;
+    const pl = g.play;
+    if (!pl.table.length) return null;
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = strength(g, e, pl);
+      if (stronger(k, bk)) { bk = k; bp = e.player; }
+    }
+    if (!(bp === g.declarer || (g.friend !== null && bp === g.friend))) return null;
+    const myK = strength(g, { player: seat, card: actual }, pl);
+    if (stronger(myK, bk)) return null;               // 내가 이기는 수면 개입 안 함
+    const isKey3 = c => E.isJoker(c) || E.sameCard(c, g.mightyCard);
+    if (!(E.isPointCard(actual) && !isKey3(actual))) return null;   // 점수 태운 결정만
+    const gi3 = g.contract ? g.contract.giruda : 'N';
+    const isTrump3 = c => gi3 !== 'N' && !E.isJoker(c) && c.suit === gi3;
+    const alt = g._legalPlays(seat).filter(m => !m.jokerCall
+      && !E.isPointCard(m.card) && !isKey3(m.card) && !isTrump3(m.card)
+      && !stronger(strength(g, { player: seat, card: m.card, jokerSuit: m.jokerSuit }, pl), bk));
+    if (!alt.length) return null;
+    alt.sort((a, b) => (a.card.rank || 0) - (b.card.rank || 0));
+    return { type: 'play', card: alt[0].card };
+  }
+
   const lock = lockedTrick(g, seat);
   if (!lock) return null;
   const isKey = c => E.isJoker(c) || E.sameCard(c, g.mightyCard);
