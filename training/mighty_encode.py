@@ -427,7 +427,7 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
     return o
 
 
-def conv_target(game, me):
+def conv_target(game, me, act_card=None):
     """E2 관례 증류 교사 — 개입 인증을 통과한 클래스에서만 목표 카드를 돌려준다.
 
     좌석 가시 정보만 쓴다(전지적 판정 금지 — 잠금 판정은 배포 가드와 같은
@@ -437,9 +437,42 @@ def conv_target(game, me):
       feedP: 공개 후·여당·야당 가시확정승 → 비점수·비기루다 최저로 회피 (+12.8±19.2 중립)
       sigW : 공개 후 프렌드가, 주공이 현재 이기고 있는 주공의 기루다 리드에
              최저 점수카드로 응답 (−4.8±5.9 중립; 무조건 응답 sig는 −6.4±5.9 유의손해로 탈락)
+      trumpTop: 주공 리드에서 정책이 기루다를 골랐고(act_card), 내 최고 기루다 위
+             서열이 밖에 없으며 상대 기루다가 남았으면 최고 기루다
+             (+166.8±113.7 유의 이득 — 2026-08-07 인증, 2,400시드.
+              리드 무늬 선택까지 강제하는 any는 +69±260 중립이라 미인증 —
+              클래스는 '기루다를 내기로 한 결정의 서열 교정'에 한정)
+    act_card: 정책이 이 상태에서 고른 카드(일반 카드 플레이일 때만, 아니면 None).
     반환: 목표 카드 또는 None.
     """
-    if game.phase != 'play' or not game.friend_revealed:
+    if game.phase != 'play':
+        return None
+    # trumpTop — 유일하게 리드 상태(테이블 빈 상태)·공개 전에도 성립하는 클래스
+    if act_card is not None and me == game.declarer and not game.play['table']:
+        gi0 = game.contract['giruda'] if game.contract else 'N'
+        if gi0 != 'N' and not is_joker(act_card) and act_card[0] == gi0:
+            my_tr = sorted((c for c in game.hands[me]
+                            if not is_joker(c) and c[0] == gi0),
+                           key=lambda c: -c[1])
+            if my_tr and not same(act_card, my_tr[0]):
+                seen0 = set()
+                for t in game.play['history']:
+                    for e in t['plays']:
+                        seen0.add(card_id(e['card']))
+                for c in game.hands[me]:
+                    seen0.add(card_id(c))
+                if game.discard:
+                    for c in game.discard:
+                        seen0.add(card_id(c))
+                out0 = [r for r in range(14, 1, -1)
+                        if gi0 + str(r) not in seen0]
+                # 위 서열이 밖에 없고(out0[0] < top), 정리할 상대 기루다는 남아 있어야 한다
+                if out0 and out0[0] < my_tr[0][1]:
+                    legal0 = [m for m in game.legal_plays(me)
+                              if not m.get('jokerCall') and not m.get('jokerSuit')]
+                    if any(same(m['card'], my_tr[0]) for m in legal0):
+                        return my_tr[0]
+    if not game.friend_revealed:
         return None
     decl, fr = game.declarer, game.friend
     if decl is None or me not in (decl, fr):

@@ -387,6 +387,12 @@ body.replaying #seat-0 .rhand{display:none}
 .hcard.coach::after{content:'AI'; position:absolute; top:-9px; left:50%; transform:translateX(-50%);
   background:#2383e2; color:#fff; font-size:.58rem; font-weight:800; padding:1px 6px;
   border-radius:999px; letter-spacing:.5px}
+/* 코칭 근거 버블 — pointer-events:none으로 클릭 통과, 시트(25)·모달 아래 z-index */
+#coach-tip{position:fixed; z-index:24; pointer-events:none; max-width:280px;
+  background:var(--panel); backdrop-filter:blur(8px); border:1px solid rgba(35,131,226,.55);
+  border-radius:10px; padding:7px 11px; font-size:.72rem; line-height:1.55;
+  color:#e8ecf2; box-shadow:0 6px 18px rgba(0,0,0,.4); word-break:keep-all}
+#coach-tip div:first-child{color:#6db3f2; font-weight:700}
 #replay-head .alt-tag{color:var(--gold); font-weight:700}
 #replay-head .alt-cmp{color:var(--mint); font-size:.92em}
 

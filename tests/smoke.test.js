@@ -70,6 +70,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     } else if (g.phase === 'play') {
       const legal = g._legalPlays(0);
       let mv = legal.find(m => !m.jokerSuit && !m.jokerCall) || legal[0];
+      // v2.2: 코칭 근거 생성기 — 합법 수에 대해 1~3줄의 문자열을 내야 한다
+      for (const gf of [false, true]) {
+        const rs = MUI.coachReasons(g, { type: 'play', ...mv }, gf);
+        if (!Array.isArray(rs) || rs.length < 1 || rs.length > 3 || rs.some(s => typeof s !== 'string' || !s)) {
+          console.error('coachReasons invalid:', JSON.stringify(rs)); process.exit(1);
+        }
+      }
       await MUI.playWithAnimation(0, { type: 'play', ...mv }); humanActs++;
     }
     if (++guard > 300) { console.error('guard tripped'); process.exit(1); }

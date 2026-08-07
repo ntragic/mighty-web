@@ -78,7 +78,10 @@ async function playout(sess, ort, g, { rng = null, record = null, maxSteps = 400
     if (!act) throw new Error('playout: 액션 변환 실패 idx=' + ai);
     // 배포 마스터의 최종 경로와 동일하게 — 가드 미적용 시뮬은 실제로 나오지
     // 않을 낭비 수를 라인에 섞는다 (코칭 정합 버그와 같은 계열)
-    if (act.type === 'play') act = getAI().keyCardGuard(g, p, act);
+    if (act.type === 'play') {
+      const A2 = getAI();
+      act = A2.topLeadGuard(g, p, A2.keyCardGuard(g, p, act));
+    }
     if (record) record.push({ p, ph: g.phase, a: JSON.parse(JSON.stringify(act)) });
     g.act(act);
   }
