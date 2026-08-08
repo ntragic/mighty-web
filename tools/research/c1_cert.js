@@ -74,7 +74,9 @@ async function run(N, iv, sess) {
     const g = new E.MightyGame({ seed });
     const ag = [];
     for (let s = 0; s < E.NUM_PLAYERS; s++)
-      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort, keyGuard: true }));
+      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort, keyGuard: true,
+        dleadGuard: process.env.RAWPOL === '1' ? false : undefined,
+        c1Guard: process.env.RAWPOL === '1' ? false : undefined }));
     g.start(Math.floor(rng() * E.NUM_PLAYERS));
     let guard = 0, fired = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
