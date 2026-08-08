@@ -342,8 +342,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.4.0';
-const APP_BUILD = '2026-08-08 빌드 — 야당 헌납 가드·관전 복기';
+const APP_VERSION = 'v2.4.1';
+const APP_BUILD = '2026-08-08 빌드 — 야당 기루다 리드 가드';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1859,7 +1859,9 @@ async function coachUpdate(){
     const raw=MightyMaster.actionToEngine(a, game, []);
     if (!raw || raw.type!=='play') return;
     const kg=MightyAI.keyCardGuard(game, HUMAN, raw);
-    const act=MightyAI.tfeedGuard(game, HUMAN, MightyAI.topLeadGuard(game, HUMAN, kg));
+    let act=MightyAI.tfeedGuard(game, HUMAN, MightyAI.topLeadGuard(game, HUMAN, kg));
+    act=await MightyAI.dleadGuard(masterSess, ortLib, game, HUMAN, act);
+    if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);

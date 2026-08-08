@@ -224,6 +224,57 @@ function tfeedGuard(game, seat, action) {
   } catch (e) { return action; }
 }
 
+/**
+ * 야당 기루다 리드 가드 — 확정 야당(카드 프렌드 판에서 프렌드 카드 미보유·비주공)이
+ * 기루다를 리드하기로 하면, 같은 정책의 차선 비기루다 리드로 교체한다.
+ * 야당의 기루다 리드는 주공의 기루다 정리를 대신 해주는 수 (2026-08-08 제보:
+ * 야당 트릭2 ♣2 리드 — 4후보 중 최하).
+ * 인증: 전좌석 마스터 2,400시드 페어드 — 발화 판 주공 상금 −178±136,
+ * 전체 −46±35, 여당 승수 −19/462 (docs/dlead-cert*.txt).
+ * 교체 수를 정책 로짓에서 뽑으므로 발화 시에만 추론 1회 추가(판당 0.27회).
+ * 롤백: createAgent({dleadGuard:false}).
+ */
+function dleadCond(game, seat, action) {
+  if (!action || action.type !== 'play' || game.phase !== 'play' || action.jokerCall) return false;
+  if (seat === game.declarer) return false;
+  const pl = game.play;
+  if (!pl || pl.table.length !== 0) return false;
+  const g = game.contract ? game.contract.giruda : 'N';
+  if (g === 'N') return false;
+  const c = action.card;
+  if (E.isJoker(c) || E.sameCard(c, game.mightyCard) || c.suit !== g) return false;
+  const fd = game.friendDecl;
+  if (!fd || fd.mode !== 'card' || !fd.card) return false;   // 야당 확정이 가능한 판만
+  if (game.hands[seat].some(x => E.sameCard(x, fd.card))) return false;
+  if (game.friendRevealed && game.friend === seat) return false;
+  return true;
+}
+async function dleadGuard(session, ort, game, seat, action) {
+  try {
+    if (!session || !ort || !dleadCond(game, seat, action)) return action;
+    let obs = M.encodeObs(game, seat, []);
+    const mask = M.legalMask(game, []);
+    const want = M.modelObsDim(session);
+    if (want !== M.OBS_DIM) obs = obs.subarray(0, want);
+    const out = await session.run({
+      obs: new ort.Tensor('float32', obs, [1, want]),
+      mask: new ort.Tensor('bool', mask, [1, M.ACTION_DIM]),
+    });
+    const logits = out.logits.data;
+    const gi = game.contract.giruda;
+    let best = -1, bv = -Infinity;
+    for (let i = 0; i < M.ACTION_DIM; i++) {
+      if (!mask[i] || i === 206) continue;                     // 조커콜 제외
+      if (i >= 149 && i < 201 && M.idxCard(i - 149).suit === gi) continue;   // 기루다 제외
+      if (i >= 201 && i < 205 && ['S','D','H','C'][i - 201] === gi) continue; // 조커 기루다 요구 제외
+      if (logits[i] > bv) { bv = logits[i]; best = i; }
+    }
+    if (best < 0) return action;
+    const alt = M.actionToEngine(best, game, []);
+    return (alt && alt.type === 'play') ? alt : action;
+  } catch (e) { return action; }
+}
+
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
 async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
   return ort.InferenceSession.create(modelPath);
@@ -247,11 +298,12 @@ async function createAgent(opts = {}) {
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
-        const guarded = a => {
+        const guarded = async a => {
           let x = (opts.keyGuard === false ? a
             : keyCardGuard(game, seat, a, opts.guardTrace));
           if (opts.topGuard !== false) x = topLeadGuard(game, seat, x);
           if (opts.feedGuard !== false) x = tfeedGuard(game, seat, x);
+          if (opts.dleadGuard !== false) x = await dleadGuard(session, ort, game, seat, x);
           return x;
         };
         for (let guard = 0; guard < 8; guard++) {
@@ -308,7 +360,7 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard,
+const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
