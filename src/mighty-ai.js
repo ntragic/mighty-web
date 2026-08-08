@@ -275,6 +275,59 @@ async function dleadGuard(session, ort, game, seat, action) {
   } catch (e) { return action; }
 }
 
+/**
+ * 주공 점수 기루다 리드 가드 — 주공이 '그 카드 위 서열이 밖에 남은' 상태에서
+ * 점수 기루다(10·J·Q·K·A)를 리드하면, 같은 정책의 차선(해당 클래스 제외 argmax)
+ * 으로 교체한다. 위 서열에 잡히며 점수만 헌납하는 리드 차단.
+ * 인증(v7=b4a 기준, 2,400시드 페어드): 발화 판 +213±169 · 전체 +34 · 승수 +14/299.
+ * v6b에서는 중립(+73±172) — v7 배포와 함께만 유효한 모델 전용 가드
+ * (docs/c1-cert*.txt). 발화 시에만 재추론 1회. 롤백: createAgent({c1Guard:false}).
+ */
+async function c1Guard(session, ort, game, seat, action) {
+  try {
+    if (!session || !ort || !action || action.type !== 'play' || game.phase !== 'play'
+        || action.jokerCall || seat !== game.declarer) return action;
+    const pl = game.play;
+    if (!pl || pl.table.length !== 0) return action;
+    const gi = game.contract ? game.contract.giruda : 'N';
+    if (gi === 'N') return action;
+    const c = action.card;
+    if (E.isJoker(c) || E.sameCard(c, game.mightyCard) || c.suit !== gi || !E.isPointCard(c)) return action;
+    const seen = new Set();
+    for (const t of pl.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+    for (const x of game.hands[seat]) seen.add(E.cardId(x));
+    if (game.discard) for (const x of game.discard) seen.add(E.cardId(x));
+    let higher = false;
+    for (let r = c.rank + 1; r <= 14; r++) if (!seen.has(gi + r)) { higher = true; break; }
+    if (!higher) return action;                        // 탑이면 정당 (topLeadGuard 영역)
+    let obs = M.encodeObs(game, seat, []);
+    const mask = M.legalMask(game, []);
+    const want = M.modelObsDim(session);
+    if (want !== M.OBS_DIM) obs = obs.subarray(0, want);
+    const out = await session.run({
+      obs: new ort.Tensor('float32', obs, [1, want]),
+      mask: new ort.Tensor('bool', mask, [1, M.ACTION_DIM]),
+    });
+    const logits = out.logits.data;
+    let best = -1, bv = -Infinity;
+    for (let i = 0; i < M.ACTION_DIM; i++) {
+      if (!mask[i] || i === 206) continue;
+      if (i >= 149 && i < 201) {
+        const cd = M.idxCard(i - 149);
+        if (cd.suit === gi && E.isPointCard(cd) && !E.sameCard(cd, game.mightyCard)) {
+          let h2 = false;
+          for (let r = cd.rank + 1; r <= 14; r++) if (!seen.has(gi + r)) { h2 = true; break; }
+          if (h2) continue;                            // 클래스 액션 제외
+        }
+      }
+      if (logits[i] > bv) { bv = logits[i]; best = i; }
+    }
+    if (best < 0) return action;
+    const alt = M.actionToEngine(best, game, []);
+    return (alt && alt.type === 'play') ? alt : action;
+  } catch (e) { return action; }
+}
+
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
 async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
   return ort.InferenceSession.create(modelPath);
@@ -304,6 +357,7 @@ async function createAgent(opts = {}) {
           if (opts.topGuard !== false) x = topLeadGuard(game, seat, x);
           if (opts.feedGuard !== false) x = tfeedGuard(game, seat, x);
           if (opts.dleadGuard !== false) x = await dleadGuard(session, ort, game, seat, x);
+          if (opts.c1Guard !== false) x = await c1Guard(session, ort, game, seat, x);
           return x;
         };
         for (let guard = 0; guard < 8; guard++) {
@@ -360,7 +414,7 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard,
+const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;

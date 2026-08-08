@@ -342,8 +342,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.4.1';
-const APP_BUILD = '2026-08-08 빌드 — 야당 기루다 리드 가드';
+const APP_VERSION = 'v2.5.0';
+const APP_BUILD = '2026-08-08 빌드 — 마스터 v7 (관례 내재화)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -627,7 +627,7 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v6b.onnx';
+const MASTER_MODEL='./model/mighty_master_v7.onnx';
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
 function loadScript(src){
@@ -1861,6 +1861,7 @@ async function coachUpdate(){
     const kg=MightyAI.keyCardGuard(game, HUMAN, raw);
     let act=MightyAI.tfeedGuard(game, HUMAN, MightyAI.topLeadGuard(game, HUMAN, kg));
     act=await MightyAI.dleadGuard(masterSess, ortLib, game, HUMAN, act);
+    act=await MightyAI.c1Guard(masterSess, ortLib, game, HUMAN, act);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
     const cid=E.cardId(act.card);

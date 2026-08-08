@@ -82,6 +82,7 @@ async function playout(sess, ort, g, { rng = null, record = null, maxSteps = 400
       const A2 = getAI();
       act = A2.tfeedGuard(g, p, A2.topLeadGuard(g, p, A2.keyCardGuard(g, p, act)));
       act = await A2.dleadGuard(sess, ort, g, p, act);
+      act = await A2.c1Guard(sess, ort, g, p, act);
     }
     if (record) record.push({ p, ph: g.phase, a: JSON.parse(JSON.stringify(act)) });
     g.act(act);
