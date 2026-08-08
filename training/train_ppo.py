@@ -388,6 +388,8 @@ def main():
                     help='E2 관례 증류 계수 — 개입 인증 클래스에서만 교사 CE를 더한다')
     ap.add_argument('--distill', action='store_true',
                     help='앵커 증류 모드: PPO 끄고 인증 클래스 CE + 재개 시점 정책 KL 앵커만')
+    ap.add_argument('--anchor-ckpt', default=None,
+                    help='앵커를 재개 체크포인트가 아닌 다른 체크포인트에서 로드 (교차 앵커)')
     ap.add_argument('--kl', type=float, default=1.0, help='앵커 KL 계수')
     ap.add_argument('--attn', action='store_true',
                     help='Phase B: 트릭 토큰 트랜스포머 인코더')
@@ -439,6 +441,10 @@ def main():
         if not args.resume:
             raise SystemExit('--distill은 --resume(앵커가 될 체크포인트)이 필요하다')
         anchor = copy.deepcopy(net).eval()
+        if args.anchor_ckpt:
+            ast_ = torch.load(args.anchor_ckpt, map_location=device)
+            miss = anchor.load_state_dict(ast_['net'], strict=False)
+            print(f'[distill] 교차 앵커 {args.anchor_ckpt} (미로드 헤드 {len(miss.missing_keys)}개)')
         for p_ in anchor.parameters():
             p_.requires_grad_(False)
         print(f'[distill] 앵커 고정 @ update {start} · kl={args.kl} conv={args.conv}')
