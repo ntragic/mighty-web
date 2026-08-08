@@ -84,6 +84,13 @@ async function recordRound(seed, agents, g) {
   ok(res.highlights.every(h => h.ghost && h.ghost.actions.length > h.idx), '하이라이트마다 고스트 라인');
   ok(res.highlights.every(h => h.lineGain > 0), '노출 하이라이트는 라인 실이득 양수');
 
+  // 6) 관전 복기 — AI 좌석(비인간)도 같은 파이프라인·불변식이 성립한다
+  const spectSeat = (seat + 1) % 5;
+  const res2 = await A.analyzeRound(sess, ort, rec, spectSeat, { topK: 3, n: 8, seed: 5 });
+  ok(Array.isArray(res2.highlights), '관전 복기 파이프라인 동작');
+  ok(res2.highlights.every(h => h.lineGain > 0), '관전 하이라이트도 라인 실이득 양수');
+  ok(res2.highlights.every(h => h.ghost && h.ghost.actions.length > h.idx), '관전 고스트 라인');
+
   console.log(`\n분석 테스트: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

@@ -13,7 +13,7 @@ const DEFAULT_NAMES = {
 const I18N_EN = {
   // 진영·역할
   '여당':'Attackers', '야당':'Defenders', '주공':'Declarer', '프렌드':'Friend',
-  '여당 승리':'Attackers win', '야당 승리':'Defenders win',
+  '여당 승리':'Attackers win', '야당 승리':'Defenders win', '관전':'Spectate',
   '여당 (주공)':'Attacker (declarer)', '여당 (프렌드)':'Attacker (friend)',
   '여당 (숨은 프렌드)':'Attacker (hidden friend)', '미정 (초구 프렌드)':'Undecided (first-trick friend)',
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
@@ -342,8 +342,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.3.0';
-const APP_BUILD = '2026-08-07 빌드 — 기루다 탑 리드 가드';
+const APP_VERSION = 'v2.4.0';
+const APP_BUILD = '2026-08-08 빌드 — 야당 헌납 가드·관전 복기';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1592,17 +1592,32 @@ function statsLineHtml(){
 /* ---------------- v2 AI 복기 (분석·하이라이트) ---------------- */
 let analysisBusy=false;
 
-async function openAnalysis(rec){
+/** 좌석별 분석 캐시 — 나(HUMAN)는 rec.analysis(통계 연동), AI 좌석은 rec.analysisAI[s] */
+function analysisOf(rec, seat){
+  return seat===HUMAN ? rec.analysis : (rec.analysisAI ? rec.analysisAI[seat] : null);
+}
+
+async function openAnalysis(rec, seat){
   if (!rec){ toast(t('복기할 라운드가 없습니다')); return; }
+  if (seat===undefined) seat=HUMAN;
   const box=$('#modal-box');
-  box.innerHTML=`<h2>${t('AI 복기')}</h2><div class="sub" id="an-status">${t('분석 중')}…</div>
+  box.innerHTML=`<h2>${t('AI 복기')}</h2>
+    <div class="chips" id="an-seats" style="margin:6px 0"></div>
+    <div class="sub" id="an-status">${t('분석 중')}…</div>
     <div id="an-body"></div>
     <div class="btnrow"><button class="btn ghost" id="an-close">${t('닫기')}</button></div>`;
+  // 관전 복기 — AI 좌석의 결정도 같은 파이프라인으로 분석 (증류 후보 축적용)
+  const chips=$('#an-seats');
+  for(let s2=0;s2<E.NUM_PLAYERS;s2++){
+    const b=el('button','chip'+(s2===seat?' on':''), NAMES[s2]);
+    b.onclick=()=>{ if(!analysisBusy && s2!==seat) openAnalysis(rec, s2); };
+    chips.append(b);
+  }
   $('#modal').classList.add('show');
   // 닫으면 정산 화면으로 복귀 (정산 반영은 settledRound 가드로 중복 없음)
   $('#an-close').onclick=()=>{ if (game && game.phase==='done') showSettlement();
                                else $('#modal').classList.remove('show'); };
-  if (!rec.analysis){
+  if (!analysisOf(rec, seat)){
     if (analysisBusy) return;
     analysisBusy=true;
     try{
@@ -1610,21 +1625,24 @@ async function openAnalysis(rec){
       if (masterState!=='ready'){ $('#an-status').textContent=t('분석은 마스터 모델이 필요합니다'); return; }
       const tick=()=>new Promise(r=>setTimeout(r,0));   // 프레임 양보 (메인 스레드 청크 실행)
       const st=()=>$('#an-status');
-      rec.analysis=await MightyAnalysis.analyzeRound(masterSess, ortLib, rec, HUMAN,
+      const res=await MightyAnalysis.analyzeRound(masterSess, ortLib, rec, seat,
         { topK:5, n:24, seed:(rec.seed>>>0)||7, tick,
           onProgress:(d,n)=>{ const s=st(); if(s) s.textContent=`${t('분석 중')}… ${d}/${n}`; } });
+      if (seat===HUMAN) rec.analysis=res;
+      else { if(!rec.analysisAI) rec.analysisAI={}; rec.analysisAI[seat]=res; }
     }catch(e){
       const s=$('#an-status'); if(s) s.textContent=t('분석 실패');
       analysisBusy=false; return;
     }
     analysisBusy=false;
-    statsFromAnalysis(rec);
+    if (seat===HUMAN) statsFromAnalysis(rec);
   }
-  renderAnalysis(rec);
+  renderAnalysis(rec, seat);
 }
 
-function renderAnalysis(rec){
-  const res=rec.analysis, body=$('#an-body'), st=$('#an-status');
+function renderAnalysis(rec, seat){
+  if (seat===undefined) seat=HUMAN;
+  const res=analysisOf(rec, seat), body=$('#an-body'), st=$('#an-status');
   if (!res || !body) return;
   if (st) st.textContent='';
   // EV 곡선 — 인간 결정 시점의 좌석 기대상금 (마스터 가치망 기준)
@@ -1656,7 +1674,7 @@ function renderAnalysis(rec){
   }).join('') : `<div class="an-sub" style="margin-top:10px">${t('표시할 실수가 없습니다 — 좋은 판이었습니다')}</div>`;
   body.innerHTML=svg+cards;
   body.querySelectorAll('button[data-hl]').forEach(b=>{
-    b.onclick=()=>openHighlight(rec, res.highlights[parseInt(b.dataset.hl,10)]);
+    b.onclick=()=>openHighlight(rec, res.highlights[parseInt(b.dataset.hl,10)], seat);
   });
 }
 /** 액션 인덱스 → 플레이 스텝 인덱스 */
@@ -1667,26 +1685,27 @@ function stepIndexOfAction(rec, actIdx){
   return n;
 }
 
-function openHighlight(rec, h){
+function openHighlight(rec, h, seat){
+  if (seat===undefined) seat=HUMAN;
   $('#modal').classList.remove('show');
   startReplay(rec);
   if (!replay) return;
   toggleReplayPlay(false);
   const ghostRec={ ...rec, actions:h.ghost.actions, result:h.ghost.result, analysis:null };
-  // 라인 결과 비교 — 인간 팀 점수카드 수와 내 상금 (대안 라인은 재생되는 한 판 기준)
+  // 라인 결과 비교 — 분석 좌석 팀의 점수카드 수와 그 좌석 상금 (대안 라인은 한 판 기준)
   let cmp=null;
   const aR=rec.result, gR=h.ghost && h.ghost.result;
   if (aR && gR){
-    const ruling=(HUMAN===replay.declarer || (replay.friend!==null && HUMAN===replay.friend));
+    const ruling=(seat===replay.declarer || (replay.friend!==null && seat===replay.friend));
     cmp={ aPts: ruling?aR.yeodangPoints:aR.yadangPoints,
           gPts: ruling?gR.yeodangPoints:gR.yadangPoints,
-          aPrize:aR.prizes[HUMAN], gPrize:gR.prizes[HUMAN] };
+          aPrize:aR.prizes[seat], gPrize:gR.prizes[seat] };
     // 대표 라인이 실제보다 낮거나 같으면 — 카드의 기대상금(시뮬 평균)과
     // 이 한 판의 결과가 왜 다른지/같은지 병기한다.
     cmp.note = (cmp.gPrize - cmp.aPrize) < 0;
     cmp.tie  = (cmp.gPrize - cmp.aPrize) === 0;
   }
-  replay.hl={ h, rec, ghostRec, alt:false, cmp };
+  replay.hl={ h, rec, ghostRec, alt:false, cmp, seat };
   jumpToHighlight();
 }
 
@@ -2031,6 +2050,8 @@ function renderReplay(){
   $('#replay-head').innerHTML = tf('replayHead', replay.rec.round,
     `${replay.contract.count}${gLabel(replay.contract.giruda)}`, NAMES[replay.declarer], fTxt)
     + (replay.hl && replay.hl.alt ? ` · <span class="alt-tag">${t('대안 라인(가정)')}</span>` : '')
+    + (replay.hl && replay.hl.seat!==undefined && replay.hl.seat!==HUMAN
+        ? ` · <span class="alt-tag">${t('관전')}: ${NAMES[replay.hl.seat]}</span>` : '')
     + (replay.hl && replay.hl.cmp ? (()=>{ const c=replay.hl.cmp;
         const sg=v=>(v>0?'+':'')+num(v);
         return `<br><span class="alt-cmp">${tf('altCmp', c.aPts, sg(c.aPrize), c.gPts, sg(c.gPrize),
@@ -2161,6 +2182,16 @@ function buildReportMd(rec){
     L.push('');
     L.push('## AI 하이라이트 (마스터 기준)');
     for (const h of rec.analysis.highlights)
+      L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 라인 이득 +${h.lineGain}` +
+             ` (시뮬 평균 +${h.dPrize}) · 승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
+  }
+  // 관전 복기(AI 좌석) 결과 — 증류 후보 축적용. 분석한 좌석만 실린다.
+  if (rec.analysisAI) for (const s of Object.keys(rec.analysisAI)){
+    const an=rec.analysisAI[s];
+    if (!an || !an.highlights.length) continue;
+    L.push('');
+    L.push(`## 관전 복기 — ${nm(+s)} (마스터 기준)`);
+    for (const h of an.highlights)
       L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 라인 이득 +${h.lineGain}` +
              ` (시뮬 평균 +${h.dPrize}) · 승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
   }
