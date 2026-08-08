@@ -2495,7 +2495,10 @@ async function playout(sess, ort, g, { rng = null, record = null, maxSteps = 400
     if (!act) throw new Error('playout: 액션 변환 실패 idx=' + ai);
     // 배포 마스터의 최종 경로와 동일하게 — 가드 미적용 시뮬은 실제로 나오지
     // 않을 낭비 수를 라인에 섞는다 (코칭 정합 버그와 같은 계열)
-    if (act.type === 'play') act = getAI().keyCardGuard(g, p, act);
+    if (act.type === 'play') {
+      const A2 = getAI();
+      act = A2.tfeedGuard(g, p, A2.topLeadGuard(g, p, A2.keyCardGuard(g, p, act)));
+    }
     if (record) record.push({ p, ph: g.phase, a: JSON.parse(JSON.stringify(act)) });
     g.act(act);
   }
@@ -2826,6 +2829,81 @@ function keyCardGuard(game, seat, action, trace) {
   } catch (e) { T('error'); return action; }
 }
 
+/**
+ * 탑 리드 가드 — 주공이 기루다 리드를 골랐고, 내 최고 기루다 위 서열이 밖에 없으며,
+ * 상대 기루다가 남아 있으면 최고 기루다로 교체한다("확실한 정리 + 프렌드 신호").
+ * 인증: 같은 딜 페어드 개입 2,400시드 — 발화 판 +167±114 · 전체 +58±40 ·
+ * 여당 승수 +15/645 (docs/trump-lead-results.txt, 2026-08-07).
+ * 좌석 가시 정보만 사용. 리드 무늬 선택은 강제하지 않는다(any 변형 미인증).
+ * 롤백: createAgent({topGuard:false}) 또는 v2.2.0 스테이지 재배포(MODELS.md 참조).
+ */
+function topLeadGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || game.phase !== 'play') return action;
+    if (seat !== game.declarer) return action;
+    const pl = game.play;
+    if (!pl || pl.table.length !== 0 || action.jokerCall) return action;
+    const g = game.contract ? game.contract.giruda : 'N';
+    if (g === 'N') return action;
+    const c = action.card;
+    if (E.isJoker(c) || c.suit !== g) return action;   // 기루다 리드 결정에만 개입
+    const myTr = game.hands[seat].filter(x => !E.isJoker(x) && x.suit === g)
+      .sort((a, b) => b.rank - a.rank);
+    if (!myTr.length) return action;
+    const top = myTr[0];
+    if (E.sameCard(c, top)) return action;             // 이미 최고 기루다
+    const seen = new Set();
+    for (const t of pl.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+    for (const x of game.hands[seat]) seen.add(E.cardId(x));
+    if (game.discard) for (const x of game.discard) seen.add(E.cardId(x));
+    let outTop = 0, outAny = 0;
+    for (let r = 2; r <= 14; r++)
+      if (!seen.has(g + r)) { outAny++; if (r > top.rank) outTop++; }
+    if (outTop > 0 || outAny === 0) return action;     // 위 서열 잔존 / 정리 대상 없음
+    if (!game._legalPlays(seat).some(m => !m.jokerCall && !m.jokerSuit && E.sameCard(m.card, top)))
+      return action;                                    // 초구 기루다 금지 등
+    return { type: 'play', card: top };
+  } catch (e) { return action; }
+}
+
+/**
+ * 야당 기루다 헌납 가드 — 공개 후 야당이, 여당이 현재 최강인 '기루다 리드' 트릭에
+ * 이기지도 못할 점수 기루다를 태울 때 최저 비점수 기루다로 교체한다.
+ * 점수 기루다는 이후 야당이 이기는 트릭에 보태야 한다(2026-08-08 실플레이 제보:
+ * 주공 ♥A 트릭에 ♥Q — 같은 딜 롤아웃 −942/판).
+ * 인증: 전좌석 마스터 2,400시드 페어드 — 발화 판 주공 상금 −895±446,
+ * 전체 −19.5±11.1, 여당 승수 −6/40 (docs/tfeed-cert*.txt).
+ * 팀 판정은 가시 정보만(프렌드 공개 후 한정). 롤백: createAgent({feedGuard:false}).
+ */
+function tfeedGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || game.phase !== 'play' || action.jokerCall) return action;
+    if (!game.friendRevealed) return action;
+    if (seat === game.declarer || seat === game.friend) return action;
+    const pl = game.play;
+    if (!pl || !pl.table.length) return action;
+    const g = game.contract ? game.contract.giruda : 'N';
+    if (g === 'N' || pl.ledSuit !== g) return action;
+    const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = game._cardStrength(e, pl);
+      if (gt(k, bk)) { bk = k; bp = e.player; }
+    }
+    if (!(bp === game.declarer || (game.friend !== null && bp === game.friend))) return action;
+    const c = action.card;
+    const isKey = x => E.isJoker(x) || E.sameCard(x, game.mightyCard);
+    if (E.isJoker(c) || isKey(c) || c.suit !== g || !E.isPointCard(c)) return action;
+    if (gt(game._cardStrength({ player: seat, card: c }, pl), bk)) return action;  // 이기는 수면 존중
+    const alt = game._legalPlays(seat).filter(m => !m.jokerCall && !E.isJoker(m.card)
+      && !isKey(m.card) && m.card.suit === g && !E.isPointCard(m.card)
+      && !gt(game._cardStrength({ player: seat, card: m.card }, pl), bk));
+    if (!alt.length) return action;
+    alt.sort((a, b) => a.card.rank - b.card.rank);
+    return { type: 'play', card: alt[0].card };
+  } catch (e) { return action; }
+}
+
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
 async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
   return ort.InferenceSession.create(modelPath);
@@ -2849,8 +2927,13 @@ async function createAgent(opts = {}) {
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
-        const guarded = a => (opts.keyGuard === false ? a
-          : keyCardGuard(game, seat, a, opts.guardTrace));
+        const guarded = a => {
+          let x = (opts.keyGuard === false ? a
+            : keyCardGuard(game, seat, a, opts.guardTrace));
+          if (opts.topGuard !== false) x = topLeadGuard(game, seat, x);
+          if (opts.feedGuard !== false) x = tfeedGuard(game, seat, x);
+          return x;
+        };
         for (let guard = 0; guard < 8; guard++) {
           const a = await M.chooseAction(session, ort, game, seat, pick);
           const act = M.actionToEngine(a, game, pick);
@@ -2905,7 +2988,7 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, keyCardGuard,
+const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
@@ -3260,8 +3343,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.2.0';
-const APP_BUILD = '2026-08-06 빌드 — 코칭 근거 버블';
+const APP_VERSION = 'v2.3.0';
+const APP_BUILD = '2026-08-07 빌드 — 기루다 탑 리드 가드';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -4755,8 +4838,9 @@ async function coachUpdate(){
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const raw=MightyMaster.actionToEngine(a, game, []);
     if (!raw || raw.type!=='play') return;
-    const act=MightyAI.keyCardGuard(game, HUMAN, raw);
-    const guardFired=!E.sameCard(raw.card, act.card);
+    const kg=MightyAI.keyCardGuard(game, HUMAN, raw);
+    const act=MightyAI.tfeedGuard(game, HUMAN, MightyAI.topLeadGuard(game, HUMAN, kg));
+    const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
     if (elc){

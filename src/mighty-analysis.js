@@ -80,7 +80,7 @@ async function playout(sess, ort, g, { rng = null, record = null, maxSteps = 400
     // 않을 낭비 수를 라인에 섞는다 (코칭 정합 버그와 같은 계열)
     if (act.type === 'play') {
       const A2 = getAI();
-      act = A2.topLeadGuard(g, p, A2.keyCardGuard(g, p, act));
+      act = A2.tfeedGuard(g, p, A2.topLeadGuard(g, p, A2.keyCardGuard(g, p, act)));
     }
     if (record) record.push({ p, ph: g.phase, a: JSON.parse(JSON.stringify(act)) });
     g.act(act);

@@ -186,6 +186,44 @@ function topLeadGuard(game, seat, action) {
   } catch (e) { return action; }
 }
 
+/**
+ * 야당 기루다 헌납 가드 — 공개 후 야당이, 여당이 현재 최강인 '기루다 리드' 트릭에
+ * 이기지도 못할 점수 기루다를 태울 때 최저 비점수 기루다로 교체한다.
+ * 점수 기루다는 이후 야당이 이기는 트릭에 보태야 한다(2026-08-08 실플레이 제보:
+ * 주공 ♥A 트릭에 ♥Q — 같은 딜 롤아웃 −942/판).
+ * 인증: 전좌석 마스터 2,400시드 페어드 — 발화 판 주공 상금 −895±446,
+ * 전체 −19.5±11.1, 여당 승수 −6/40 (docs/tfeed-cert*.txt).
+ * 팀 판정은 가시 정보만(프렌드 공개 후 한정). 롤백: createAgent({feedGuard:false}).
+ */
+function tfeedGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || game.phase !== 'play' || action.jokerCall) return action;
+    if (!game.friendRevealed) return action;
+    if (seat === game.declarer || seat === game.friend) return action;
+    const pl = game.play;
+    if (!pl || !pl.table.length) return action;
+    const g = game.contract ? game.contract.giruda : 'N';
+    if (g === 'N' || pl.ledSuit !== g) return action;
+    const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = game._cardStrength(e, pl);
+      if (gt(k, bk)) { bk = k; bp = e.player; }
+    }
+    if (!(bp === game.declarer || (game.friend !== null && bp === game.friend))) return action;
+    const c = action.card;
+    const isKey = x => E.isJoker(x) || E.sameCard(x, game.mightyCard);
+    if (E.isJoker(c) || isKey(c) || c.suit !== g || !E.isPointCard(c)) return action;
+    if (gt(game._cardStrength({ player: seat, card: c }, pl), bk)) return action;  // 이기는 수면 존중
+    const alt = game._legalPlays(seat).filter(m => !m.jokerCall && !E.isJoker(m.card)
+      && !isKey(m.card) && m.card.suit === g && !E.isPointCard(m.card)
+      && !gt(game._cardStrength({ player: seat, card: m.card }, pl), bk));
+    if (!alt.length) return action;
+    alt.sort((a, b) => a.card.rank - b.card.rank);
+    return { type: 'play', card: alt[0].card };
+  } catch (e) { return action; }
+}
+
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
 async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
   return ort.InferenceSession.create(modelPath);
@@ -213,6 +251,7 @@ async function createAgent(opts = {}) {
           let x = (opts.keyGuard === false ? a
             : keyCardGuard(game, seat, a, opts.guardTrace));
           if (opts.topGuard !== false) x = topLeadGuard(game, seat, x);
+          if (opts.feedGuard !== false) x = tfeedGuard(game, seat, x);
           return x;
         };
         for (let guard = 0; guard < 8; guard++) {
@@ -269,7 +308,7 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard,
+const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;

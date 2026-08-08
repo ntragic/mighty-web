@@ -1838,7 +1838,7 @@ async function coachUpdate(){
     const raw=MightyMaster.actionToEngine(a, game, []);
     if (!raw || raw.type!=='play') return;
     const kg=MightyAI.keyCardGuard(game, HUMAN, raw);
-    const act=MightyAI.topLeadGuard(game, HUMAN, kg);
+    const act=MightyAI.tfeedGuard(game, HUMAN, MightyAI.topLeadGuard(game, HUMAN, kg));
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);

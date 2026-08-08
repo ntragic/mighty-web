@@ -106,6 +106,34 @@ function override(g, seat, mode, actual) {
     return { type: 'play', card: pts[0].card };
   }
 
+  // tfeed: 공개 후 야당이, 여당이 현재 최강인 '기루다 리드' 트릭에서 팔로우
+  // 강제로 점수 기루다를 태울 때 → 최저 비점수 기루다로 교체 (2026-08-08 제보:
+  // 주공 ♥A 트릭에 ♥Q 추천 — 페어드 롤아웃 −942/판. dfeed는 대체재에서
+  // 기루다를 제외해 이 클래스를 구조적으로 못 잡았다)
+  if (mode === 'tfeed') {
+    if (!g.friendRevealed) return null;
+    if (seat === g.declarer || seat === g.friend) return null;
+    const pl = g.play;
+    if (!pl.table.length) return null;
+    const gi4 = g.contract ? g.contract.giruda : 'N';
+    if (gi4 === 'N' || pl.ledSuit !== gi4) return null;            // 기루다 리드 한정
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = strength(g, e, pl);
+      if (stronger(k, bk)) { bk = k; bp = e.player; }
+    }
+    if (!(bp === g.declarer || (g.friend !== null && bp === g.friend))) return null;
+    const isKey4 = c => E.isJoker(c) || E.sameCard(c, g.mightyCard);
+    if (isKey4(actual) || actual.suit !== gi4 || !E.isPointCard(actual)) return null;
+    if (stronger(strength(g, { player: seat, card: actual }, pl), bk)) return null;  // 이기는 수면 존중
+    const alt = g._legalPlays(seat).filter(m => !m.jokerCall && !isKey4(m.card)
+      && !E.isJoker(m.card) && m.card.suit === gi4 && !E.isPointCard(m.card)
+      && !stronger(strength(g, { player: seat, card: m.card }, pl), bk));
+    if (!alt.length) return null;
+    alt.sort((a, b) => a.card.rank - b.card.rank);
+    return { type: 'play', card: alt[0].card };
+  }
+
   // dfeed: 공개 후 야당이, 여당이 '현재 최강'인 트릭(잠금 불요)에 점수카드를
   // 태운 결정을 최저 비점수·비기루다 버림으로 교정 (2026-08-07 제보 클래스 —
   // keyCardGuard는 가시확정 잠금만 커버, 미잠금 헌납이 잔여 축)
