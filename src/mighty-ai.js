@@ -328,6 +328,69 @@ async function c1Guard(session, ort, game, seat, action) {
   } catch (e) { return action; }
 }
 
+/**
+ * 확정승 컷 가드 — 공개 후, 리드 무늬 보이드인 좌석이 상대팀이 최강인 점수
+ * 트릭을 두고 비기루다 버림을 선택하면, '가시 확정승'인 최저 기루다 컷으로
+ * 교체한다. keyCardGuard(아끼기)의 역방향 — 먹어야 할 때 먹는다.
+ * 인증(v7, 1,600시드 페어드): 발화 좌석 상금 +533±166, 두 배치 단독 유의
+ * (+401±265 / +634±210 — docs/c5-cert.txt). 제보 seed 746746024 트릭7
+ * (♠6 버림 대 ♦6 컷, +1,150/판)에서 출발. 교사 결정론 — 차기 증류 클래스.
+ * 롤백: createAgent({cutGuard:false}).
+ */
+function cutGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || game.phase !== 'play'
+        || action.jokerCall || !game.friendRevealed) return action;
+    const pl = game.play;
+    if (!pl || !pl.table.length) return action;
+    const gi = game.contract ? game.contract.giruda : 'N';
+    if (gi === 'N') return action;
+    const c = action.card;
+    if (E.isJoker(c) || E.sameCard(c, game.mightyCard)) return action;
+    if (c.suit === gi || pl.ledSuit === gi) return action;         // 이미 컷 / 기루다 팔로우
+    if (game.hands[seat].some(x => !E.isJoker(x) && x.suit === pl.ledSuit)) return action;
+    if (pl.table.filter(e => E.isPointCard(e.card)).length < 1) return action;
+    const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = game._cardStrength(e, pl);
+      if (gt(k, bk)) { bk = k; bp = e.player; }
+    }
+    const iAmRuling = seat === game.declarer || seat === game.friend;
+    const bestRuling = bp === game.declarer || (game.friend !== null && bp === game.friend);
+    if (iAmRuling === bestRuling) return action;                   // 아군 최강이면 방치 정당
+    const seen = new Set();
+    for (const t of pl.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+    for (const e of pl.table) seen.add(E.cardId(e.card));
+    for (const x of game.hands[seat]) seen.add(E.cardId(x));
+    if (seat === game.declarer && game.discard) for (const x of game.discard) seen.add(E.cardId(x));
+    const acted = new Set(pl.table.map(e => e.player)); acted.add(seat);
+    let remaining = 0;
+    for (let p = 0; p < E.NUM_PLAYERS; p++) if (!acted.has(p)) remaining++;
+    const cfg = game.config || {};
+    const jokerCanWin = !pl.jokerCallActive &&
+      !(pl.trickNo === 1 && cfg.firstTrickJokerWeak !== false) &&
+      !(pl.trickNo >= 10 && cfg.lastTrickJokerWeak !== false);
+    const threats = [];
+    if (remaining > 0) {
+      if (!seen.has(E.cardId(game.mightyCard))) threats.push([4, 0]);
+      if (jokerCanWin && !seen.has(E.JOKER)) threats.push([3, 0]);
+      for (let r = 2; r <= 14; r++) if (!seen.has(gi + r)) threats.push([2, r]);
+    }
+    const myTr = game.hands[seat]
+      .filter(x => !E.isJoker(x) && x.suit === gi && !E.sameCard(x, game.mightyCard))
+      .sort((a, b) => a.rank - b.rank);
+    for (const tc of myTr) {
+      const k = game._cardStrength({ player: seat, card: tc }, pl);
+      if (!gt(k, bk)) continue;
+      if (threats.some(t => gt(t, k))) continue;                   // 뒤 위협에 잡힘
+      if (!game._legalPlays(seat).some(m => !m.jokerCall && E.sameCard(m.card, tc))) continue;
+      return { type: 'play', card: tc };                           // 최저 확정승 컷
+    }
+    return action;
+  } catch (e) { return action; }
+}
+
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
 async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
   return ort.InferenceSession.create(modelPath);
@@ -356,6 +419,7 @@ async function createAgent(opts = {}) {
             : keyCardGuard(game, seat, a, opts.guardTrace));
           if (opts.topGuard !== false) x = topLeadGuard(game, seat, x);
           if (opts.feedGuard !== false) x = tfeedGuard(game, seat, x);
+          if (opts.cutGuard !== false) x = cutGuard(game, seat, x);
           if (opts.dleadGuard !== false) x = await dleadGuard(session, ort, game, seat, x);
           if (opts.c1Guard !== false) x = await c1Guard(session, ort, game, seat, x);
           return x;
@@ -414,7 +478,7 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard,
+const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
