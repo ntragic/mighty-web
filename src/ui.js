@@ -1802,7 +1802,9 @@ function coachReasons(g, act, guardFired){
   else if (isMighty) R.push(TF.coachMighty());
   else if (isJk && !jokerWeak) R.push(TF.coachJoker());
   else if (pl.table.length===0){
-    if (gi!=='N' && c.suit===gi && trumpOut>0) R.push(TF.coachTrumpSweep(trumpOut));
+    // '기루다 정리'는 여당(주공/확인된 프렌드) 관점 문구 — 야당 기루다 리드에 붙이면 오해
+    const iAtt = HUMAN===g.declarer || (ally!==null && ally===g.declarer);
+    if (gi!=='N' && c.suit===gi && trumpOut>0 && iAtt) R.push(TF.coachTrumpSweep(trumpOut));
     else {
       let higher=0;
       for(let r=c.rank+1;r<=14;r++) if(out(c.suit+r)) higher++;
