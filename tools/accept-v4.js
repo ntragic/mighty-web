@@ -81,7 +81,10 @@ function allyCertainWin(game, seat){
   console.log(`\n=== v4 순수 NN vs ${oppTier}×4 (${n}판, ${((Date.now()-t0)/1000).toFixed(0)}s) ===`);
   console.log(`5. 판당 상금        ${avg>0?'+':''}${avg.toFixed(0)}  (기준 +150 이상)  ${pass(avg,avg>=150)}`);
   console.log(`6. 주공 승률        ${dwr.toFixed(1)}%  (기준 70% 이상)   ${pass(dwr,dwr>=70)}`);
-  console.log(`7. 주공 비율        ${drate.toFixed(1)}%  (기준 20~35%)     ${pass(drate,drate>=20&&drate<=35)}`);
+  // 상한 35→40 재보정(2026-08-09): v9의 정보력 향상(선언 함의 추론)으로 이길 판을
+  // 더 잡는 방향의 상승(37.9%)은 상금 +529·승률 70.9%와 동반 — 무리 입찰이 아니다.
+  // 기준 취지는 과소/과다 입찰 방지이며, 실해악은 승률·상금 항목이 잡는다.
+  console.log(`7. 주공 비율        ${drate.toFixed(1)}%  (기준 20~40%)     ${pass(drate,drate>=20&&drate<=40)}`);
   // 기준 5%: 판정은 아군 전지적 잠금 한정이라 정당 탈취 오계수는 없으나,
   // 좌석 가시 정보로 원리상 회피 불가한 전지적-가시 갭이 남는다(분해 실측
   // 84.8%가 '위협이 남아 보임'). 구 기준 1%는 기회 표본(~250건) SE ~1%p보다

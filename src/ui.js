@@ -13,7 +13,8 @@ const DEFAULT_NAMES = {
 const I18N_EN = {
   // 진영·역할
   '여당':'Attackers', '야당':'Defenders', '주공':'Declarer', '프렌드':'Friend',
-  '여당 승리':'Attackers win', '야당 승리':'Defenders win',
+  '여당 승리':'Attackers win', '야당 승리':'Defenders win', '관전':'Spectate',
+  '책사':'Strategist', '수문장':'Gatekeeper', '정석가':'Purist',
   '여당 (주공)':'Attacker (declarer)', '여당 (프렌드)':'Attacker (friend)',
   '여당 (숨은 프렌드)':'Attacker (hidden friend)', '미정 (초구 프렌드)':'Undecided (first-trick friend)',
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
@@ -33,6 +34,9 @@ const I18N_EN = {
   // 프렌드
   '프렌드 지정':'Choose friend', '조커 프렌드':'Joker friend', '기루다 A':'Trump ace', '기루다 K':'Trump king',
   '초구 프렌드':'First-trick friend', '노프렌드':'No friend', '직접 선택':'Pick a card',
+  '내가 가진 카드를 부르면 히든 셀프(단독 여당·상대에겐 비공개)가 됩니다. 프렌드는 해당 카드가 나올 때 공개됩니다.':
+    'Calling a card you hold makes it a hidden solo (you play alone; others cannot tell). The friend is revealed when the card is played.',
+  '히든 셀프':'Hidden solo', '히든 셀프로 진행':'Go hidden solo',
   '자신이 가진 카드는 부를 수 없습니다. 프렌드는 해당 카드가 나올 때 공개됩니다.':
     'You cannot call a card you hold. The friend is revealed when that card is played.',
   '초구를 주공이 승리 — 사실상 노프렌드':'Declarer won the first trick — effectively no friend',
@@ -227,6 +231,9 @@ const TF = {
     ? `actual ${aP} pts · ${aZ} → alt ${gP} pts · ${gZ} (${dP} point cards, ${dZ} prize)`
     : `실제 점수카드 ${aP}장·상금 ${aZ} → 대안 ${gP}장·${gZ} (점수카드 ${dP}장 · 상금 ${dZ})`,
   // v2.2 코칭 근거 버블 — 좌석 가시 정보로만 도출한 룰 기반 근거(전지적 판정 금지)
+  selfFriendAsk:(cn)=> LANG==='en'
+    ? `You hold ${cn} yourself.<br>Calling it means playing <b>alone</b> — opponents cannot tell there is no friend. Proceed?`
+    : `${cn}은(는) 내 손에 있는 카드입니다.<br>부르면 <b>프렌드 없이 단독</b>으로 싸우게 되고, 상대는 그 사실을 알 수 없습니다. 진행할까요?`,
   coachTrumpSweep:(n)=> LANG==='en' ? `Trump sweep — up to ${n} enemy trumps left` : `기루다 정리 — 상대 기루다 최대 ${n}장`,
   coachTopCard:()=> LANG==='en' ? 'Highest live card — keeps the lead' : '현재 최강 — 리드 유지',
   coachSafeLead:()=> LANG==='en' ? 'Safe lead — probe at low risk' : '안전 리드 — 낮은 위험으로 탐색',
@@ -342,8 +349,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.3.0';
-const APP_BUILD = '2026-08-07 빌드 — 기루다 탑 리드 가드';
+const APP_VERSION = 'v2.8.0';
+const APP_BUILD = '2026-08-09 빌드 — 마스터 혼합 운영 (책사·수문장·정석가)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -627,7 +634,29 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v6b.onnx';
+const MASTER_MODEL='./model/mighty_master_v9.onnx';
+/* v2.8 혼합 운영 — 상호 대결 동등이 실증된 세대를 좌석 성향차로 섞는다.
+ * 플레이 중 비노출(비딩 읽힘 방지 — 페르소나와 같은 원칙), 매치 종료 화면에서
+ * 사후 공개. 코칭·AI 복기 판정은 항상 대표(MASTER_MODEL=v9). */
+const MASTER_POOL=[
+  { id:'v9', file:'./model/mighty_master_v9.onnx', nick:'책사' },
+  { id:'v8', file:'./model/mighty_master_v8.onnx', nick:'수문장' },
+  { id:'v7', file:'./model/mighty_master_v7.onnx', nick:'정석가' },
+];
+let masterSessions={};                       // id → onnx session (지연 로드 캐시)
+let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id — 매치 내 고정
+function poolOf(id){ return MASTER_POOL.find(m=>m.id===id); }
+async function loadPoolModel(id){
+  if (masterSessions[id]) return masterSessions[id];
+  const m=poolOf(id);
+  masterSessions[id]=await MightyAI.loadMaster(ortLib, m.file);
+  return masterSessions[id];
+}
+/** 매치 시작 시 AI 좌석 모델 추첨 + 필요 모델 지연 로드 */
+async function assignSeatModels(){
+  for(let p=1;p<5;p++) seatModels[p]=MASTER_POOL[Math.floor(Math.random()*MASTER_POOL.length)].id;
+  await Promise.all([...new Set(seatModels.slice(1))].map(loadPoolModel));
+}
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
 function loadScript(src){
@@ -653,6 +682,8 @@ async function ensureMaster(){
       ortLib.env.wasm.numThreads = 1;            // COOP/COEP 헤더 없는 정적 호스팅 대응
     }catch(e){}
     masterSess=await MightyAI.loadMaster(ortLib, MASTER_MODEL);
+    masterSessions['v9']=masterSess;                 // 대표 모델은 풀 캐시와 공유
+    if (!seatModels[1]) await assignSeatModels();    // 최초 로드 시 좌석 배정
     masterState='ready';
     await buildAgents();
     toast(t('마스터 AI 준비 완료'), 1600);
@@ -674,9 +705,13 @@ function currentTier(){
 async function buildAgents(reassign){
   const tier = currentTier();
   if (reassign || !botTable || botTable.tier !== tier){
+    // v2.8 혼합 운영 — 마스터 티어는 좌석별 배정 모델 세션 사용 (미배정/미로드는 대표로 폴백)
+    const sessions = tier==='master'
+      ? [null,1,2,3,4].map((_,p)=>p===0?null:(masterSessions[seatModels[p]]||masterSess))
+      : null;
     botTable = await MightyAI.createTable({
       tiers: [tier, tier, tier, tier, tier],
-      rng: Math.random, session: masterSess, ort: ortLib,
+      rng: Math.random, session: masterSess, ort: ortLib, sessions,
     });
     botTable.tier = tier;
   }
@@ -1054,12 +1089,12 @@ function sheetFriend(sh){
   const m=game.mightyCard;
   const quick=el('div','chips');
   const has=c=>hand.some(h=>E.sameCard(h,c));
-  const mk=(label,act,dis)=>{ const b=el('button','chip',label); b.disabled=!!dis; b.onclick=act; return b; };
-  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티'))), has(m)));
-  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드')), has(E.JOKER)));
+  const mk=(label,act)=>{ const b=el('button','chip',label); b.onclick=act; return b; };
+  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티')))));
+  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드'))));
   if (game.contract.giruda!=='N'){
     const gA={suit:game.contract.giruda, rank:14};
-    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A'))), has(gA)));
+    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A')))));
   }
   quick.append(mk(t('초구 프렌드'), ()=>callFriend({type:'friend',mode:'first'},t('초구 프렌드'))));
   quick.append(mk(t('노프렌드'), ()=>callFriend({type:'friend',mode:'none'},t('노프렌드'))));
@@ -1077,15 +1112,23 @@ function sheetFriend(sh){
     for(const r of [14,13,12,11,10,9,8,7,6,5,4,3,2]){
       const card={suit:friendSuit, rank:r};
       const b=el('button','chip '+suCls(friendSuit), {11:'J',12:'Q',13:'K',14:'A'}[r]||r);
-      b.disabled=hand.some(h=>E.sameCard(h,card));
       b.onclick=()=>callFriend({type:'friend',mode:'card',card},tf('cardFriend', cardLabel(card)));
       ranks.append(b);
     }
     sh.append(ranks);
   }
-  sh.append(el('div','hint',t('자신이 가진 카드는 부를 수 없습니다. 프렌드는 해당 카드가 나올 때 공개됩니다.')));
+  sh.append(el('div','hint',t('내가 가진 카드를 부르면 히든 셀프(단독 여당·상대에겐 비공개)가 됩니다. 프렌드는 해당 카드가 나올 때 공개됩니다.')));
 }
-function callFriend(act,label){
+async function callFriend(act,label){
+  // 보유 카드 호출 = 히든 셀프 플레이 — 실수 방지를 위해 확인만 받고 허용한다
+  if (act.mode==='card' && game.hands[HUMAN].some(h=>E.sameCard(h,act.card))){
+    const gen=stateGen;
+    const ok=await confirmModal(t('히든 셀프'),
+      tf('selfFriendAsk', cardLabel(act.card)),
+      t('히든 셀프로 진행'), t('취소'));
+    if (!ok || gen!==stateGen || !game || game.phase!=='friend'
+        || game.currentPlayer!==HUMAN) { renderSheet(); return; }
+  }
   friendCustom=false;
   humanAct(act, tf('logFriendDecl', NAMES[HUMAN], label));
   const fd=game.friendDecl;
@@ -1592,17 +1635,32 @@ function statsLineHtml(){
 /* ---------------- v2 AI 복기 (분석·하이라이트) ---------------- */
 let analysisBusy=false;
 
-async function openAnalysis(rec){
+/** 좌석별 분석 캐시 — 나(HUMAN)는 rec.analysis(통계 연동), AI 좌석은 rec.analysisAI[s] */
+function analysisOf(rec, seat){
+  return seat===HUMAN ? rec.analysis : (rec.analysisAI ? rec.analysisAI[seat] : null);
+}
+
+async function openAnalysis(rec, seat){
   if (!rec){ toast(t('복기할 라운드가 없습니다')); return; }
+  if (seat===undefined) seat=HUMAN;
   const box=$('#modal-box');
-  box.innerHTML=`<h2>${t('AI 복기')}</h2><div class="sub" id="an-status">${t('분석 중')}…</div>
+  box.innerHTML=`<h2>${t('AI 복기')}</h2>
+    <div class="chips" id="an-seats" style="margin:6px 0"></div>
+    <div class="sub" id="an-status">${t('분석 중')}…</div>
     <div id="an-body"></div>
     <div class="btnrow"><button class="btn ghost" id="an-close">${t('닫기')}</button></div>`;
+  // 관전 복기 — AI 좌석의 결정도 같은 파이프라인으로 분석 (증류 후보 축적용)
+  const chips=$('#an-seats');
+  for(let s2=0;s2<E.NUM_PLAYERS;s2++){
+    const b=el('button','chip'+(s2===seat?' on':''), NAMES[s2]);
+    b.onclick=()=>{ if(!analysisBusy && s2!==seat) openAnalysis(rec, s2); };
+    chips.append(b);
+  }
   $('#modal').classList.add('show');
   // 닫으면 정산 화면으로 복귀 (정산 반영은 settledRound 가드로 중복 없음)
   $('#an-close').onclick=()=>{ if (game && game.phase==='done') showSettlement();
                                else $('#modal').classList.remove('show'); };
-  if (!rec.analysis){
+  if (!analysisOf(rec, seat)){
     if (analysisBusy) return;
     analysisBusy=true;
     try{
@@ -1610,21 +1668,24 @@ async function openAnalysis(rec){
       if (masterState!=='ready'){ $('#an-status').textContent=t('분석은 마스터 모델이 필요합니다'); return; }
       const tick=()=>new Promise(r=>setTimeout(r,0));   // 프레임 양보 (메인 스레드 청크 실행)
       const st=()=>$('#an-status');
-      rec.analysis=await MightyAnalysis.analyzeRound(masterSess, ortLib, rec, HUMAN,
+      const res=await MightyAnalysis.analyzeRound(masterSess, ortLib, rec, seat,
         { topK:5, n:24, seed:(rec.seed>>>0)||7, tick,
           onProgress:(d,n)=>{ const s=st(); if(s) s.textContent=`${t('분석 중')}… ${d}/${n}`; } });
+      if (seat===HUMAN) rec.analysis=res;
+      else { if(!rec.analysisAI) rec.analysisAI={}; rec.analysisAI[seat]=res; }
     }catch(e){
       const s=$('#an-status'); if(s) s.textContent=t('분석 실패');
       analysisBusy=false; return;
     }
     analysisBusy=false;
-    statsFromAnalysis(rec);
+    if (seat===HUMAN) statsFromAnalysis(rec);
   }
-  renderAnalysis(rec);
+  renderAnalysis(rec, seat);
 }
 
-function renderAnalysis(rec){
-  const res=rec.analysis, body=$('#an-body'), st=$('#an-status');
+function renderAnalysis(rec, seat){
+  if (seat===undefined) seat=HUMAN;
+  const res=analysisOf(rec, seat), body=$('#an-body'), st=$('#an-status');
   if (!res || !body) return;
   if (st) st.textContent='';
   // EV 곡선 — 인간 결정 시점의 좌석 기대상금 (마스터 가치망 기준)
@@ -1656,7 +1717,7 @@ function renderAnalysis(rec){
   }).join('') : `<div class="an-sub" style="margin-top:10px">${t('표시할 실수가 없습니다 — 좋은 판이었습니다')}</div>`;
   body.innerHTML=svg+cards;
   body.querySelectorAll('button[data-hl]').forEach(b=>{
-    b.onclick=()=>openHighlight(rec, res.highlights[parseInt(b.dataset.hl,10)]);
+    b.onclick=()=>openHighlight(rec, res.highlights[parseInt(b.dataset.hl,10)], seat);
   });
 }
 /** 액션 인덱스 → 플레이 스텝 인덱스 */
@@ -1667,26 +1728,27 @@ function stepIndexOfAction(rec, actIdx){
   return n;
 }
 
-function openHighlight(rec, h){
+function openHighlight(rec, h, seat){
+  if (seat===undefined) seat=HUMAN;
   $('#modal').classList.remove('show');
   startReplay(rec);
   if (!replay) return;
   toggleReplayPlay(false);
   const ghostRec={ ...rec, actions:h.ghost.actions, result:h.ghost.result, analysis:null };
-  // 라인 결과 비교 — 인간 팀 점수카드 수와 내 상금 (대안 라인은 재생되는 한 판 기준)
+  // 라인 결과 비교 — 분석 좌석 팀의 점수카드 수와 그 좌석 상금 (대안 라인은 한 판 기준)
   let cmp=null;
   const aR=rec.result, gR=h.ghost && h.ghost.result;
   if (aR && gR){
-    const ruling=(HUMAN===replay.declarer || (replay.friend!==null && HUMAN===replay.friend));
+    const ruling=(seat===replay.declarer || (replay.friend!==null && seat===replay.friend));
     cmp={ aPts: ruling?aR.yeodangPoints:aR.yadangPoints,
           gPts: ruling?gR.yeodangPoints:gR.yadangPoints,
-          aPrize:aR.prizes[HUMAN], gPrize:gR.prizes[HUMAN] };
+          aPrize:aR.prizes[seat], gPrize:gR.prizes[seat] };
     // 대표 라인이 실제보다 낮거나 같으면 — 카드의 기대상금(시뮬 평균)과
     // 이 한 판의 결과가 왜 다른지/같은지 병기한다.
     cmp.note = (cmp.gPrize - cmp.aPrize) < 0;
     cmp.tie  = (cmp.gPrize - cmp.aPrize) === 0;
   }
-  replay.hl={ h, rec, ghostRec, alt:false, cmp };
+  replay.hl={ h, rec, ghostRec, alt:false, cmp, seat };
   jumpToHighlight();
 }
 
@@ -1783,7 +1845,9 @@ function coachReasons(g, act, guardFired){
   else if (isMighty) R.push(TF.coachMighty());
   else if (isJk && !jokerWeak) R.push(TF.coachJoker());
   else if (pl.table.length===0){
-    if (gi!=='N' && c.suit===gi && trumpOut>0) R.push(TF.coachTrumpSweep(trumpOut));
+    // '기루다 정리'는 여당(주공/확인된 프렌드) 관점 문구 — 야당 기루다 리드에 붙이면 오해
+    const iAtt = HUMAN===g.declarer || (ally!==null && ally===g.declarer);
+    if (gi!=='N' && c.suit===gi && trumpOut>0 && iAtt) R.push(TF.coachTrumpSweep(trumpOut));
     else {
       let higher=0;
       for(let r=c.rank+1;r<=14;r++) if(out(c.suit+r)) higher++;
@@ -1838,7 +1902,10 @@ async function coachUpdate(){
     const raw=MightyMaster.actionToEngine(a, game, []);
     if (!raw || raw.type!=='play') return;
     const kg=MightyAI.keyCardGuard(game, HUMAN, raw);
-    const act=MightyAI.topLeadGuard(game, HUMAN, kg);
+    let act=MightyAI.cutGuard(game, HUMAN, MightyAI.tfeedGuard(game, HUMAN, MightyAI.topLeadGuard(game, HUMAN, kg)));
+    act=await MightyAI.dleadGuard(masterSess, ortLib, game, HUMAN, act);
+    act=await MightyAI.c1Guard(masterSess, ortLib, game, HUMAN, act);
+    if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
     const cid=E.cardId(act.card);
     const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
@@ -1986,6 +2053,29 @@ function replayRestart(){
   replay.step = 0;
   renderReplay();
 }
+/** 한 트릭 뒤로 — 트릭 경계(5수 단위)로 되감아 그 트릭이 완성된 화면에서 정지 */
+function replayPrevTrick(){
+  if (!replay || replay.stepping) return;
+  toggleReplayPlay(false);
+  const s = replay.step;
+  const target = (s % E.NUM_PLAYERS === 0)
+    ? Math.max(0, s - E.NUM_PLAYERS)
+    : Math.floor(s / E.NUM_PLAYERS) * E.NUM_PLAYERS;
+  replay.ghost = null;
+  replay.g = rebuildGame(replay.rec, replay.playStart);
+  replay.step = 0;
+  while (replay.step < target){
+    replay.g.act(replay.steps[replay.step].a);
+    replay.step++;
+  }
+  // 경계에서는 직전 트릭을 완성 상태로 붙잡아 보여준다 (앞으로 재생과 동일한 화면)
+  const hist = replay.g.play && replay.g.play.history;
+  if (replay.step > 0 && hist && hist.length){
+    const h = hist[hist.length - 1];
+    replay.ghost = { plays: h.plays, winner: h.winner };
+  }
+  renderReplay();
+}
 /** 다음 트릭을 순서대로 빠르게 보여준 뒤 일시정지 상태로 둔다 */
 async function replayNextTrick(){
   if (!replay || replay.stepping) return;
@@ -2031,6 +2121,8 @@ function renderReplay(){
   $('#replay-head').innerHTML = tf('replayHead', replay.rec.round,
     `${replay.contract.count}${gLabel(replay.contract.giruda)}`, NAMES[replay.declarer], fTxt)
     + (replay.hl && replay.hl.alt ? ` · <span class="alt-tag">${t('대안 라인(가정)')}</span>` : '')
+    + (replay.hl && replay.hl.seat!==undefined && replay.hl.seat!==HUMAN
+        ? ` · <span class="alt-tag">${t('관전')}: ${NAMES[replay.hl.seat]}</span>` : '')
     + (replay.hl && replay.hl.cmp ? (()=>{ const c=replay.hl.cmp;
         const sg=v=>(v>0?'+':'')+num(v);
         return `<br><span class="alt-cmp">${tf('altCmp', c.aPts, sg(c.aPrize), c.gPts, sg(c.gPrize),
@@ -2084,7 +2176,8 @@ function renderReplay(){
   // 컨트롤 바
   const bar = $('#replay-bar'); bar.innerHTML='';
   const mk=(label,fn,cls)=>{ const b=el('button',cls||'',label); b.onclick=fn; return b; };
-  bar.append(mk('⏮', replayRestart));
+  bar.append(mk('↺', replayRestart));
+  bar.append(mk('⏮', replayPrevTrick));
   bar.append(mk(replay.playing?'⏸':'▶', ()=>toggleReplayPlay(), 'primary'));
   bar.append(mk('⏭', replayNextTrick));
   const tn = gh ? gh.trickNo : (g.phase==='play' ? g.play.trickNo : 10);
@@ -2161,6 +2254,16 @@ function buildReportMd(rec){
     L.push('');
     L.push('## AI 하이라이트 (마스터 기준)');
     for (const h of rec.analysis.highlights)
+      L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 라인 이득 +${h.lineGain}` +
+             ` (시뮬 평균 +${h.dPrize}) · 승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
+  }
+  // 관전 복기(AI 좌석) 결과 — 증류 후보 축적용. 분석한 좌석만 실린다.
+  if (rec.analysisAI) for (const s of Object.keys(rec.analysisAI)){
+    const an=rec.analysisAI[s];
+    if (!an || !an.highlights.length) continue;
+    L.push('');
+    L.push(`## 관전 복기 — ${nm(+s)} (마스터 기준)`);
+    for (const h of an.highlights)
       L.push(`- 트릭 ${h.trick} [${h.grade}] ${h.actual} → ${h.alt} · 라인 이득 +${h.lineGain}` +
              ` (시뮬 평균 +${h.dPrize}) · 승률 ${h.flip.act.win}/${h.flip.act.n} → ${h.flip.alt.win}/${h.flip.alt.n}`);
   }
@@ -2517,7 +2620,8 @@ function showFinal(){
     ${buildFinalChart()}
     <div style="margin:4px 0 18px">
     ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
-      <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):''}</div>
+      <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
+        (currentTier()==='master'&&seatModels[p]?` <span class="style-tag">${t(poolOf(seatModels[p]).nick)}</span>`:'')}</div>
       <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
     </div>`).join('')}</div>
     ${statsLineHtml()}
@@ -2532,6 +2636,8 @@ function showFinal(){
 }
 function newMatch(){
   matchHistory=[];
+  // v2.8: 매치마다 좌석 모델(성향) 재추첨 — 로드는 비동기, 완료 전엔 대표로 폴백
+  if (masterState==='ready') assignSeatModels().then(()=>buildAgents(true));
   buildAgents(true);                      // 매치마다 좌석 성향 재배정
   matchLog = [];
   totals=[0,0,0,0,0]; roundNo=0; matchOver=false;

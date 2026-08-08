@@ -292,7 +292,7 @@ class MixedCollector:
                 g_ = env.game
                 is_play = g_.phase == 'play'
                 cp = tuple(g_.play['capturedPoints']) if is_play else (0,) * 5
-                sl, tl = aux_labels(g_, p)
+                sl, tl, mk, jk = aux_labels(g_, p)
                 tno = g_.play['trickNo'] if is_play else -1
                 ca = -1
                 if self.conv and is_play:
@@ -302,7 +302,7 @@ class MixedCollector:
                     if tc is not None:
                         ca = A_PLAY0 + cidx(tc)
                 self.open[i][p].append([o, m, int(acts_np[j]), float(logps_np[j]),
-                                        float(vals_np[j]), (cp, sl, tl, tno, ca)])
+                                        float(vals_np[j]), (cp, sl, tl, tno, ca, mk, jk)])
                 steps += 1
                 no, nm, np_, rew, done = env.step(int(acts_np[j]))
                 if done:
@@ -386,10 +386,10 @@ class MixedCollector:
                     if role == 1 and self.feed_coef and played_pts:
                         R += self.feed_coef * fed / played_pts
                     for rec in segs:
-                        _, sl, tl, tno, ca = rec.pop()
+                        _, sl, tl, tno, ca, mk, jk = rec.pop()
                         w = winners.get(tno)
                         lw = -1 if w is None else (w - seat) % 5
-                        traj.append(rec + [R, role, lab, sl, tl, lw, ca])
+                        traj.append(rec + [R, role, lab, sl, tl, lw, ca, mk, jk])
                 fresh.append(self._reset_env(i))
             if fresh:
                 self._rpc({'new': fresh})   # 같은 env id로 덮어쓴다 (drop 불필요)

@@ -383,14 +383,35 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
             mine_top = max([c[1] for c in game.hands[me]
                             if (not is_joker(c)) and c[0] == su], default=0)
             o[O_TOPOUT + 4 + si] = 1.0 if (mine_top and mine_top > top_out) else 0.0
-        # 마이티·조커를 아직 쥐고 있을 수 있는 좌석 (보이드 추론 반영)
+        # 마이티·조커를 아직 쥐고 있을 수 있는 좌석 (보이드 추론 + 프렌드 선언 함의)
         m_seen = card_id(game.mighty_card) in seen
         j_seen = JOKER in seen or 'JOKER' in seen
         m_suit = SUIT_IDX[game.mighty_card[0]]
+        # 프렌드 선언 함의 — 주공이 마이티/조커 프렌드를 불렀다면 주공에겐 그 카드가
+        # 없고, 미공개 카드 프렌드라면 보유자(=프렌드)에게 있다. 이 연역이 빠져
+        # 프렌드가 주공 마이티를 뽑는 리드를 두는 결함이 있었다(2026-08-08 제보 2건).
+        fd2 = game.friend_decl
+        decl2 = game.declarer
+        fr2 = game.friend if game.friend_revealed else None
+        m_decl_no = (fd2 and fd2.get('mode') == 'card' and fd2.get('card')
+                     and same(fd2['card'], game.mighty_card))
+        j_decl_no = (fd2 and fd2.get('mode') == 'card' and fd2.get('card')
+                     and is_joker(fd2['card']))
         for r in range(1, NUM_PLAYERS):
             p = (me + r) % NUM_PLAYERS
-            o[O_KCAND + (r - 1)] = 0.0 if (m_seen or void[p][m_suit]) else 1.0
-            o[O_KCAND + 4 + (r - 1)] = 0.0 if j_seen else 1.0
+            m_can = not (m_seen or void[p][m_suit])
+            j_can = not j_seen
+            if p == decl2:
+                if m_decl_no:
+                    m_can = False              # 마이티 프렌드 선언 = 주공 마이티 부재
+                if j_decl_no:
+                    j_can = False              # 조커 프렌드 선언 = 주공 조커 부재
+            if fr2 is not None and not m_seen and m_decl_no:
+                m_can = (p == fr2)             # 공개된 마이티 프렌드가 보유 확정
+            if fr2 is not None and not j_seen and j_decl_no:
+                j_can = (p == fr2)
+            o[O_KCAND + (r - 1)] = 1.0 if m_can else 0.0
+            o[O_KCAND + 4 + (r - 1)] = 1.0 if j_can else 0.0
         o[O_KCAND + 8] = len(game.hands[me]) / 10.0
 
     rv = encode_rules(game.config)
@@ -447,6 +468,93 @@ def conv_target(game, me, act_card=None):
     """
     if game.phase != 'play':
         return None
+    # tfeed — 공개 후 야당이, 여당이 최강인 기루다 리드 트릭에 이기지 못할 점수
+    # 기루다를 태우면 최저 비점수 기루다 (2026-08-08 인증: 발화 판 주공 −895±446)
+    if act_card is not None and game.friend_revealed:
+        decl0, fr0 = game.declarer, game.friend
+        if decl0 is not None and me != decl0 and me != fr0:
+            pl0 = game.play
+            gi0 = game.contract['giruda'] if game.contract else 'N'
+            if pl0['table'] and gi0 != 'N' and pl0['ledSuit'] == gi0:
+                c0 = act_card
+                if (not is_joker(c0)) and (not same(c0, game.mighty_card)) \
+                        and c0[0] == gi0 and is_point(c0):
+                    bk0, bp0 = (-2, -1), -1
+                    for e in pl0['table']:
+                        k0 = game.card_strength(e, pl0)
+                        if k0 > bk0:
+                            bk0, bp0 = k0, e['player']
+                    if (bp0 == decl0 or (fr0 is not None and bp0 == fr0)) \
+                            and not (game.card_strength({'player': me, 'card': c0}, pl0) > bk0):
+                        alts = [m['card'] for m in game.legal_plays(me)
+                                if not m.get('jokerCall')
+                                and not is_joker(m['card'])
+                                and not same(m['card'], game.mighty_card)
+                                and m['card'][0] == gi0
+                                and not is_point(m['card'])
+                                and not (game.card_strength({'player': me, 'card': m['card']}, pl0) > bk0)]
+                        if alts:
+                            return min(alts, key=lambda c: c[1])
+    # cut — 공개 후, 리드 무늬 보이드 좌석이 상대팀 최강 점수 트릭에 비기루다를
+    # 버릴 때 → '가시 확정승' 최저 기루다 컷 (2026-08-08 인증 +533±166, cutGuard)
+    if act_card is not None and game.friend_revealed:
+        plc = game.play
+        gic = game.contract['giruda'] if game.contract else 'N'
+        cc = act_card
+        if (plc['table'] and gic != 'N' and plc['ledSuit'] != gic
+                and not is_joker(cc) and not same(cc, game.mighty_card)
+                and cc[0] != gic
+                and not any((not is_joker(x)) and x[0] == plc['ledSuit']
+                            for x in game.hands[me])
+                and sum(1 for e in plc['table'] if is_point(e['card'])) >= 1):
+            bkc, bpc = (-2, -1), -1
+            for e in plc['table']:
+                kc = game.card_strength(e, plc)
+                if kc > bkc:
+                    bkc, bpc = kc, e['player']
+            i_rul = me == game.declarer or me == game.friend
+            b_rul = bpc == game.declarer or (game.friend is not None and bpc == game.friend)
+            if i_rul != b_rul:
+                seenc = set()
+                for t in plc['history']:
+                    for e in t['plays']:
+                        seenc.add(card_id(e['card']))
+                for e in plc['table']:
+                    seenc.add(card_id(e['card']))
+                for x in game.hands[me]:
+                    seenc.add(card_id(x))
+                if me == game.declarer and game.discard:
+                    for x in game.discard:
+                        seenc.add(card_id(x))
+                acted = set(e['player'] for e in plc['table'])
+                acted.add(me)
+                rem = sum(1 for p in range(NUM_PLAYERS) if p not in acted)
+                cfgc = game.config or {}
+                joker_win = (not plc['jokerCallActive']
+                             and not (plc['trickNo'] == 1 and cfgc.get('firstTrickJokerWeak', True))
+                             and not (plc['trickNo'] >= 10 and cfgc.get('lastTrickJokerWeak', True)))
+                threats = []
+                if rem > 0:
+                    if card_id(game.mighty_card) not in seenc:
+                        threats.append((4, 0))
+                    if joker_win and JOKER not in seenc:
+                        threats.append((3, 0))
+                    for r in range(2, 15):
+                        if gic + str(r) not in seenc:
+                            threats.append((2, r))
+                my_tr = sorted((x for x in game.hands[me]
+                                if not is_joker(x) and x[0] == gic
+                                and not same(x, game.mighty_card)),
+                               key=lambda x: x[1])
+                for tc in my_tr:
+                    kc = game.card_strength({'player': me, 'card': tc}, plc)
+                    if not (kc > bkc):
+                        continue
+                    if any(t > kc for t in threats):
+                        continue
+                    if any(same(m['card'], tc) for m in game.legal_plays(me)
+                           if not m.get('jokerCall')):
+                        return tc
     # trumpTop — 유일하게 리드 상태(테이블 빈 상태)·공개 전에도 성립하는 클래스
     if act_card is not None and me == game.declarer and not game.play['table']:
         gi0 = game.contract['giruda'] if game.contract else 'N'
@@ -562,9 +670,19 @@ def aux_labels(game, me):
     """보조 손실용 정답 (엔진 truth, 상대좌석 rel1..4 기준).
     suit16: 그 좌석이 해당 무늬를 아직 들고 있는가
     trump4: 그 좌석의 잔여 기루다 수 /10 (노기루다면 0)
+    mk/jk: 마이티/조커 보유 좌석 rel0..4 (미보유 상태·소진이면 -1 — 예측 제외).
+    프렌드 선언 함의를 정책이 실제로 소화하도록 위치 추론을 손실로 강제한다.
     협력 판단(기루다 정리·무늬 공략)은 전부 이 추정 위에 선다."""
     suit = np.zeros(16, dtype=np.float32)
     trump = np.zeros(4, dtype=np.float32)
+    mk, jk = -1, -1
+    if game.contract:
+        for p in range(NUM_PLAYERS):
+            for c in game.hands[p]:
+                if same(c, game.mighty_card):
+                    mk = (p - me) % NUM_PLAYERS
+                if is_joker(c):
+                    jk = (p - me) % NUM_PLAYERS
     ct = game.contract
     gir = ct['giruda'] if ct else None
     for p in range(NUM_PLAYERS):
@@ -578,7 +696,7 @@ def aux_labels(game, me):
         if gir and gir != 'N':
             trump[r - 1] = sum(1 for c in hand
                                if (not is_joker(c)) and c[0] == gir) / 10.0
-    return suit, trump
+    return suit, trump, mk, jk
 
 
 # ---------------- 환경 래퍼 ----------------

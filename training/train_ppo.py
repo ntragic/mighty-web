@@ -52,6 +52,9 @@ class PolicyValueNet(nn.Module):
         self.aux_suit = nn.Linear(d, 16) if aux_head else None
         self.aux_trump = nn.Linear(d, 4) if aux_head else None
         self.aux_win = nn.Linear(d, 5) if aux_head else None
+        # v9: 마이티/조커 보유 좌석 예측 (rel0..4) — 프렌드 선언 함의 소화 강제
+        self.aux_mkey = nn.Linear(d, 5) if aux_head else None
+        self.aux_jkey = nn.Linear(d, 5) if aux_head else None
 
     def _feat(self, obs):
         if not self.use_attn:
@@ -73,7 +76,9 @@ class PolicyValueNet(nn.Module):
             return logits, self.v(h).squeeze(-1), None
         return logits, self.v(h).squeeze(-1), {
             'friend': self.aux(h), 'suit': self.aux_suit(h),
-            'trump': self.aux_trump(h), 'win': self.aux_win(h)}
+            'trump': self.aux_trump(h), 'win': self.aux_win(h),
+            'mkey': self.aux_mkey(h) if self.aux_mkey is not None else None,
+            'jkey': self.aux_jkey(h) if self.aux_jkey is not None else None}
 
 
 def team_diff(cp, decl, fr):
@@ -126,7 +131,7 @@ class Collector:
                 g_ = env.game
                 is_play = g_.phase == 'play'
                 cp = tuple(g_.play['capturedPoints']) if is_play else (0,) * 5
-                sl, tl = aux_labels(g_, p)
+                sl, tl, mk, jk = aux_labels(g_, p)
                 tno = g_.play['trickNo'] if is_play else -1
                 ca = -1
                 if self.conv and is_play:
@@ -136,7 +141,7 @@ class Collector:
                     if tc is not None:
                         ca = A_PLAY0 + cidx(tc)
                 rec_i = [o, m, int(acts_np[i]), float(logps_np[i]),
-                         float(vals_np[i]), (cp, sl, tl, tno, ca)]
+                         float(vals_np[i]), (cp, sl, tl, tno, ca, mk, jk)]
                 self.open[i][p].append(rec_i)
                 no, nm, np_, rew, done = env.step(int(acts_np[i]))
                 # Phase A: 이 결정이 '아군 확정승 트릭에 비싼 카드' 였는가
@@ -170,7 +175,7 @@ class Collector:
                                    for t in (pl_T['history'] if pl_T else [])}
                         for rec in segs:
                             wflag = rec.pop() if self.alloc else False
-                            cp_t, sl, tl, tno, ca = rec.pop()
+                            cp_t, sl, tl, tno, ca, mk, jk = rec.pop()
                             phi_t = (sign * team_diff(cp_t, decl, fr)
                                      if decl is not None else 0.0)
                             w = winners.get(tno)
@@ -178,7 +183,7 @@ class Collector:
                             # 종단보상 + 잠재함수 셰이핑(텔레스코핑 → 최적정책 불변)
                             traj.append(rec + [R + self.shape * (phi_T - phi_t)
                                                - (self.alloc if wflag else 0.0),
-                                               role, lab, sl, tl, lw, ca])
+                                               role, lab, sl, tl, lw, ca, mk, jk])
                         self.open[i][seat] = []
                     self.states[i] = env.reset()
                 else:
@@ -189,7 +194,7 @@ class Collector:
 # ---------------- PPO 업데이트 ----------------
 def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                vf_coef=0.5, ent_coef=0.05, bf16=False, aux_coef=0.1, role_norm=False,
-               conv_coef=0.0):
+               conv_coef=0.0, anchor=None, kl_coef=1.0):
     obs = torch.as_tensor(np.stack([t[0] for t in traj]), device=device)
     mask = torch.as_tensor(np.stack([t[1] for t in traj]), device=device)
     act = torch.as_tensor([t[2] for t in traj], device=device)
@@ -203,6 +208,9 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
     lab_win = torch.as_tensor([t[10] for t in traj], device=device)
     # E2: 관례 교사 액션 (인증 클래스 밖은 -1)
     conv_a = torch.as_tensor([t[11] if len(t) > 11 else -1 for t in traj], device=device)
+    # v9: 마이티/조커 보유 좌석 라벨 (rel0..4, 소진 -1)
+    lab_mk = torch.as_tensor([t[12] if len(t) > 12 else -1 for t in traj], device=device)
+    lab_jk = torch.as_tensor([t[13] if len(t) > 13 else -1 for t in traj], device=device)
     # 프렌드 선언 이전 스텝은 예측 대상이 없음 → 보조손실에서 제외
     aux_ok = obs[:, O_FDMODE] < 0.5
     play_ok = obs[:, O_PHASE + 4] > 0.5                    # 플레이 페이즈만
@@ -226,6 +234,42 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
     n = len(traj)
     stats = {}
     amp = torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=bf16)
+
+    # ---- 앵커 증류 모드: PPO를 끄고 (인증 클래스 CE) + (앵커 KL) + (가치 고정)만.
+    # b2x·b3top의 실패 원인이 '증류와 동반된 PPO 계속학습의 드리프트'였으므로
+    # 정책 이동 자체를 앵커로 묶는다. 관례는 CE가 끌고, 나머지 행동은 앵커가 지킨다.
+    if anchor is not None:
+        for _ in range(epochs):
+            perm = torch.randperm(n, device=device)
+            for s in range(0, n, mb):
+                idx = perm[s:s + mb]
+                with amp:
+                    logits, v, _ = net.forward_aux(obs[idx], mask[idx])
+                    with torch.no_grad():
+                        a_logits, a_v, _ = anchor.forward_aux(obs[idx], mask[idx])
+                    lp = F.log_softmax(logits.float(), -1)
+                    ap = F.softmax(a_logits.float(), -1)
+                    # 마스크된 액션은 ap=0 — 0*(-inf)=nan 차단
+                    kl = -(torch.where(ap > 1e-8, ap * lp, torch.zeros_like(lp))).sum(-1).mean()
+                    vloss = F.mse_loss(v, a_v.float())
+                    loss = kl_coef * kl + 0.5 * vloss
+                    convacc, convn = 0.0, 0
+                    if conv_coef:
+                        ck = conv_a[idx] >= 0
+                        if bool(ck.any()):
+                            cl = F.cross_entropy(logits[ck].float(), conv_a[idx][ck])
+                            loss = loss + conv_coef * cl
+                            convacc = (logits[ck].argmax(-1) == conv_a[idx][ck]).float().mean().item()
+                            convn = int(ck.sum())
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                nn.utils.clip_grad_norm_(net.parameters(), 1.0)
+                opt.step()
+                stats = {'pg': 0.0, 'v': vloss.item(), 'ent': kl.item(), 'aux': 0.0,
+                         'auxacc': 0.0, 'suit': 0.0, 'trump': 0.0, 'win': 0.0,
+                         'conv': convacc, 'conv_n': convn}
+        return stats
+
     for _ in range(epochs):
         perm = torch.randperm(n, device=device)
         for s in range(0, n, mb):
@@ -269,6 +313,20 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                         loss = loss + 0.5 * aux_coef * wl
                         auxsub['win'] = (auxlog['win'][wk].argmax(-1)
                                          == lab_win[idx][wk]).float().mean().item()
+                    if auxlog.get('mkey') is not None:      # v9: 특수카드 보유 좌석
+                        mk2 = play_ok[idx] & (lab_mk[idx] >= 0)
+                        jk2 = play_ok[idx] & (lab_jk[idx] >= 0)
+                        acc = []
+                        if bool(mk2.any()):
+                            ml = F.cross_entropy(auxlog['mkey'][mk2].float(), lab_mk[idx][mk2])
+                            loss = loss + 0.5 * aux_coef * ml
+                            acc.append((auxlog['mkey'][mk2].argmax(-1) == lab_mk[idx][mk2]).float().mean().item())
+                        if bool(jk2.any()):
+                            jl = F.cross_entropy(auxlog['jkey'][jk2].float(), lab_jk[idx][jk2])
+                            loss = loss + 0.5 * aux_coef * jl
+                            acc.append((auxlog['jkey'][jk2].argmax(-1) == lab_jk[idx][jk2]).float().mean().item())
+                        if acc:
+                            auxsub['key'] = sum(acc) / len(acc)
                 # E2: 인증 클래스 관례 증류 — 클래스 밖(-1)은 계수 0, 승률 최적화 불변
                 if conv_coef:
                     ck = conv_a[idx] >= 0
@@ -286,6 +344,7 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                      'aux': auxl.item(), 'auxacc': auxacc,
                      'suit': auxsub.get('suit', 0.0), 'trump': auxsub.get('trump', 0.0),
                      'win': auxsub.get('win', 0.0),
+                     'key': auxsub.get('key', 0.0),
                      'conv': auxsub.get('conv', 0.0), 'conv_n': auxsub.get('conv_n', 0)}
     return stats
 
@@ -327,6 +386,11 @@ def main():
                     help='프렌드 좌석 예측 보조손실 계수 (0이면 헤드 없음)')
     ap.add_argument('--conv', type=float, default=0.0,
                     help='E2 관례 증류 계수 — 개입 인증 클래스에서만 교사 CE를 더한다')
+    ap.add_argument('--distill', action='store_true',
+                    help='앵커 증류 모드: PPO 끄고 인증 클래스 CE + 재개 시점 정책 KL 앵커만')
+    ap.add_argument('--anchor-ckpt', default=None,
+                    help='앵커를 재개 체크포인트가 아닌 다른 체크포인트에서 로드 (교차 앵커)')
+    ap.add_argument('--kl', type=float, default=1.0, help='앵커 KL 계수')
     ap.add_argument('--attn', action='store_true',
                     help='Phase B: 트릭 토큰 트랜스포머 인코더')
     args = ap.parse_args()
@@ -346,7 +410,13 @@ def main():
     start = 0
     if args.resume:
         st = torch.load(args.resume, map_location=device)
-        net.load_state_dict(st['net']); opt.load_state_dict(st['opt'])
+        missing = net.load_state_dict(st['net'], strict=False)
+        if missing.missing_keys:
+            print(f'[warm] 신규 파라미터 초기화: {missing.missing_keys}')
+        try:
+            opt.load_state_dict(st['opt'])
+        except ValueError:
+            print('[warm] 옵티마이저 파라미터 불일치 — 새로 시작')
         start = st['update']
         print(f'resumed @ update {start}')
 
@@ -366,6 +436,18 @@ def main():
           f'params {sum(p.numel() for p in net.parameters()):,}')
 
     import copy
+    anchor = None
+    if args.distill:
+        if not args.resume:
+            raise SystemExit('--distill은 --resume(앵커가 될 체크포인트)이 필요하다')
+        anchor = copy.deepcopy(net).eval()
+        if args.anchor_ckpt:
+            ast_ = torch.load(args.anchor_ckpt, map_location=device)
+            miss = anchor.load_state_dict(ast_['net'], strict=False)
+            print(f'[distill] 교차 앵커 {args.anchor_ckpt} (미로드 헤드 {len(miss.missing_keys)}개)')
+        for p_ in anchor.parameters():
+            p_.requires_grad_(False)
+        print(f'[distill] 앵커 고정 @ update {start} · kl={args.kl} conv={args.conv}')
     snaps = []
     for u in range(start + 1, args.updates + 1):
         # 과거 자신을 파트너 풀에 넣는다 — 휴리스틱 과적합 방지
@@ -391,7 +473,8 @@ def main():
             print(f'upd {u:4d} | empty traj (no completed episodes) — skip update')
             continue
         st = ppo_update(net, opt, traj, device, bf16=bf16, aux_coef=args.aux,
-                        role_norm=args.role_norm, conv_coef=args.conv)
+                        role_norm=args.role_norm, conv_coef=args.conv,
+                        anchor=anchor, kl_coef=args.kl)
         t2 = time.time()
         if prizes:
             P = np.stack(prizes)
@@ -403,7 +486,7 @@ def main():
                   f'redeal {cstat["redeal"]:.2f} '
                   f'dcl {cstat["decl_rate"]:.2f}/{cstat["decl_win"]:.2f} '
                   f'kw {cstat["key_waste"]*100:.1f}% fb {fb:.2f} '
-                  f'sui {st["suit"]:.2f} trp {st["trump"]:.3f} win {st["win"]:.2f} '
+                  f'sui {st["suit"]:.2f} trp {st["trump"]:.3f} win {st["win"]:.2f} key {st.get("key",0):.2f} '
                   f'cv {st["conv"]:.2f}/{st["conv_n"]} '
                   f'| env {t1-t0:.1f}s gpu {t2-t1:.1f}s '
                   f'({len(traj)/(t1-t0):.0f} steps/s)')

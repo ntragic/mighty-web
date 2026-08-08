@@ -186,6 +186,211 @@ function topLeadGuard(game, seat, action) {
   } catch (e) { return action; }
 }
 
+/**
+ * 야당 기루다 헌납 가드 — 공개 후 야당이, 여당이 현재 최강인 '기루다 리드' 트릭에
+ * 이기지도 못할 점수 기루다를 태울 때 최저 비점수 기루다로 교체한다.
+ * 점수 기루다는 이후 야당이 이기는 트릭에 보태야 한다(2026-08-08 실플레이 제보:
+ * 주공 ♥A 트릭에 ♥Q — 같은 딜 롤아웃 −942/판).
+ * 인증: 전좌석 마스터 2,400시드 페어드 — 발화 판 주공 상금 −895±446,
+ * 전체 −19.5±11.1, 여당 승수 −6/40 (docs/tfeed-cert*.txt).
+ * 팀 판정은 가시 정보만(프렌드 공개 후 한정). 롤백: createAgent({feedGuard:false}).
+ */
+function tfeedGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || game.phase !== 'play' || action.jokerCall) return action;
+    if (!game.friendRevealed) return action;
+    if (seat === game.declarer || seat === game.friend) return action;
+    const pl = game.play;
+    if (!pl || !pl.table.length) return action;
+    const g = game.contract ? game.contract.giruda : 'N';
+    if (g === 'N' || pl.ledSuit !== g) return action;
+    const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = game._cardStrength(e, pl);
+      if (gt(k, bk)) { bk = k; bp = e.player; }
+    }
+    if (!(bp === game.declarer || (game.friend !== null && bp === game.friend))) return action;
+    const c = action.card;
+    const isKey = x => E.isJoker(x) || E.sameCard(x, game.mightyCard);
+    if (E.isJoker(c) || isKey(c) || c.suit !== g || !E.isPointCard(c)) return action;
+    if (gt(game._cardStrength({ player: seat, card: c }, pl), bk)) return action;  // 이기는 수면 존중
+    const alt = game._legalPlays(seat).filter(m => !m.jokerCall && !E.isJoker(m.card)
+      && !isKey(m.card) && m.card.suit === g && !E.isPointCard(m.card)
+      && !gt(game._cardStrength({ player: seat, card: m.card }, pl), bk));
+    if (!alt.length) return action;
+    alt.sort((a, b) => a.card.rank - b.card.rank);
+    return { type: 'play', card: alt[0].card };
+  } catch (e) { return action; }
+}
+
+/**
+ * 야당 기루다 리드 가드 — 확정 야당(카드 프렌드 판에서 프렌드 카드 미보유·비주공)이
+ * 기루다를 리드하기로 하면, 같은 정책의 차선 비기루다 리드로 교체한다.
+ * 야당의 기루다 리드는 주공의 기루다 정리를 대신 해주는 수 (2026-08-08 제보:
+ * 야당 트릭2 ♣2 리드 — 4후보 중 최하).
+ * 인증: 전좌석 마스터 2,400시드 페어드 — 발화 판 주공 상금 −178±136,
+ * 전체 −46±35, 여당 승수 −19/462 (docs/dlead-cert*.txt).
+ * 교체 수를 정책 로짓에서 뽑으므로 발화 시에만 추론 1회 추가(판당 0.27회).
+ * 롤백: createAgent({dleadGuard:false}).
+ */
+function dleadCond(game, seat, action) {
+  if (!action || action.type !== 'play' || game.phase !== 'play' || action.jokerCall) return false;
+  if (seat === game.declarer) return false;
+  const pl = game.play;
+  if (!pl || pl.table.length !== 0) return false;
+  const g = game.contract ? game.contract.giruda : 'N';
+  if (g === 'N') return false;
+  const c = action.card;
+  if (E.isJoker(c) || E.sameCard(c, game.mightyCard) || c.suit !== g) return false;
+  const fd = game.friendDecl;
+  if (!fd || fd.mode !== 'card' || !fd.card) return false;   // 야당 확정이 가능한 판만
+  if (game.hands[seat].some(x => E.sameCard(x, fd.card))) return false;
+  if (game.friendRevealed && game.friend === seat) return false;
+  return true;
+}
+async function dleadGuard(session, ort, game, seat, action) {
+  try {
+    if (!session || !ort || !dleadCond(game, seat, action)) return action;
+    let obs = M.encodeObs(game, seat, []);
+    const mask = M.legalMask(game, []);
+    const want = M.modelObsDim(session);
+    if (want !== M.OBS_DIM) obs = obs.subarray(0, want);
+    const out = await session.run({
+      obs: new ort.Tensor('float32', obs, [1, want]),
+      mask: new ort.Tensor('bool', mask, [1, M.ACTION_DIM]),
+    });
+    const logits = out.logits.data;
+    const gi = game.contract.giruda;
+    let best = -1, bv = -Infinity;
+    for (let i = 0; i < M.ACTION_DIM; i++) {
+      if (!mask[i] || i === 206) continue;                     // 조커콜 제외
+      if (i >= 149 && i < 201 && M.idxCard(i - 149).suit === gi) continue;   // 기루다 제외
+      if (i >= 201 && i < 205 && ['S','D','H','C'][i - 201] === gi) continue; // 조커 기루다 요구 제외
+      if (logits[i] > bv) { bv = logits[i]; best = i; }
+    }
+    if (best < 0) return action;
+    const alt = M.actionToEngine(best, game, []);
+    return (alt && alt.type === 'play') ? alt : action;
+  } catch (e) { return action; }
+}
+
+/**
+ * 주공 점수 기루다 리드 가드 — 주공이 '그 카드 위 서열이 밖에 남은' 상태에서
+ * 점수 기루다(10·J·Q·K·A)를 리드하면, 같은 정책의 차선(해당 클래스 제외 argmax)
+ * 으로 교체한다. 위 서열에 잡히며 점수만 헌납하는 리드 차단.
+ * 인증(v7=b4a 기준, 2,400시드 페어드): 발화 판 +213±169 · 전체 +34 · 승수 +14/299.
+ * v6b에서는 중립(+73±172) — v7 배포와 함께만 유효한 모델 전용 가드
+ * (docs/c1-cert*.txt). 발화 시에만 재추론 1회. 롤백: createAgent({c1Guard:false}).
+ */
+async function c1Guard(session, ort, game, seat, action) {
+  try {
+    if (!session || !ort || !action || action.type !== 'play' || game.phase !== 'play'
+        || action.jokerCall || seat !== game.declarer) return action;
+    const pl = game.play;
+    if (!pl || pl.table.length !== 0) return action;
+    const gi = game.contract ? game.contract.giruda : 'N';
+    if (gi === 'N') return action;
+    const c = action.card;
+    if (E.isJoker(c) || E.sameCard(c, game.mightyCard) || c.suit !== gi || !E.isPointCard(c)) return action;
+    const seen = new Set();
+    for (const t of pl.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+    for (const x of game.hands[seat]) seen.add(E.cardId(x));
+    if (game.discard) for (const x of game.discard) seen.add(E.cardId(x));
+    let higher = false;
+    for (let r = c.rank + 1; r <= 14; r++) if (!seen.has(gi + r)) { higher = true; break; }
+    if (!higher) return action;                        // 탑이면 정당 (topLeadGuard 영역)
+    let obs = M.encodeObs(game, seat, []);
+    const mask = M.legalMask(game, []);
+    const want = M.modelObsDim(session);
+    if (want !== M.OBS_DIM) obs = obs.subarray(0, want);
+    const out = await session.run({
+      obs: new ort.Tensor('float32', obs, [1, want]),
+      mask: new ort.Tensor('bool', mask, [1, M.ACTION_DIM]),
+    });
+    const logits = out.logits.data;
+    let best = -1, bv = -Infinity;
+    for (let i = 0; i < M.ACTION_DIM; i++) {
+      if (!mask[i] || i === 206) continue;
+      if (i >= 149 && i < 201) {
+        const cd = M.idxCard(i - 149);
+        if (cd.suit === gi && E.isPointCard(cd) && !E.sameCard(cd, game.mightyCard)) {
+          let h2 = false;
+          for (let r = cd.rank + 1; r <= 14; r++) if (!seen.has(gi + r)) { h2 = true; break; }
+          if (h2) continue;                            // 클래스 액션 제외
+        }
+      }
+      if (logits[i] > bv) { bv = logits[i]; best = i; }
+    }
+    if (best < 0) return action;
+    const alt = M.actionToEngine(best, game, []);
+    return (alt && alt.type === 'play') ? alt : action;
+  } catch (e) { return action; }
+}
+
+/**
+ * 확정승 컷 가드 — 공개 후, 리드 무늬 보이드인 좌석이 상대팀이 최강인 점수
+ * 트릭을 두고 비기루다 버림을 선택하면, '가시 확정승'인 최저 기루다 컷으로
+ * 교체한다. keyCardGuard(아끼기)의 역방향 — 먹어야 할 때 먹는다.
+ * 인증(v7, 1,600시드 페어드): 발화 좌석 상금 +533±166, 두 배치 단독 유의
+ * (+401±265 / +634±210 — docs/c5-cert.txt). 제보 seed 746746024 트릭7
+ * (♠6 버림 대 ♦6 컷, +1,150/판)에서 출발. 교사 결정론 — 차기 증류 클래스.
+ * 롤백: createAgent({cutGuard:false}).
+ */
+function cutGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || game.phase !== 'play'
+        || action.jokerCall || !game.friendRevealed) return action;
+    const pl = game.play;
+    if (!pl || !pl.table.length) return action;
+    const gi = game.contract ? game.contract.giruda : 'N';
+    if (gi === 'N') return action;
+    const c = action.card;
+    if (E.isJoker(c) || E.sameCard(c, game.mightyCard)) return action;
+    if (c.suit === gi || pl.ledSuit === gi) return action;         // 이미 컷 / 기루다 팔로우
+    if (game.hands[seat].some(x => !E.isJoker(x) && x.suit === pl.ledSuit)) return action;
+    if (pl.table.filter(e => E.isPointCard(e.card)).length < 1) return action;
+    const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = game._cardStrength(e, pl);
+      if (gt(k, bk)) { bk = k; bp = e.player; }
+    }
+    const iAmRuling = seat === game.declarer || seat === game.friend;
+    const bestRuling = bp === game.declarer || (game.friend !== null && bp === game.friend);
+    if (iAmRuling === bestRuling) return action;                   // 아군 최강이면 방치 정당
+    const seen = new Set();
+    for (const t of pl.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+    for (const e of pl.table) seen.add(E.cardId(e.card));
+    for (const x of game.hands[seat]) seen.add(E.cardId(x));
+    if (seat === game.declarer && game.discard) for (const x of game.discard) seen.add(E.cardId(x));
+    const acted = new Set(pl.table.map(e => e.player)); acted.add(seat);
+    let remaining = 0;
+    for (let p = 0; p < E.NUM_PLAYERS; p++) if (!acted.has(p)) remaining++;
+    const cfg = game.config || {};
+    const jokerCanWin = !pl.jokerCallActive &&
+      !(pl.trickNo === 1 && cfg.firstTrickJokerWeak !== false) &&
+      !(pl.trickNo >= 10 && cfg.lastTrickJokerWeak !== false);
+    const threats = [];
+    if (remaining > 0) {
+      if (!seen.has(E.cardId(game.mightyCard))) threats.push([4, 0]);
+      if (jokerCanWin && !seen.has(E.JOKER)) threats.push([3, 0]);
+      for (let r = 2; r <= 14; r++) if (!seen.has(gi + r)) threats.push([2, r]);
+    }
+    const myTr = game.hands[seat]
+      .filter(x => !E.isJoker(x) && x.suit === gi && !E.sameCard(x, game.mightyCard))
+      .sort((a, b) => a.rank - b.rank);
+    for (const tc of myTr) {
+      const k = game._cardStrength({ player: seat, card: tc }, pl);
+      if (!gt(k, bk)) continue;
+      if (threats.some(t => gt(t, k))) continue;                   // 뒤 위협에 잡힘
+      if (!game._legalPlays(seat).some(m => !m.jokerCall && E.sameCard(m.card, tc))) continue;
+      return { type: 'play', card: tc };                           // 최저 확정승 컷
+    }
+    return action;
+  } catch (e) { return action; }
+}
+
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
 async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
   return ort.InferenceSession.create(modelPath);
@@ -209,10 +414,14 @@ async function createAgent(opts = {}) {
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
-        const guarded = a => {
+        const guarded = async a => {
           let x = (opts.keyGuard === false ? a
             : keyCardGuard(game, seat, a, opts.guardTrace));
           if (opts.topGuard !== false) x = topLeadGuard(game, seat, x);
+          if (opts.feedGuard !== false) x = tfeedGuard(game, seat, x);
+          if (opts.cutGuard !== false) x = cutGuard(game, seat, x);
+          if (opts.dleadGuard !== false) x = await dleadGuard(session, ort, game, seat, x);
+          if (opts.c1Guard !== false) x = await c1Guard(session, ort, game, seat, x);
           return x;
         };
         for (let guard = 0; guard < 8; guard++) {
@@ -248,7 +457,7 @@ const PERSONA_KEYS = ['gambler', 'balanced', 'careful'];
  */
 async function createTable(opts = {}) {
   const { tiers = 'advanced', rng = Math.random, session = null, ort = null,
-          personas = null, revealPersona = false } = opts;
+          personas = null, revealPersona = false, sessions = null } = opts;
   const seats = opts.seats || E.NUM_PLAYERS;
   const tierAt = s => (Array.isArray(tiers) ? tiers[s] : tiers);
   const assigned = [], agents = [];
@@ -258,8 +467,10 @@ async function createTable(opts = {}) {
     const persona = tier === 'master' ? null
       : (personas ? personas[s] : PERSONA_KEYS[Math.floor(rng() * PERSONA_KEYS.length)]);
     assigned.push(persona);
+    // v2.8: 혼합 운영 — 좌석별 모델 세션(성향차)을 허용한다
     agents.push(await createAgent({ tier, persona: persona || 'balanced',
-                                    rng, session, ort, revealPersona }));
+                                    rng, session: (sessions && sessions[s]) || session,
+                                    ort, revealPersona }));
   }
   return {
     seats, agents,
@@ -269,7 +480,7 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard,
+const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
