@@ -305,10 +305,25 @@ function encodeObs(game, me, pickBuffer) {
     const mSeen = seen.has(cardId(game.mightyCard));
     const jSeen = seen.has('JOKER');
     const mSuit = SUIT_IDX[game.mightyCard.suit];
+    // 프렌드 선언 함의 — 마이티/조커 프렌드 선언은 주공의 해당 카드 부재를,
+    // 공개 후엔 프렌드의 보유를 확정한다 (python encode와 반드시 동일)
+    const fd2 = game.friendDecl;
+    const fr2 = game.friendRevealed ? game.friend : null;
+    const mDeclNo = !!(fd2 && fd2.mode === 'card' && fd2.card && !isJoker(fd2.card)
+      && sameCard(fd2.card, game.mightyCard));
+    const jDeclNo = !!(fd2 && fd2.mode === 'card' && fd2.card && isJoker(fd2.card));
     for (let r = 1; r < 5; r++) {
       const p = (me + r) % 5;
-      o[O.key_cand9 + (r - 1)] = (mSeen || voidM[p][mSuit]) ? 0 : 1;
-      o[O.key_cand9 + 4 + (r - 1)] = jSeen ? 0 : 1;
+      let mCan = !(mSeen || voidM[p][mSuit]);
+      let jCan = !jSeen;
+      if (p === game.declarer) {
+        if (mDeclNo) mCan = false;
+        if (jDeclNo) jCan = false;
+      }
+      if (fr2 !== null && !mSeen && mDeclNo) mCan = (p === fr2);
+      if (fr2 !== null && !jSeen && jDeclNo) jCan = (p === fr2);
+      o[O.key_cand9 + (r - 1)] = mCan ? 1 : 0;
+      o[O.key_cand9 + 4 + (r - 1)] = jCan ? 1 : 0;
     }
     o[O.key_cand9 + 8] = game.hands[me].length / 10;
   }

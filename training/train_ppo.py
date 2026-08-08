@@ -52,6 +52,9 @@ class PolicyValueNet(nn.Module):
         self.aux_suit = nn.Linear(d, 16) if aux_head else None
         self.aux_trump = nn.Linear(d, 4) if aux_head else None
         self.aux_win = nn.Linear(d, 5) if aux_head else None
+        # v9: 마이티/조커 보유 좌석 예측 (rel0..4) — 프렌드 선언 함의 소화 강제
+        self.aux_mkey = nn.Linear(d, 5) if aux_head else None
+        self.aux_jkey = nn.Linear(d, 5) if aux_head else None
 
     def _feat(self, obs):
         if not self.use_attn:
@@ -73,7 +76,9 @@ class PolicyValueNet(nn.Module):
             return logits, self.v(h).squeeze(-1), None
         return logits, self.v(h).squeeze(-1), {
             'friend': self.aux(h), 'suit': self.aux_suit(h),
-            'trump': self.aux_trump(h), 'win': self.aux_win(h)}
+            'trump': self.aux_trump(h), 'win': self.aux_win(h),
+            'mkey': self.aux_mkey(h) if self.aux_mkey is not None else None,
+            'jkey': self.aux_jkey(h) if self.aux_jkey is not None else None}
 
 
 def team_diff(cp, decl, fr):
@@ -126,7 +131,7 @@ class Collector:
                 g_ = env.game
                 is_play = g_.phase == 'play'
                 cp = tuple(g_.play['capturedPoints']) if is_play else (0,) * 5
-                sl, tl = aux_labels(g_, p)
+                sl, tl, mk, jk = aux_labels(g_, p)
                 tno = g_.play['trickNo'] if is_play else -1
                 ca = -1
                 if self.conv and is_play:
@@ -136,7 +141,7 @@ class Collector:
                     if tc is not None:
                         ca = A_PLAY0 + cidx(tc)
                 rec_i = [o, m, int(acts_np[i]), float(logps_np[i]),
-                         float(vals_np[i]), (cp, sl, tl, tno, ca)]
+                         float(vals_np[i]), (cp, sl, tl, tno, ca, mk, jk)]
                 self.open[i][p].append(rec_i)
                 no, nm, np_, rew, done = env.step(int(acts_np[i]))
                 # Phase A: 이 결정이 '아군 확정승 트릭에 비싼 카드' 였는가
@@ -170,7 +175,7 @@ class Collector:
                                    for t in (pl_T['history'] if pl_T else [])}
                         for rec in segs:
                             wflag = rec.pop() if self.alloc else False
-                            cp_t, sl, tl, tno, ca = rec.pop()
+                            cp_t, sl, tl, tno, ca, mk, jk = rec.pop()
                             phi_t = (sign * team_diff(cp_t, decl, fr)
                                      if decl is not None else 0.0)
                             w = winners.get(tno)
@@ -178,7 +183,7 @@ class Collector:
                             # 종단보상 + 잠재함수 셰이핑(텔레스코핑 → 최적정책 불변)
                             traj.append(rec + [R + self.shape * (phi_T - phi_t)
                                                - (self.alloc if wflag else 0.0),
-                                               role, lab, sl, tl, lw, ca])
+                                               role, lab, sl, tl, lw, ca, mk, jk])
                         self.open[i][seat] = []
                     self.states[i] = env.reset()
                 else:
@@ -203,6 +208,9 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
     lab_win = torch.as_tensor([t[10] for t in traj], device=device)
     # E2: 관례 교사 액션 (인증 클래스 밖은 -1)
     conv_a = torch.as_tensor([t[11] if len(t) > 11 else -1 for t in traj], device=device)
+    # v9: 마이티/조커 보유 좌석 라벨 (rel0..4, 소진 -1)
+    lab_mk = torch.as_tensor([t[12] if len(t) > 12 else -1 for t in traj], device=device)
+    lab_jk = torch.as_tensor([t[13] if len(t) > 13 else -1 for t in traj], device=device)
     # 프렌드 선언 이전 스텝은 예측 대상이 없음 → 보조손실에서 제외
     aux_ok = obs[:, O_FDMODE] < 0.5
     play_ok = obs[:, O_PHASE + 4] > 0.5                    # 플레이 페이즈만
@@ -305,6 +313,20 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                         loss = loss + 0.5 * aux_coef * wl
                         auxsub['win'] = (auxlog['win'][wk].argmax(-1)
                                          == lab_win[idx][wk]).float().mean().item()
+                    if auxlog.get('mkey') is not None:      # v9: 특수카드 보유 좌석
+                        mk2 = play_ok[idx] & (lab_mk[idx] >= 0)
+                        jk2 = play_ok[idx] & (lab_jk[idx] >= 0)
+                        acc = []
+                        if bool(mk2.any()):
+                            ml = F.cross_entropy(auxlog['mkey'][mk2].float(), lab_mk[idx][mk2])
+                            loss = loss + 0.5 * aux_coef * ml
+                            acc.append((auxlog['mkey'][mk2].argmax(-1) == lab_mk[idx][mk2]).float().mean().item())
+                        if bool(jk2.any()):
+                            jl = F.cross_entropy(auxlog['jkey'][jk2].float(), lab_jk[idx][jk2])
+                            loss = loss + 0.5 * aux_coef * jl
+                            acc.append((auxlog['jkey'][jk2].argmax(-1) == lab_jk[idx][jk2]).float().mean().item())
+                        if acc:
+                            auxsub['key'] = sum(acc) / len(acc)
                 # E2: 인증 클래스 관례 증류 — 클래스 밖(-1)은 계수 0, 승률 최적화 불변
                 if conv_coef:
                     ck = conv_a[idx] >= 0
@@ -322,6 +344,7 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                      'aux': auxl.item(), 'auxacc': auxacc,
                      'suit': auxsub.get('suit', 0.0), 'trump': auxsub.get('trump', 0.0),
                      'win': auxsub.get('win', 0.0),
+                     'key': auxsub.get('key', 0.0),
                      'conv': auxsub.get('conv', 0.0), 'conv_n': auxsub.get('conv_n', 0)}
     return stats
 
@@ -385,7 +408,13 @@ def main():
     start = 0
     if args.resume:
         st = torch.load(args.resume, map_location=device)
-        net.load_state_dict(st['net']); opt.load_state_dict(st['opt'])
+        missing = net.load_state_dict(st['net'], strict=False)
+        if missing.missing_keys:
+            print(f'[warm] 신규 파라미터 초기화: {missing.missing_keys}')
+        try:
+            opt.load_state_dict(st['opt'])
+        except ValueError:
+            print('[warm] 옵티마이저 파라미터 불일치 — 새로 시작')
         start = st['update']
         print(f'resumed @ update {start}')
 
@@ -451,7 +480,7 @@ def main():
                   f'redeal {cstat["redeal"]:.2f} '
                   f'dcl {cstat["decl_rate"]:.2f}/{cstat["decl_win"]:.2f} '
                   f'kw {cstat["key_waste"]*100:.1f}% fb {fb:.2f} '
-                  f'sui {st["suit"]:.2f} trp {st["trump"]:.3f} win {st["win"]:.2f} '
+                  f'sui {st["suit"]:.2f} trp {st["trump"]:.3f} win {st["win"]:.2f} key {st.get("key",0):.2f} '
                   f'cv {st["conv"]:.2f}/{st["conv_n"]} '
                   f'| env {t1-t0:.1f}s gpu {t2-t1:.1f}s '
                   f'({len(traj)/(t1-t0):.0f} steps/s)')

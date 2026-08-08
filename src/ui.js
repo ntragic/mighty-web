@@ -33,6 +33,9 @@ const I18N_EN = {
   // 프렌드
   '프렌드 지정':'Choose friend', '조커 프렌드':'Joker friend', '기루다 A':'Trump ace', '기루다 K':'Trump king',
   '초구 프렌드':'First-trick friend', '노프렌드':'No friend', '직접 선택':'Pick a card',
+  '내가 가진 카드를 부르면 히든 셀프(단독 여당·상대에겐 비공개)가 됩니다. 프렌드는 해당 카드가 나올 때 공개됩니다.':
+    'Calling a card you hold makes it a hidden solo (you play alone; others cannot tell). The friend is revealed when the card is played.',
+  '히든 셀프':'Hidden solo', '히든 셀프로 진행':'Go hidden solo',
   '자신이 가진 카드는 부를 수 없습니다. 프렌드는 해당 카드가 나올 때 공개됩니다.':
     'You cannot call a card you hold. The friend is revealed when that card is played.',
   '초구를 주공이 승리 — 사실상 노프렌드':'Declarer won the first trick — effectively no friend',
@@ -227,6 +230,9 @@ const TF = {
     ? `actual ${aP} pts · ${aZ} → alt ${gP} pts · ${gZ} (${dP} point cards, ${dZ} prize)`
     : `실제 점수카드 ${aP}장·상금 ${aZ} → 대안 ${gP}장·${gZ} (점수카드 ${dP}장 · 상금 ${dZ})`,
   // v2.2 코칭 근거 버블 — 좌석 가시 정보로만 도출한 룰 기반 근거(전지적 판정 금지)
+  selfFriendAsk:(cn)=> LANG==='en'
+    ? `You hold ${cn} yourself.<br>Calling it means playing <b>alone</b> — opponents cannot tell there is no friend. Proceed?`
+    : `${cn}은(는) 내 손에 있는 카드입니다.<br>부르면 <b>프렌드 없이 단독</b>으로 싸우게 되고, 상대는 그 사실을 알 수 없습니다. 진행할까요?`,
   coachTrumpSweep:(n)=> LANG==='en' ? `Trump sweep — up to ${n} enemy trumps left` : `기루다 정리 — 상대 기루다 최대 ${n}장`,
   coachTopCard:()=> LANG==='en' ? 'Highest live card — keeps the lead' : '현재 최강 — 리드 유지',
   coachSafeLead:()=> LANG==='en' ? 'Safe lead — probe at low risk' : '안전 리드 — 낮은 위험으로 탐색',
@@ -1054,12 +1060,12 @@ function sheetFriend(sh){
   const m=game.mightyCard;
   const quick=el('div','chips');
   const has=c=>hand.some(h=>E.sameCard(h,c));
-  const mk=(label,act,dis)=>{ const b=el('button','chip',label); b.disabled=!!dis; b.onclick=act; return b; };
-  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티'))), has(m)));
-  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드')), has(E.JOKER)));
+  const mk=(label,act)=>{ const b=el('button','chip',label); b.onclick=act; return b; };
+  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티')))));
+  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드'))));
   if (game.contract.giruda!=='N'){
     const gA={suit:game.contract.giruda, rank:14};
-    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A'))), has(gA)));
+    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A')))));
   }
   quick.append(mk(t('초구 프렌드'), ()=>callFriend({type:'friend',mode:'first'},t('초구 프렌드'))));
   quick.append(mk(t('노프렌드'), ()=>callFriend({type:'friend',mode:'none'},t('노프렌드'))));
@@ -1077,15 +1083,23 @@ function sheetFriend(sh){
     for(const r of [14,13,12,11,10,9,8,7,6,5,4,3,2]){
       const card={suit:friendSuit, rank:r};
       const b=el('button','chip '+suCls(friendSuit), {11:'J',12:'Q',13:'K',14:'A'}[r]||r);
-      b.disabled=hand.some(h=>E.sameCard(h,card));
       b.onclick=()=>callFriend({type:'friend',mode:'card',card},tf('cardFriend', cardLabel(card)));
       ranks.append(b);
     }
     sh.append(ranks);
   }
-  sh.append(el('div','hint',t('자신이 가진 카드는 부를 수 없습니다. 프렌드는 해당 카드가 나올 때 공개됩니다.')));
+  sh.append(el('div','hint',t('내가 가진 카드를 부르면 히든 셀프(단독 여당·상대에겐 비공개)가 됩니다. 프렌드는 해당 카드가 나올 때 공개됩니다.')));
 }
-function callFriend(act,label){
+async function callFriend(act,label){
+  // 보유 카드 호출 = 히든 셀프 플레이 — 실수 방지를 위해 확인만 받고 허용한다
+  if (act.mode==='card' && game.hands[HUMAN].some(h=>E.sameCard(h,act.card))){
+    const gen=stateGen;
+    const ok=await confirmModal(t('히든 셀프'),
+      tf('selfFriendAsk', cardLabel(act.card)),
+      t('히든 셀프로 진행'), t('취소'));
+    if (!ok || gen!==stateGen || !game || game.phase!=='friend'
+        || game.currentPlayer!==HUMAN) { renderSheet(); return; }
+  }
   friendCustom=false;
   humanAct(act, tf('logFriendDecl', NAMES[HUMAN], label));
   const fd=game.friendDecl;
