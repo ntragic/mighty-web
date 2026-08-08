@@ -474,6 +474,66 @@ def conv_target(game, me, act_card=None):
                                 and not (game.card_strength({'player': me, 'card': m['card']}, pl0) > bk0)]
                         if alts:
                             return min(alts, key=lambda c: c[1])
+    # cut — 공개 후, 리드 무늬 보이드 좌석이 상대팀 최강 점수 트릭에 비기루다를
+    # 버릴 때 → '가시 확정승' 최저 기루다 컷 (2026-08-08 인증 +533±166, cutGuard)
+    if act_card is not None and game.friend_revealed:
+        plc = game.play
+        gic = game.contract['giruda'] if game.contract else 'N'
+        cc = act_card
+        if (plc['table'] and gic != 'N' and plc['ledSuit'] != gic
+                and not is_joker(cc) and not same(cc, game.mighty_card)
+                and cc[0] != gic
+                and not any((not is_joker(x)) and x[0] == plc['ledSuit']
+                            for x in game.hands[me])
+                and sum(1 for e in plc['table'] if is_point(e['card'])) >= 1):
+            bkc, bpc = (-2, -1), -1
+            for e in plc['table']:
+                kc = game.card_strength(e, plc)
+                if kc > bkc:
+                    bkc, bpc = kc, e['player']
+            i_rul = me == game.declarer or me == game.friend
+            b_rul = bpc == game.declarer or (game.friend is not None and bpc == game.friend)
+            if i_rul != b_rul:
+                seenc = set()
+                for t in plc['history']:
+                    for e in t['plays']:
+                        seenc.add(card_id(e['card']))
+                for e in plc['table']:
+                    seenc.add(card_id(e['card']))
+                for x in game.hands[me]:
+                    seenc.add(card_id(x))
+                if me == game.declarer and game.discard:
+                    for x in game.discard:
+                        seenc.add(card_id(x))
+                acted = set(e['player'] for e in plc['table'])
+                acted.add(me)
+                rem = sum(1 for p in range(NUM_PLAYERS) if p not in acted)
+                cfgc = game.config or {}
+                joker_win = (not plc['jokerCallActive']
+                             and not (plc['trickNo'] == 1 and cfgc.get('firstTrickJokerWeak', True))
+                             and not (plc['trickNo'] >= 10 and cfgc.get('lastTrickJokerWeak', True)))
+                threats = []
+                if rem > 0:
+                    if card_id(game.mighty_card) not in seenc:
+                        threats.append((4, 0))
+                    if joker_win and JOKER not in seenc:
+                        threats.append((3, 0))
+                    for r in range(2, 15):
+                        if gic + str(r) not in seenc:
+                            threats.append((2, r))
+                my_tr = sorted((x for x in game.hands[me]
+                                if not is_joker(x) and x[0] == gic
+                                and not same(x, game.mighty_card)),
+                               key=lambda x: x[1])
+                for tc in my_tr:
+                    kc = game.card_strength({'player': me, 'card': tc}, plc)
+                    if not (kc > bkc):
+                        continue
+                    if any(t > kc for t in threats):
+                        continue
+                    if any(same(m['card'], tc) for m in game.legal_plays(me)
+                           if not m.get('jokerCall')):
+                        return tc
     # trumpTop — 유일하게 리드 상태(테이블 빈 상태)·공개 전에도 성립하는 클래스
     if act_card is not None and me == game.declarer and not game.play['table']:
         gi0 = game.contract['giruda'] if game.contract else 'N'
