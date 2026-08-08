@@ -26,7 +26,8 @@
 | mighty_master_v4.onnx | 16MB | 688 | v1.2.x | v4 정본 학습(5k 업데이트, 도메인 랜덤화) | 보관(비교 기준) |
 | mighty_master_v5.onnx | 4MB | 739 | v1.3.0 | e2c005 — E2 관례 증류 conv=0.05 | 보관 |
 | mighty_master_v6b.onnx | 6.5MB | 1630 | v1.4.0~v2.4.1 | b1attn — 어텐션 + conv=0.05 (+value 헤드) | 보관(롤백용) |
-| mighty_master_v7.onnx | 6.5MB | 1630 | v2.5.0~현행 | b4a — v6b 앵커 증류(topLead·tfeed 내재화) | **현행 배포** |
+| mighty_master_v7.onnx | 6.5MB | 1630 | v2.5.0~v2.5.2 | b4a — v6b 앵커 증류(topLead·tfeed 내재화) | 보관(롤백용) |
+| mighty_master_v8.onnx | 6.5MB | 1630 | v2.6.0~현행 | b5b — v7 앵커 증류(+확정승 컷, kl2.0·conv0.5) | **현행 배포** |
 
 ### v4 — 규칙 기반을 넘어선 첫 정본 (v1.2.x)
 
@@ -69,7 +70,7 @@ value 헤드 포함 export(logits+value) — v2.0 AI 복기의 승률 추정에 
 | b3top | b1 재개 + trumpTop 4클래스 | 탈락(낭비 회귀) | 관례는 topLeadGuard(v2.3.0)로 대체 — 아래 참조 |
 | b4a | b1 앵커 증류(+300, PPO 없이 KL+CE) | **v2.5.0 채택(=v7)** |
 | b5a | b4a 앵커 + cut 클래스 (kl1.0·conv1.0) | 탈락 | 컷 내재화 성공했으나 주공 승률 −9%p 회귀 — KL 부족 |
-| b5b | b4a 앵커 + cut 클래스 (kl2.0·conv0.5) | **v8 후보 (게이트 전 통과·미배포)** | 계수쌍 조정으로 회귀 제거 — 클래스 추가 시 KL 비례 상향이 기준 | 탑 리드 내재화 100%·tfeed 발화 0·낭비 무회귀·accept PASS·대결 동등 — 드리프트 없는 통합 입증. 배포는 사례 축적 후 일괄 통합 시 |
+| b5b | b4a 앵커 + cut 클래스 (kl2.0·conv0.5) | **v2.6.0 채택(=v8)** | 계수쌍 조정으로 회귀 제거 — 클래스 추가 시 KL 비례 상향이 기준 | 탑 리드 내재화 100%·tfeed 발화 0·낭비 무회귀·accept PASS·대결 동등 — 드리프트 없는 통합 입증. 배포는 사례 축적 후 일괄 통합 시 |
 
 ### 배포 가드 이력 (모델 외 정책 후처리)
 
