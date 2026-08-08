@@ -342,8 +342,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.5.1';
-const APP_BUILD = '2026-08-08 빌드 — 확정승 컷 가드';
+const APP_VERSION = 'v2.5.2';
+const APP_BUILD = '2026-08-08 빌드 — 복기 트릭 단위 이동';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -2010,6 +2010,29 @@ function replayRestart(){
   replay.step = 0;
   renderReplay();
 }
+/** 한 트릭 뒤로 — 트릭 경계(5수 단위)로 되감아 그 트릭이 완성된 화면에서 정지 */
+function replayPrevTrick(){
+  if (!replay || replay.stepping) return;
+  toggleReplayPlay(false);
+  const s = replay.step;
+  const target = (s % E.NUM_PLAYERS === 0)
+    ? Math.max(0, s - E.NUM_PLAYERS)
+    : Math.floor(s / E.NUM_PLAYERS) * E.NUM_PLAYERS;
+  replay.ghost = null;
+  replay.g = rebuildGame(replay.rec, replay.playStart);
+  replay.step = 0;
+  while (replay.step < target){
+    replay.g.act(replay.steps[replay.step].a);
+    replay.step++;
+  }
+  // 경계에서는 직전 트릭을 완성 상태로 붙잡아 보여준다 (앞으로 재생과 동일한 화면)
+  const hist = replay.g.play && replay.g.play.history;
+  if (replay.step > 0 && hist && hist.length){
+    const h = hist[hist.length - 1];
+    replay.ghost = { plays: h.plays, winner: h.winner };
+  }
+  renderReplay();
+}
 /** 다음 트릭을 순서대로 빠르게 보여준 뒤 일시정지 상태로 둔다 */
 async function replayNextTrick(){
   if (!replay || replay.stepping) return;
@@ -2110,7 +2133,8 @@ function renderReplay(){
   // 컨트롤 바
   const bar = $('#replay-bar'); bar.innerHTML='';
   const mk=(label,fn,cls)=>{ const b=el('button',cls||'',label); b.onclick=fn; return b; };
-  bar.append(mk('⏮', replayRestart));
+  bar.append(mk('↺', replayRestart));
+  bar.append(mk('⏮', replayPrevTrick));
   bar.append(mk(replay.playing?'⏸':'▶', ()=>toggleReplayPlay(), 'primary'));
   bar.append(mk('⏭', replayNextTrick));
   const tn = gh ? gh.trickNo : (g.phase==='play' ? g.play.trickNo : 10);
