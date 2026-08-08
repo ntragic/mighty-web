@@ -189,7 +189,7 @@ class Collector:
 # ---------------- PPO 업데이트 ----------------
 def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                vf_coef=0.5, ent_coef=0.05, bf16=False, aux_coef=0.1, role_norm=False,
-               conv_coef=0.0):
+               conv_coef=0.0, anchor=None, kl_coef=1.0):
     obs = torch.as_tensor(np.stack([t[0] for t in traj]), device=device)
     mask = torch.as_tensor(np.stack([t[1] for t in traj]), device=device)
     act = torch.as_tensor([t[2] for t in traj], device=device)
@@ -226,6 +226,42 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
     n = len(traj)
     stats = {}
     amp = torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=bf16)
+
+    # ---- 앵커 증류 모드: PPO를 끄고 (인증 클래스 CE) + (앵커 KL) + (가치 고정)만.
+    # b2x·b3top의 실패 원인이 '증류와 동반된 PPO 계속학습의 드리프트'였으므로
+    # 정책 이동 자체를 앵커로 묶는다. 관례는 CE가 끌고, 나머지 행동은 앵커가 지킨다.
+    if anchor is not None:
+        for _ in range(epochs):
+            perm = torch.randperm(n, device=device)
+            for s in range(0, n, mb):
+                idx = perm[s:s + mb]
+                with amp:
+                    logits, v, _ = net.forward_aux(obs[idx], mask[idx])
+                    with torch.no_grad():
+                        a_logits, a_v, _ = anchor.forward_aux(obs[idx], mask[idx])
+                    lp = F.log_softmax(logits.float(), -1)
+                    ap = F.softmax(a_logits.float(), -1)
+                    # 마스크된 액션은 ap=0 — 0*(-inf)=nan 차단
+                    kl = -(torch.where(ap > 1e-8, ap * lp, torch.zeros_like(lp))).sum(-1).mean()
+                    vloss = F.mse_loss(v, a_v.float())
+                    loss = kl_coef * kl + 0.5 * vloss
+                    convacc, convn = 0.0, 0
+                    if conv_coef:
+                        ck = conv_a[idx] >= 0
+                        if bool(ck.any()):
+                            cl = F.cross_entropy(logits[ck].float(), conv_a[idx][ck])
+                            loss = loss + conv_coef * cl
+                            convacc = (logits[ck].argmax(-1) == conv_a[idx][ck]).float().mean().item()
+                            convn = int(ck.sum())
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                nn.utils.clip_grad_norm_(net.parameters(), 1.0)
+                opt.step()
+                stats = {'pg': 0.0, 'v': vloss.item(), 'ent': kl.item(), 'aux': 0.0,
+                         'auxacc': 0.0, 'suit': 0.0, 'trump': 0.0, 'win': 0.0,
+                         'conv': convacc, 'conv_n': convn}
+        return stats
+
     for _ in range(epochs):
         perm = torch.randperm(n, device=device)
         for s in range(0, n, mb):
@@ -327,6 +363,9 @@ def main():
                     help='프렌드 좌석 예측 보조손실 계수 (0이면 헤드 없음)')
     ap.add_argument('--conv', type=float, default=0.0,
                     help='E2 관례 증류 계수 — 개입 인증 클래스에서만 교사 CE를 더한다')
+    ap.add_argument('--distill', action='store_true',
+                    help='앵커 증류 모드: PPO 끄고 인증 클래스 CE + 재개 시점 정책 KL 앵커만')
+    ap.add_argument('--kl', type=float, default=1.0, help='앵커 KL 계수')
     ap.add_argument('--attn', action='store_true',
                     help='Phase B: 트릭 토큰 트랜스포머 인코더')
     args = ap.parse_args()
@@ -366,6 +405,14 @@ def main():
           f'params {sum(p.numel() for p in net.parameters()):,}')
 
     import copy
+    anchor = None
+    if args.distill:
+        if not args.resume:
+            raise SystemExit('--distill은 --resume(앵커가 될 체크포인트)이 필요하다')
+        anchor = copy.deepcopy(net).eval()
+        for p_ in anchor.parameters():
+            p_.requires_grad_(False)
+        print(f'[distill] 앵커 고정 @ update {start} · kl={args.kl} conv={args.conv}')
     snaps = []
     for u in range(start + 1, args.updates + 1):
         # 과거 자신을 파트너 풀에 넣는다 — 휴리스틱 과적합 방지
@@ -391,7 +438,8 @@ def main():
             print(f'upd {u:4d} | empty traj (no completed episodes) — skip update')
             continue
         st = ppo_update(net, opt, traj, device, bf16=bf16, aux_coef=args.aux,
-                        role_norm=args.role_norm, conv_coef=args.conv)
+                        role_norm=args.role_norm, conv_coef=args.conv,
+                        anchor=anchor, kl_coef=args.kl)
         t2 = time.time()
         if prizes:
             P = np.stack(prizes)

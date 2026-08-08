@@ -447,6 +447,33 @@ def conv_target(game, me, act_card=None):
     """
     if game.phase != 'play':
         return None
+    # tfeed — 공개 후 야당이, 여당이 최강인 기루다 리드 트릭에 이기지 못할 점수
+    # 기루다를 태우면 최저 비점수 기루다 (2026-08-08 인증: 발화 판 주공 −895±446)
+    if act_card is not None and game.friend_revealed:
+        decl0, fr0 = game.declarer, game.friend
+        if decl0 is not None and me != decl0 and me != fr0:
+            pl0 = game.play
+            gi0 = game.contract['giruda'] if game.contract else 'N'
+            if pl0['table'] and gi0 != 'N' and pl0['ledSuit'] == gi0:
+                c0 = act_card
+                if (not is_joker(c0)) and (not same(c0, game.mighty_card)) \
+                        and c0[0] == gi0 and is_point(c0):
+                    bk0, bp0 = (-2, -1), -1
+                    for e in pl0['table']:
+                        k0 = game.card_strength(e, pl0)
+                        if k0 > bk0:
+                            bk0, bp0 = k0, e['player']
+                    if (bp0 == decl0 or (fr0 is not None and bp0 == fr0)) \
+                            and not (game.card_strength({'player': me, 'card': c0}, pl0) > bk0):
+                        alts = [m['card'] for m in game.legal_plays(me)
+                                if not m.get('jokerCall')
+                                and not is_joker(m['card'])
+                                and not same(m['card'], game.mighty_card)
+                                and m['card'][0] == gi0
+                                and not is_point(m['card'])
+                                and not (game.card_strength({'player': me, 'card': m['card']}, pl0) > bk0)]
+                        if alts:
+                            return min(alts, key=lambda c: c[1])
     # trumpTop — 유일하게 리드 상태(테이블 빈 상태)·공개 전에도 성립하는 클래스
     if act_card is not None and me == game.declarer and not game.play['table']:
         gi0 = game.contract['giruda'] if game.contract else 'N'

@@ -43,7 +43,8 @@ function topOpportunity(g, seat, act) {
     const g = new E.MightyGame({ seed });
     const ag = [];
     for (let s = 0; s < E.NUM_PLAYERS; s++)
-      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort, keyGuard: true }));
+      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort, keyGuard: true,
+        topGuard: process.env.NOGUARD !== '1', feedGuard: process.env.NOGUARD !== '1', dleadGuard: process.env.NOGUARD !== '1' }));
     g.start(Math.floor(rng() * E.NUM_PLAYERS));
     let guard = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
