@@ -14,6 +14,7 @@ const I18N_EN = {
   // 진영·역할
   '여당':'Attackers', '야당':'Defenders', '주공':'Declarer', '프렌드':'Friend',
   '여당 승리':'Attackers win', '야당 승리':'Defenders win', '관전':'Spectate',
+  '책사':'Strategist', '수문장':'Gatekeeper', '정석가':'Purist',
   '여당 (주공)':'Attacker (declarer)', '여당 (프렌드)':'Attacker (friend)',
   '여당 (숨은 프렌드)':'Attacker (hidden friend)', '미정 (초구 프렌드)':'Undecided (first-trick friend)',
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
@@ -348,8 +349,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.7.0';
-const APP_BUILD = '2026-08-09 빌드 — 마스터 v9 (선언 추론) · 히든 셀프';
+const APP_VERSION = 'v2.8.0';
+const APP_BUILD = '2026-08-09 빌드 — 마스터 혼합 운영 (책사·수문장·정석가)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -634,6 +635,28 @@ let agentsReady = false;
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
 const MASTER_MODEL='./model/mighty_master_v9.onnx';
+/* v2.8 혼합 운영 — 상호 대결 동등이 실증된 세대를 좌석 성향차로 섞는다.
+ * 플레이 중 비노출(비딩 읽힘 방지 — 페르소나와 같은 원칙), 매치 종료 화면에서
+ * 사후 공개. 코칭·AI 복기 판정은 항상 대표(MASTER_MODEL=v9). */
+const MASTER_POOL=[
+  { id:'v9', file:'./model/mighty_master_v9.onnx', nick:'책사' },
+  { id:'v8', file:'./model/mighty_master_v8.onnx', nick:'수문장' },
+  { id:'v7', file:'./model/mighty_master_v7.onnx', nick:'정석가' },
+];
+let masterSessions={};                       // id → onnx session (지연 로드 캐시)
+let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id — 매치 내 고정
+function poolOf(id){ return MASTER_POOL.find(m=>m.id===id); }
+async function loadPoolModel(id){
+  if (masterSessions[id]) return masterSessions[id];
+  const m=poolOf(id);
+  masterSessions[id]=await MightyAI.loadMaster(ortLib, m.file);
+  return masterSessions[id];
+}
+/** 매치 시작 시 AI 좌석 모델 추첨 + 필요 모델 지연 로드 */
+async function assignSeatModels(){
+  for(let p=1;p<5;p++) seatModels[p]=MASTER_POOL[Math.floor(Math.random()*MASTER_POOL.length)].id;
+  await Promise.all([...new Set(seatModels.slice(1))].map(loadPoolModel));
+}
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
 function loadScript(src){
@@ -659,6 +682,8 @@ async function ensureMaster(){
       ortLib.env.wasm.numThreads = 1;            // COOP/COEP 헤더 없는 정적 호스팅 대응
     }catch(e){}
     masterSess=await MightyAI.loadMaster(ortLib, MASTER_MODEL);
+    masterSessions['v9']=masterSess;                 // 대표 모델은 풀 캐시와 공유
+    if (!seatModels[1]) await assignSeatModels();    // 최초 로드 시 좌석 배정
     masterState='ready';
     await buildAgents();
     toast(t('마스터 AI 준비 완료'), 1600);
@@ -680,9 +705,13 @@ function currentTier(){
 async function buildAgents(reassign){
   const tier = currentTier();
   if (reassign || !botTable || botTable.tier !== tier){
+    // v2.8 혼합 운영 — 마스터 티어는 좌석별 배정 모델 세션 사용 (미배정/미로드는 대표로 폴백)
+    const sessions = tier==='master'
+      ? [null,1,2,3,4].map((_,p)=>p===0?null:(masterSessions[seatModels[p]]||masterSess))
+      : null;
     botTable = await MightyAI.createTable({
       tiers: [tier, tier, tier, tier, tier],
-      rng: Math.random, session: masterSess, ort: ortLib,
+      rng: Math.random, session: masterSess, ort: ortLib, sessions,
     });
     botTable.tier = tier;
   }
@@ -2591,7 +2620,8 @@ function showFinal(){
     ${buildFinalChart()}
     <div style="margin:4px 0 18px">
     ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
-      <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):''}</div>
+      <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
+        (currentTier()==='master'&&seatModels[p]?` <span class="style-tag">${t(poolOf(seatModels[p]).nick)}</span>`:'')}</div>
       <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
     </div>`).join('')}</div>
     ${statsLineHtml()}
@@ -2606,6 +2636,8 @@ function showFinal(){
 }
 function newMatch(){
   matchHistory=[];
+  // v2.8: 매치마다 좌석 모델(성향) 재추첨 — 로드는 비동기, 완료 전엔 대표로 폴백
+  if (masterState==='ready') assignSeatModels().then(()=>buildAgents(true));
   buildAgents(true);                      // 매치마다 좌석 성향 재배정
   matchLog = [];
   totals=[0,0,0,0,0]; roundNo=0; matchOver=false;

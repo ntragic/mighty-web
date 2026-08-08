@@ -457,7 +457,7 @@ const PERSONA_KEYS = ['gambler', 'balanced', 'careful'];
  */
 async function createTable(opts = {}) {
   const { tiers = 'advanced', rng = Math.random, session = null, ort = null,
-          personas = null, revealPersona = false } = opts;
+          personas = null, revealPersona = false, sessions = null } = opts;
   const seats = opts.seats || E.NUM_PLAYERS;
   const tierAt = s => (Array.isArray(tiers) ? tiers[s] : tiers);
   const assigned = [], agents = [];
@@ -467,8 +467,10 @@ async function createTable(opts = {}) {
     const persona = tier === 'master' ? null
       : (personas ? personas[s] : PERSONA_KEYS[Math.floor(rng() * PERSONA_KEYS.length)]);
     assigned.push(persona);
+    // v2.8: 혼합 운영 — 좌석별 모델 세션(성향차)을 허용한다
     agents.push(await createAgent({ tier, persona: persona || 'balanced',
-                                    rng, session, ort, revealPersona }));
+                                    rng, session: (sessions && sessions[s]) || session,
+                                    ort, revealPersona }));
   }
   return {
     seats, agents,
