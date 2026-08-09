@@ -349,8 +349,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.8.0';
-const APP_BUILD = '2026-08-09 빌드 — 마스터 혼합 운영 (책사·수문장·정석가)';
+const APP_VERSION = 'v2.9.0';
+const APP_BUILD = '2026-08-09 빌드 — 가드 체인 단일화·c1 기본 OFF';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1901,10 +1901,8 @@ async function coachUpdate(){
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const raw=MightyMaster.actionToEngine(a, game, []);
     if (!raw || raw.type!=='play') return;
-    const kg=MightyAI.keyCardGuard(game, HUMAN, raw);
-    let act=MightyAI.cutGuard(game, HUMAN, MightyAI.tfeedGuard(game, HUMAN, MightyAI.topLeadGuard(game, HUMAN, kg)));
-    act=await MightyAI.dleadGuard(masterSess, ortLib, game, HUMAN, act);
-    act=await MightyAI.c1Guard(masterSess, ortLib, game, HUMAN, act);
+    const kg=MightyAI.keyCardGuard(game, HUMAN, raw);   // 문구 판정용(가드 체인은 아래 한 줄)
+    const act=await MightyAI.applyGuards(masterSess, ortLib, game, HUMAN, raw);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
     const cid=E.cardId(act.card);

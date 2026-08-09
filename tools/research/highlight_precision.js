@@ -24,7 +24,7 @@ const PER = ['gambler', 'balanced', 'careful'];
   let seat = 0;
 
   for (let i = 0; i < N; i++) {
-    const seed = 770000 + i;
+    const seed = parseInt(process.env.SEED_BASE || '770000', 10) + i;
     const rng = E.makeRng(seed);
     const g = new E.MightyGame({ seed });
     const ag = [];

@@ -391,6 +391,34 @@ function cutGuard(game, seat, action) {
   } catch (e) { return action; }
 }
 
+/**
+ * 배포 가드 체인 — 정책 argmax 결과에 후처리 가드를 정해진 순서로 적용한다.
+ * 실플레이 에이전트·코칭·AI 복기 시뮬이 **전부 이 함수 하나**를 쓴다. 체인을
+ * 세 곳에 복사해 두면 한 곳만 구버전으로 남는다(코칭 정합 버그 실적).
+ *
+ * 가드별로 opts.xxxGuard=false로 끈다. c1Guard만 반대로 기본 OFF다 —
+ * v9 가드 스윕에서 이득 근거가 소멸(−92±261 중립)했고 발화 시 재추론 비용만
+ * 남아서, 켜려면 명시적으로 {c1Guard:true}를 준다(docs/GUARDS.md).
+ *
+ * opts.guardCount에 객체를 주면 가드별 발화 횟수를 센다(진단 전용,
+ * tools/research/guard_fire.js).
+ */
+async function applyGuards(session, ort, game, seat, action, opts = {}) {
+  const cnt = opts.guardCount || null;
+  const tally = (name, before, after) => {
+    if (cnt && before !== after) cnt[name] = (cnt[name] || 0) + 1;
+    return after;
+  };
+  let x = (opts.keyGuard === false ? action
+    : tally('key', action, keyCardGuard(game, seat, action, opts.guardTrace)));
+  if (opts.topGuard !== false) x = tally('top', x, topLeadGuard(game, seat, x));
+  if (opts.feedGuard !== false) x = tally('tfeed', x, tfeedGuard(game, seat, x));
+  if (opts.cutGuard !== false) x = tally('cut', x, cutGuard(game, seat, x));
+  if (opts.dleadGuard !== false) x = tally('dlead', x, await dleadGuard(session, ort, game, seat, x));
+  if (opts.c1Guard === true) x = tally('c1', x, await c1Guard(session, ort, game, seat, x));
+  return x;
+}
+
 /** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
 async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
   return ort.InferenceSession.create(modelPath);
@@ -414,20 +442,11 @@ async function createAgent(opts = {}) {
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
-        const guarded = async a => {
-          let x = (opts.keyGuard === false ? a
-            : keyCardGuard(game, seat, a, opts.guardTrace));
-          if (opts.topGuard !== false) x = topLeadGuard(game, seat, x);
-          if (opts.feedGuard !== false) x = tfeedGuard(game, seat, x);
-          if (opts.cutGuard !== false) x = cutGuard(game, seat, x);
-          if (opts.dleadGuard !== false) x = await dleadGuard(session, ort, game, seat, x);
-          if (opts.c1Guard !== false) x = await c1Guard(session, ort, game, seat, x);
-          return x;
-        };
         for (let guard = 0; guard < 8; guard++) {
           const a = await M.chooseAction(session, ort, game, seat, pick);
           const act = M.actionToEngine(a, game, pick);
-          if (act) return guarded(act);   // null이면 교환 카드 누적 중 → 다시 고른다
+          // null이면 교환 카드 누적 중 → 다시 고른다
+          if (act) return applyGuards(session, ort, game, seat, act, opts);
         }
         throw new Error('master: 액션 확정 실패');
       },
@@ -480,7 +499,8 @@ async function createTable(opts = {}) {
   };
 }
 
-const api = { createAgent, createTable, loadMaster, keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
+const api = { createAgent, createTable, loadMaster, applyGuards,
+              keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
