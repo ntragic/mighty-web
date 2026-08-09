@@ -40,7 +40,8 @@ web/
 tests/                   엔진 단위 테스트, jsdom 기반 UI 스모크
 tools/                   빌드·릴리스·벤치마크·진화학습
 training/                Python 엔진 포트 + PPO 학습 키트 (DGX Spark용)
-docs/                    CHANGELOG · GLOSSARY · HANDOFF · TRAINING-BRIEF
+docs/                    SESSION-HANDOFF(새 세션 첫 문서) · CHANGELOG · GLOSSARY
+                         GUARDS(가드 정본) · MODELS(ONNX 레지스트리) · TRAINING-PLAN
 ```
 
 ---
