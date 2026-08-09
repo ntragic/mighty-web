@@ -18,6 +18,15 @@ const getAI = () => (IS_NODE ? require('./mighty-ai.js') : window.MightyAI);
 const GRADE = { CRITICAL: '결정적', LOSS: '손해', SLIP: '부정확' };
 // SLIP 80: 정밀도 벤치에서 60은 검증 통과율이 낮았다(표본 4건 중 1건) — 더 극단만 표시
 const TH = { LOSS: 100, SLIP: 80, FLIP_HI: 2 / 3, FLIP_LO: 1 / 3 };
+// 페어드 롤아웃의 샘플링 온도. 배포는 argmax(T=0)인데 롤아웃만 T=1이면 양 팔
+// 모두 실전보다 약하게 둔다 — 그 괴리가 오탐으로 나온다. v2.9.0에서 0.5로
+// 내렸다(정밀도 벤치 250판×2 독립 배치, docs/rollout-temp.txt):
+//   T=1   결정적 8/9 · 손해 84/94 · 부정확 4/8 → 오탐 15/111
+//   T=0.5 결정적 10/10 · 손해 92/98 · 부정확 2/2 → 오탐 8/110
+// 두 배치 모두 개선, 악화 지표 없음. 0에 더 붙이지 않는 이유는 롤아웃이
+// 불확실성 표본이기도 해서다 — 완전 결정론이면 n=24가 같은 라인 24개가 된다.
+// 연구용 덮어쓰기: env ROLL_T.
+const ROLL_TEMP = (IS_NODE && process.env.ROLL_T) ? parseFloat(process.env.ROLL_T) : 0.5;
 
 function rebuild(rec, upto) {
   const g = new E.MightyGame(rec.cfg);
@@ -49,12 +58,17 @@ async function infer(sess, ort, g, seat) {
   return { logits: r.logits.data, value: r.value ? r.value.data[0] : 0, mask };
 }
 
-/** 마스크된 소프트맥스 샘플 (rng: () => [0,1)) */
-function sampleIdx(logits, mask, rng) {
+/**
+ * 마스크된 소프트맥스 샘플 (rng: () => [0,1)).
+ * temp<1이면 분포를 배포 경로(argmax)에 가깝게 죈다 — 롤아웃이 실전보다 약하게
+ * 두는 편향을 줄인다. 기본값은 ROLL_TEMP.
+ */
+function sampleIdx(logits, mask, rng, temp = ROLL_TEMP) {
+  const t = (temp > 0 ? temp : 1);
   let mx = -Infinity;
   for (let i = 0; i < mask.length; i++) if (mask[i] && logits[i] > mx) mx = logits[i];
   let z = 0; const p = new Float64Array(mask.length);
-  for (let i = 0; i < mask.length; i++) if (mask[i]) { p[i] = Math.exp(logits[i] - mx); z += p[i]; }
+  for (let i = 0; i < mask.length; i++) if (mask[i]) { p[i] = Math.exp((logits[i] - mx) / t); z += p[i]; }
   let u = rng() * z;
   for (let i = 0; i < mask.length; i++) if (mask[i]) { u -= p[i]; if (u <= 0) return i; }
   for (let i = mask.length - 1; i >= 0; i--) if (mask[i]) return i;
@@ -78,12 +92,7 @@ async function playout(sess, ort, g, { rng = null, record = null, maxSteps = 400
     if (!act) throw new Error('playout: 액션 변환 실패 idx=' + ai);
     // 배포 마스터의 최종 경로와 동일하게 — 가드 미적용 시뮬은 실제로 나오지
     // 않을 낭비 수를 라인에 섞는다 (코칭 정합 버그와 같은 계열)
-    if (act.type === 'play') {
-      const A2 = getAI();
-      act = A2.cutGuard(g, p, A2.tfeedGuard(g, p, A2.topLeadGuard(g, p, A2.keyCardGuard(g, p, act))));
-      act = await A2.dleadGuard(sess, ort, g, p, act);
-      act = await A2.c1Guard(sess, ort, g, p, act);
-    }
+    if (act.type === 'play') act = await getAI().applyGuards(sess, ort, g, p, act);
     if (record) record.push({ p, ph: g.phase, a: JSON.parse(JSON.stringify(act)) });
     g.act(act);
   }
@@ -230,11 +239,11 @@ async function analyzeRound(sess, ort, rec, seat, opts = {}) {
     const g = rebuild(rec, s.idx);
     // 고스트 = 가드 포함 argmax 반사실 라인 — "대안 수를 두고 실제 AI들이
     // 그대로 이어갔다면"의 결정론 라인. 실제 라인(역시 argmax+가드 진행)과
-    // 같은 강도의 비교라 공정하다. 샘플링 롤아웃(T=1)은 양 팔 모두 실전보다
-    // 약하게 두므로 등급 판정(평균 비교)에만 쓰고 재생 라인으론 쓰지 않는다.
+    // 같은 강도의 비교라 공정하다. 샘플링 롤아웃(T=ROLL_TEMP)은 양 팔 모두
+    // 실전보다 약하게 두므로 등급 판정(평균 비교)에만 쓰고 재생 라인으론 쓰지 않는다.
     const ghost = await ghostLine(sess, ort, rec, seat, s.idx, s.altIdx);
     // 반사실 라인의 실제 이득 — 사용자에게 약속하는 수치는 이것이다.
-    // 시뮬 평균(dPrize)은 T=1 샘플링 세계의 페어드 차이라 등급 판정에는 옳지만
+    // 시뮬 평균(dPrize)은 샘플링 세계의 페어드 차이라 등급 판정에는 옳지만
     // "실제 대비 이득" 예측으로는 과대다(실플레이 캘리브레이션: 약속 +949 대
     // 라인 실이득 +38). 라인이 실제보다 좋아지는 하이라이트만 노출한다.
     const lineGain = (ghost && ghost.result && rec.result)
