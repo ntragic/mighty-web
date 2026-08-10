@@ -27,7 +27,7 @@ from mighty_encode import (MightyEnv, OBS_DIM, ACTION_DIM, O_FDMODE, O_PHASE,
 
 # ---------------- 모델 ----------------
 class PolicyValueNet(nn.Module):
-    def __init__(self, hidden=512, depth=3, aux_head=False, attn=False):
+    def __init__(self, hidden=512, depth=3, aux_head=False, attn=False, fut_head=False):
         super().__init__()
         # Phase B: 관측 끝의 트릭 토큰 블록을 [11,81]로 세워 소형 트랜스포머로
         # 인코딩하고, 풀링 벡터를 관측에 concat해 트렁크에 넣는다.
@@ -55,6 +55,11 @@ class PolicyValueNet(nn.Module):
         # v9: 마이티/조커 보유 좌석 예측 (rel0..4) — 프렌드 선언 함의 소화 강제
         self.aux_mkey = nn.Linear(d, 5) if aux_head else None
         self.aux_jkey = nn.Linear(d, 5) if aux_head else None
+        # v11: 미래 예측 — 남은 트릭/점수(2) + 마이티·기루다 소진 시야(2).
+        # 전개 결과를 표현에 담도록 강제한다(docs/LOOKAHEAD-PLAN.md 1단계).
+        # ONNX에는 내보내지 않으므로 배포 추론 비용은 늘지 않는다.
+        self.aux_fut = nn.Linear(d, 2) if (aux_head and fut_head) else None
+        self.aux_hor = nn.Linear(d, 2) if (aux_head and fut_head) else None
 
     def _feat(self, obs):
         if not self.use_attn:
@@ -77,6 +82,8 @@ class PolicyValueNet(nn.Module):
         return logits, self.v(h).squeeze(-1), {
             'friend': self.aux(h), 'suit': self.aux_suit(h),
             'trump': self.aux_trump(h), 'win': self.aux_win(h),
+            'fut': self.aux_fut(h) if self.aux_fut is not None else None,
+            'hor': self.aux_hor(h) if self.aux_hor is not None else None,
             'mkey': self.aux_mkey(h) if self.aux_mkey is not None else None,
             'jkey': self.aux_jkey(h) if self.aux_jkey is not None else None}
 
@@ -196,7 +203,7 @@ class Collector:
 # ---------------- PPO 업데이트 ----------------
 def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                vf_coef=0.5, ent_coef=0.05, bf16=False, aux_coef=0.1, role_norm=False,
-               conv_coef=0.0, anchor=None, kl_coef=1.0, jcall_w=1.0):
+               conv_coef=0.0, anchor=None, kl_coef=1.0, jcall_w=1.0, fut_coef=0.0):
     obs = torch.as_tensor(np.stack([t[0] for t in traj]), device=device)
     mask = torch.as_tensor(np.stack([t[1] for t in traj]), device=device)
     act = torch.as_tensor([t[2] for t in traj], device=device)
@@ -213,6 +220,9 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
     # v9: 마이티/조커 보유 좌석 라벨 (rel0..4, 소진 -1)
     lab_mk = torch.as_tensor([t[12] if len(t) > 12 else -1 for t in traj], device=device)
     lab_jk = torch.as_tensor([t[13] if len(t) > 13 else -1 for t in traj], device=device)
+    _futz = np.full(4, -1.0, dtype=np.float32)
+    lab_fut = torch.as_tensor(np.stack([t[14] if len(t) > 14 else _futz for t in traj]),
+                              device=device)
     # 프렌드 선언 이전 스텝은 예측 대상이 없음 → 보조손실에서 제외
     aux_ok = obs[:, O_FDMODE] < 0.5
     play_ok = obs[:, O_PHASE + 4] > 0.5                    # 플레이 페이즈만
@@ -335,6 +345,21 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                             acc.append((auxlog['jkey'][jk2].argmax(-1) == lab_jk[idx][jk2]).float().mean().item())
                         if acc:
                             auxsub['key'] = sum(acc) / len(acc)
+                    if auxlog.get('fut') is not None and fut_coef:
+                        # 남은 트릭·점수 (항상 유효), 마이티·기루다 시야 (지났으면 마스크)
+                        fk = play_ok[idx] & (lab_fut[idx][:, 0] >= 0)
+                        if bool(fk.any()):
+                            fl = F.mse_loss(auxlog['fut'][fk].float(), lab_fut[idx][fk][:, :2])
+                            loss = loss + fut_coef * aux_coef * fl
+                            auxsub['fut'] = fl.item()
+                        mkh = play_ok[idx] & (lab_fut[idx][:, 2] >= 0)
+                        if bool(mkh.any()):
+                            loss = loss + fut_coef * aux_coef * F.mse_loss(
+                                auxlog['hor'][mkh][:, 0].float(), lab_fut[idx][mkh][:, 2])
+                        tgh = play_ok[idx] & (lab_fut[idx][:, 3] >= 0)
+                        if bool(tgh.any()):
+                            loss = loss + fut_coef * aux_coef * F.mse_loss(
+                                auxlog['hor'][tgh][:, 1].float(), lab_fut[idx][tgh][:, 3])
                 # E2: 인증 클래스 관례 증류 — 클래스 밖(-1)은 계수 0, 승률 최적화 불변
                 if conv_coef:
                     ck = conv_a[idx] >= 0
@@ -356,6 +381,7 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
             stats = {'pg': pg.item(), 'v': vloss.item(), 'ent': ent.item(),
                      'aux': auxl.item(), 'auxacc': auxacc,
                      'suit': auxsub.get('suit', 0.0), 'trump': auxsub.get('trump', 0.0),
+                     'fut': auxsub.get('fut', 0.0),
                      'win': auxsub.get('win', 0.0),
                      'key': auxsub.get('key', 0.0),
                      'conv': auxsub.get('conv', 0.0), 'conv_n': auxsub.get('conv_n', 0)}
@@ -404,6 +430,10 @@ def main():
     ap.add_argument('--anchor-ckpt', default=None,
                     help='앵커를 재개 체크포인트가 아닌 다른 체크포인트에서 로드 (교차 앵커)')
     ap.add_argument('--kl', type=float, default=1.0, help='앵커 KL 계수')
+    ap.add_argument('--futaux', type=float, default=0.0,
+                    help='미래 예측 보조 헤드 계수(aux 계수에 곱해진다). 0이면 헤드 없음. '
+                         '남은 트릭·점수와 마이티·기루다 소진 시야를 맞히게 해 '
+                         '트렁크가 전개 결과를 표현에 담도록 강제한다')
     ap.add_argument('--jcall-w', type=float, default=1.0,
                     help='조커콜 클래스 CE 가중치. 이 클래스는 발화가 희소해 '
                          '(update당 ~1.6샘플 대 다른 관례 40~57샘플) 균등 가중이면 '
@@ -422,7 +452,7 @@ def main():
     os.makedirs(args.ckpt, exist_ok=True)
 
     net = PolicyValueNet(args.hidden, args.depth, aux_head=args.aux > 0,
-                         attn=args.attn).to(device)
+                         attn=args.attn, fut_head=args.futaux > 0).to(device)
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr)
     start = 0
     if args.resume:
@@ -491,7 +521,8 @@ def main():
             continue
         st = ppo_update(net, opt, traj, device, bf16=bf16, aux_coef=args.aux,
                         role_norm=args.role_norm, conv_coef=args.conv,
-                        anchor=anchor, kl_coef=args.kl, jcall_w=args.jcall_w)
+                        anchor=anchor, kl_coef=args.kl, jcall_w=args.jcall_w,
+                        fut_coef=args.futaux)
         t2 = time.time()
         if prizes:
             P = np.stack(prizes)
@@ -504,13 +535,14 @@ def main():
                   f'dcl {cstat["decl_rate"]:.2f}/{cstat["decl_win"]:.2f} '
                   f'kw {cstat["key_waste"]*100:.1f}% fb {fb:.2f} '
                   f'sui {st["suit"]:.2f} trp {st["trump"]:.3f} win {st["win"]:.2f} key {st.get("key",0):.2f} '
+                  f'fut {st.get("fut",0):.4f} '
                   f'cv {st["conv"]:.2f}/{st["conv_n"]} '
                   f'| env {t1-t0:.1f}s gpu {t2-t1:.1f}s '
                   f'({len(traj)/(t1-t0):.0f} steps/s)')
         if u % 25 == 0 or u == args.updates:
             torch.save({'net': net.state_dict(), 'opt': opt.state_dict(),
                         'update': u, 'obs_dim': OBS_DIM, 'action_dim': ACTION_DIM,
-                        'aux_head': args.aux > 0, 'hidden': args.hidden,
+                        'aux_head': args.aux > 0, 'fut_head': args.futaux > 0, 'hidden': args.hidden,
                         'depth': args.depth, 'shape': args.shape, 'alloc': args.alloc,
                         'partners': args.partners, 'feed': args.feed,
                         'conv': args.conv, 'attn': args.attn},

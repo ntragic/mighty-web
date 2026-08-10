@@ -448,6 +448,58 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
     return o
 
 
+def episode_future(game):
+    """끝난 판을 트릭별 승자·점수와 마이티·기루다 소진 시점으로 요약한다.
+    미래 예측 보조 헤드(docs/LOOKAHEAD-PLAN.md 1단계)의 라벨 원천이다.
+    에피소드가 끝나야 알 수 있으므로 수집기의 종료 처리에서 역채움한다."""
+    pl = getattr(game, 'play', None)
+    if not pl:
+        return None
+    gi = game.contract['giruda'] if game.contract else 'N'
+    win, pts = {}, {}
+    mighty_t, trump_t = -1, -1
+    for t in pl['history']:
+        no = t['trickNo']
+        win[no] = t['winner']
+        pts[no] = sum(1 for e in t['plays'] if is_point(e['card']))
+        for e in t['plays']:
+            c = e['card']
+            if is_joker(c):
+                continue
+            if same(c, game.mighty_card):
+                mighty_t = no
+            elif gi != 'N' and c[0] == gi:
+                trump_t = max(trump_t, no)          # 기루다가 마지막으로 나온 트릭
+    return {'win': win, 'pts': pts, 'mighty_t': mighty_t, 'trump_t': trump_t}
+
+
+FUT_DIM = 4
+
+
+def future_targets(summ, team, tno):
+    """트릭 tno(포함) 이후의 미래 요약 4종. 라벨 −1은 마스크(학습에서 제외).
+
+      0: 남은 트릭 중 우리 팀이 딸 개수 /10      — 템포의 직접 지표
+      1: 남은 트릭에서 우리 팀이 얻을 점수 /20   — 컷·보태기의 진짜 값
+      2: 마이티가 나올 때까지 남은 트릭 /10      — 이미 나왔으면 마스크
+      3: 기루다가 소진될 때까지 남은 트릭 /10    — 소진 루틴의 시야
+    """
+    if summ is None or tno is None or tno < 1:
+        return [-1.0] * FUT_DIM
+    ft = fp = 0
+    for no, w in summ['win'].items():
+        if no < tno:
+            continue
+        if w in team:
+            ft += 1
+            fp += summ['pts'][no]
+    mi = summ['mighty_t'] - tno
+    tg = summ['trump_t'] - tno
+    return [ft / 10.0, fp / 20.0,
+            mi / 10.0 if summ['mighty_t'] >= tno else -1.0,
+            tg / 10.0 if summ['trump_t'] >= tno else -1.0]
+
+
 def conv_target(game, me, act_card=None, act_jcall=False):
     """E2 관례 증류 교사 — 개입 인증을 통과한 클래스에서만 목표 카드를 돌려준다.
 
