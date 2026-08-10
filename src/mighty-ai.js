@@ -369,12 +369,18 @@ function jokerCallGuard(game, seat, action) {
  * 인증(v7, 1,600시드 페어드): 발화 좌석 상금 +533±166, 두 배치 단독 유의
  * (+401±265 / +634±210 — docs/c5-cert.txt). 제보 seed 746746024 트릭7
  * (♠6 버림 대 ♦6 컷, +1,150/판)에서 출발. 교사 결정론 — 차기 증류 클래스.
+ * v2.9.2에서 **공개 전 구간으로 확장**했다. 공개 전에는 팀을 모르지만, 확정
+ * 야당(비주공이면서 카드 프렌드를 자기가 안 든 좌석)은 "주공이 최강인 트릭 =
+ * 상대 트릭"임을 좌석 가시 정보만으로 안다. 인증(v9, 48,000시드 페어드):
+ * 발화 좌석 상금 **+386±134**(n=161) 유의 이득 — docs/c5p-cert.txt.
+ * 제보 2026-08-10: 트릭1에서 야당이 스페이드 보이드인데 기루다 컷 대신 클럽을
+ * 버려 주공에게 트릭을 넘겼고, 리드를 못 잡아 조커콜 기회까지 날렸다.
  * 롤백: createAgent({cutGuard:false}).
  */
 function cutGuard(game, seat, action) {
   try {
     if (!action || action.type !== 'play' || game.phase !== 'play'
-        || action.jokerCall || !game.friendRevealed) return action;
+        || action.jokerCall) return action;
     const pl = game.play;
     if (!pl || !pl.table.length) return action;
     const gi = game.contract ? game.contract.giruda : 'N';
@@ -390,9 +396,18 @@ function cutGuard(game, seat, action) {
       const k = game._cardStrength(e, pl);
       if (gt(k, bk)) { bk = k; bp = e.player; }
     }
-    const iAmRuling = seat === game.declarer || seat === game.friend;
-    const bestRuling = bp === game.declarer || (game.friend !== null && bp === game.friend);
-    if (iAmRuling === bestRuling) return action;                   // 아군 최강이면 방치 정당
+    if (game.friendRevealed) {
+      const iAmRuling = seat === game.declarer || seat === game.friend;
+      const bestRuling = bp === game.declarer || (game.friend !== null && bp === game.friend);
+      if (iAmRuling === bestRuling) return action;                 // 아군 최강이면 방치 정당
+    } else {
+      // 공개 전 — 확정 야당만, 그리고 주공이 최강인 트릭에서만 성립한다
+      const fd = game.friendDecl;
+      const holdsFriendCard = fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(x => E.sameCard(x, fd.card));
+      if (seat === game.declarer || holdsFriendCard) return action;
+      if (bp !== game.declarer) return action;
+    }
     const seen = new Set();
     for (const t of pl.history) for (const e of t.plays) seen.add(E.cardId(e.card));
     for (const e of pl.table) seen.add(E.cardId(e.card));

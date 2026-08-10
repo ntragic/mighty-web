@@ -5,7 +5,13 @@
  * (2026-08-08 제보 seed 746746024 트릭7: ♠6 버림 vs ♦6 컷 — +1,150/판, 24/24.
  *  keyCardGuard의 역방향: '아끼기'만 있고 '먹어야 할 때 먹기'가 없다)
  * 교사 결정론(최저 확정승 기루다) — 증류 가능 클래스. 지표: 발화 좌석 본인 상금.
- * 사용: node tools/research/c5_cert.js [판수]   env MODEL·SEED_BASE
+ * C5p 변형 env C5_PREREVEAL=1 — **프렌드 공개 전** 구간으로 클래스를 확장한다.
+ * 공개 전에는 팀을 모르지만, '확정 야당'(비주공·카드 프렌드 미보유)은 주공이
+ * 최강인 트릭이 상대팀 트릭임을 알 수 있다. 좌석 가시 정보만으로 성립한다.
+ * (2026-08-10 제보: 트릭1에서 야당이 스페이드 보이드인데 기루다 컷 대신 클럽을
+ *  버려 주공에게 트릭을 주고, 리드를 못 잡아 조커콜 기회까지 날렸다)
+ *
+ * 사용: node tools/research/c5_cert.js [판수]   env MODEL·SEED_BASE·C5_PREREVEAL
  */
 'use strict';
 const path = require('path');
@@ -18,8 +24,11 @@ const SEED0 = parseInt(process.env.SEED_BASE || '2200000', 10);
 const PER = ['gambler', 'balanced', 'careful'];
 const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
 
+const PREREVEAL = process.env.C5_PREREVEAL === '1';
+
 function override(g, seat, act) {
-  if (!g.friendRevealed || act.jokerCall) return null;
+  if (act.jokerCall) return null;
+  if (!g.friendRevealed && !PREREVEAL) return null;
   const pl = g.play;
   if (!pl.table.length) return null;
   const gi = g.contract.giruda;
@@ -37,9 +46,19 @@ function override(g, seat, act) {
     const k = g._cardStrength(e, pl);
     if (gt(k, bk)) { bk = k; bp = e.player; }
   }
-  const iAmRuling = seat === g.declarer || seat === g.friend;
-  const bestRuling = bp === g.declarer || (g.friend !== null && bp === g.friend);
-  if (iAmRuling === bestRuling) return null;                       // 아군 최강이면 방치 정당
+  if (g.friendRevealed) {
+    const iAmRuling = seat === g.declarer || seat === g.friend;
+    const bestRuling = bp === g.declarer || (g.friend !== null && bp === g.friend);
+    if (iAmRuling === bestRuling) return null;                     // 아군 최강이면 방치 정당
+  } else {
+    // 공개 전 — 팀은 모르지만 '확정 야당'은 주공이 최강인 트릭이 상대 트릭임을 안다.
+    // 카드 프렌드를 자기가 들고 있으면 자기가 프렌드이므로 제외한다(좌석 가시 정보).
+    const fd = g.friendDecl;
+    const holdsFriendCard = fd && fd.mode === 'card' && fd.card &&
+      g.hands[seat].some(x => E.sameCard(x, fd.card));
+    if (seat === g.declarer || holdsFriendCard) return null;
+    if (bp !== g.declarer) return null;                            // 주공이 최강일 때만
+  }
   // 최저 '가시 확정승' 기루다 컷 탐색 — keyCardGuard와 같은 위협 논리
   const seen = new Set();
   for (const t of pl.history) for (const e of t.plays) seen.add(E.cardId(e.card));
@@ -81,7 +100,11 @@ async function run(N, iv, sess) {
     const g = new E.MightyGame({ seed });
     const ag = [];
     for (let s = 0; s < E.NUM_PLAYERS; s++)
-      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort, keyGuard: true }));
+      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort,
+        keyGuard: true,
+        // RAWPOL=1 — cutGuard를 꺼서 모델 단독 판단을 잰다(가드가 이미 교정한
+        // 출력을 검사하면 동어반복이 된다)
+        cutGuard: process.env.RAWPOL === '1' ? false : undefined }));
     g.start(Math.floor(rng() * E.NUM_PLAYERS));
     let guard = 0; const fseats = new Set();
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {

@@ -18,7 +18,15 @@
  *                 "조커 프렌드 판에서 여당의 조커콜이 손해인가"만 잰다.
  *                 (자연 발화가 드물어 drop/next 모드로는 표본이 안 모인다)
  *
- * 사용: node tools/research/jcall_cert.js [판수]   env MODEL·SEED_BASE·JC_MODE
+ * 측정 대상 env JC_SIDE:
+ *   ruling (기본) — 여당의 자해 조커콜. 개입은 '콜 제거'
+ *   opp           — 야당의 조커콜 **미사용**. 확정 야당(비주공·카드프렌드 미보유)이
+ *                   조커 미보유·조커 미출현 상태로 조커콜 카드를 들고 리드할 때,
+ *                   A팔은 콜 없이 리드(현행 정책 습관), B팔은 콜 강제.
+ *                   지표는 그대로 주공 상금이라 **음수가 야당 이득**이다.
+ *                   (2026-08-10 제보: 프렌드 조커를 뽑을 수단이 있는데 안 쓴다)
+ *
+ * 사용: node tools/research/jcall_cert.js [판수]   env MODEL·SEED_BASE·JC_MODE·JC_SIDE
  */
 'use strict';
 const path = require('path');
@@ -30,6 +38,7 @@ const M = require(P('../../src/mighty-master.js'));
 const MODEL = process.env.MODEL || P('../../web/model/mighty_master_v9.onnx');
 const SEED0 = parseInt(process.env.SEED_BASE || '6100000', 10);
 const MODE = process.env.JC_MODE || 'drop';
+const SIDE = process.env.JC_SIDE || 'ruling';
 const PER = ['gambler', 'balanced', 'careful'];
 const A_PLAY0 = 149, A_JOKERCALL = 206;
 
@@ -69,13 +78,37 @@ async function run(N, iv, sess) {
     const g = new E.MightyGame({ seed });
     const ag = [];
     for (let s = 0; s < E.NUM_PLAYERS; s++)
-      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort }));
+      ag.push(await AI.createAgent({ tier: 'master', persona: PER[s % 3], rng, session: sess, ort,
+        // RAWPOL=1 — 가드를 끄고 원시 정책을 잰다. 가드가 켜져 있으면 정책이
+        // 조커콜을 골라도 떼어낸 뒤라 '자연 채택률'이 항상 0으로 나온다.
+        jcallGuard: process.env.RAWPOL === '1' ? false : undefined }));
     g.start(Math.floor(rng() * E.NUM_PLAYERS));
     let guard = 0, fired = 0, natural = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
       const p = g.currentPlayer;
       let act = await ag[p].act(g, p);
-      if (MODE === 'force' && g.phase === 'play') {
+      if (MODE === 'force' && g.phase === 'play' && SIDE === 'opp') {
+        // 야당의 조커콜 미사용 — A팔 콜 없음(현행 습관), B팔 콜 강제
+        const fd = g.friendDecl;
+        const holdsFriendCard = fd && fd.mode === 'card' && fd.card &&
+          g.hands[p].some(c => E.sameCard(c, fd.card));
+        const surelyOpp = p !== g.declarer && !holdsFriendCard &&
+          !(g.friendRevealed && p === g.friend);
+        if (surelyOpp && !g.hands[p].some(c => E.isJoker(c))) {
+          const seen = new Set();
+          for (const tr of g.play.history) for (const e of tr.plays) seen.add(E.cardId(e.card));
+          for (const c of g.hands[p]) seen.add(E.cardId(c));
+          if (!seen.has(E.JOKER)) {                       // 뽑을 조커가 아직 살아 있어야 한다
+            const call = g._legalPlays(p).find(m => m.jokerCall);
+            if (call) {
+              hits++; fired++;
+              if (act.jokerCall) { policyCalls++; natural++; }
+              act = iv ? { type: 'play', card: call.card, jokerCall: true }
+                       : { type: 'play', card: call.card };
+            }
+          }
+        }
+      } else if (MODE === 'force' && g.phase === 'play') {
         const fd = g.friendDecl;
         const jf = fd && fd.mode === 'card' && fd.card && E.isJoker(fd.card);
         const ruling = p === g.declarer || (g.friendRevealed && p === g.friend);
@@ -134,7 +167,7 @@ async function run(N, iv, sess) {
     const sd = Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (n - 1));
     return { n, m, ci: 1.96 * sd / Math.sqrt(n) }; };
   const all = st(diffs), fo = fdiffs.length > 1 ? st(fdiffs) : { n: fdiffs.length, m: fdiffs[0] || 0, ci: 0 };
-  console.log(`${path.basename(MODEL)} 전좌석 마스터 · mode=${MODE} · 짝지은 ${all.n}판 · 발화 ${base.hits}회/${fr}판`);
+  console.log(`${path.basename(MODEL)} 전좌석 마스터 · mode=${MODE} side=${SIDE} · 짝지은 ${all.n}판 · 발화 ${base.hits}회/${fr}판`);
   console.log(`조커 카드 프렌드 판 ${base.jokerFriend}/${N} (${(100 * base.jokerFriend / N).toFixed(1)}%)`);
   if (MODE === 'force')
     console.log(`기회 ${base.hits}회 중 정책이 스스로 조커콜 선택 ${base.policyCalls}회 (${(100 * base.policyCalls / Math.max(1, base.hits)).toFixed(1)}%)`);
@@ -144,6 +177,11 @@ async function run(N, iv, sess) {
     const na = st(ndiffs);
     console.log(`  └ 정책이 스스로 고른 판만 ${na.m >= 0 ? '+' : ''}${na.m.toFixed(1)} ± ${na.ci.toFixed(1)} (n=${na.n})`);
   }
-  console.log(fo.m - fo.ci > 0 ? '→ 주공 유의 이득 — 가드 승격 근거'
-    : fo.m + fo.ci < 0 ? '→ 유의 손해 — 현재 정책이 옳다' : '→ 유의차 없음');
+  if (SIDE === 'opp') {
+    console.log(fo.m + fo.ci < 0 ? '→ 야당 유의 이득 (주공 상금 감소) — 조커콜을 써야 한다'
+      : fo.m - fo.ci > 0 ? '→ 야당 유의 손해 — 안 쓰는 현행이 옳다' : '→ 유의차 없음');
+  } else {
+    console.log(fo.m - fo.ci > 0 ? '→ 주공 유의 이득 — 가드 승격 근거'
+      : fo.m + fo.ci < 0 ? '→ 유의 손해 — 현재 정책이 옳다' : '→ 유의차 없음');
+  }
 })();

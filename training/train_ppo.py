@@ -22,7 +22,7 @@ import torch.nn.functional as F
 
 from mighty_encode import (MightyEnv, OBS_DIM, ACTION_DIM, O_FDMODE, O_PHASE,
                            O_GIRUDA, aux_labels, conv_target, A_PLAY0, cidx,
-                           idx_card, O_TOK, TOK_N, TOK_D)
+                           idx_card, O_TOK, TOK_N, TOK_D, A_PLAY_JOKERCALL)
 
 
 # ---------------- 모델 ----------------
@@ -136,8 +136,10 @@ class Collector:
                 ca = -1
                 if self.conv and is_play:
                     ai_ = int(acts_np[i])
-                    tc = conv_target(g_, p, idx_card(ai_ - A_PLAY0)
-                                     if A_PLAY0 <= ai_ < A_PLAY0 + 52 else None)
+                    tc = conv_target(g_, p,
+                                     idx_card(ai_ - A_PLAY0)
+                                     if A_PLAY0 <= ai_ < A_PLAY0 + 52 else None,
+                                     act_jcall=(ai_ == A_PLAY_JOKERCALL))
                     if tc is not None:
                         ca = A_PLAY0 + cidx(tc)
                 rec_i = [o, m, int(acts_np[i]), float(logps_np[i]),
@@ -194,7 +196,7 @@ class Collector:
 # ---------------- PPO 업데이트 ----------------
 def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                vf_coef=0.5, ent_coef=0.05, bf16=False, aux_coef=0.1, role_norm=False,
-               conv_coef=0.0, anchor=None, kl_coef=1.0):
+               conv_coef=0.0, anchor=None, kl_coef=1.0, jcall_w=1.0):
     obs = torch.as_tensor(np.stack([t[0] for t in traj]), device=device)
     mask = torch.as_tensor(np.stack([t[1] for t in traj]), device=device)
     act = torch.as_tensor([t[2] for t in traj], device=device)
@@ -257,7 +259,13 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                     if conv_coef:
                         ck = conv_a[idx] >= 0
                         if bool(ck.any()):
-                            cl = F.cross_entropy(logits[ck].float(), conv_a[idx][ck])
+                            ce = F.cross_entropy(logits[ck].float(), conv_a[idx][ck],
+                                                 reduction='none')
+                            # 원래 고른 액션이 조커콜이면 그 샘플이 jcall 클래스다
+                            w = torch.where(act[idx][ck] == A_PLAY_JOKERCALL,
+                                            torch.full_like(ce, jcall_w),
+                                            torch.ones_like(ce))
+                            cl = (ce * w).sum() / w.sum()
                             loss = loss + conv_coef * cl
                             convacc = (logits[ck].argmax(-1) == conv_a[idx][ck]).float().mean().item()
                             convn = int(ck.sum())
@@ -331,7 +339,12 @@ def ppo_update(net, opt, traj, device, epochs=4, mb=4096, clip=0.2,
                 if conv_coef:
                     ck = conv_a[idx] >= 0
                     if bool(ck.any()):
-                        cl = F.cross_entropy(logits[ck].float(), conv_a[idx][ck])
+                        ce = F.cross_entropy(logits[ck].float(), conv_a[idx][ck],
+                                             reduction='none')
+                        w = torch.where(act[idx][ck] == A_PLAY_JOKERCALL,
+                                        torch.full_like(ce, jcall_w),
+                                        torch.ones_like(ce))
+                        cl = (ce * w).sum() / w.sum()
                         loss = loss + conv_coef * cl
                         auxsub['conv'] = (logits[ck].argmax(-1)
                                           == conv_a[idx][ck]).float().mean().item()
@@ -391,6 +404,10 @@ def main():
     ap.add_argument('--anchor-ckpt', default=None,
                     help='앵커를 재개 체크포인트가 아닌 다른 체크포인트에서 로드 (교차 앵커)')
     ap.add_argument('--kl', type=float, default=1.0, help='앵커 KL 계수')
+    ap.add_argument('--jcall-w', type=float, default=1.0,
+                    help='조커콜 클래스 CE 가중치. 이 클래스는 발화가 희소해 '
+                         '(update당 ~1.6샘플 대 다른 관례 40~57샘플) 균등 가중이면 '
+                         'KL에 눌려 이식되지 않는다')
     ap.add_argument('--attn', action='store_true',
                     help='Phase B: 트릭 토큰 트랜스포머 인코더')
     args = ap.parse_args()
@@ -474,7 +491,7 @@ def main():
             continue
         st = ppo_update(net, opt, traj, device, bf16=bf16, aux_coef=args.aux,
                         role_norm=args.role_norm, conv_coef=args.conv,
-                        anchor=anchor, kl_coef=args.kl)
+                        anchor=anchor, kl_coef=args.kl, jcall_w=args.jcall_w)
         t2 = time.time()
         if prizes:
             P = np.stack(prizes)
