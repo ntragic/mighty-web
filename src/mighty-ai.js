@@ -329,6 +329,40 @@ async function c1Guard(session, ort, game, seat, action) {
 }
 
 /**
+ * 조커콜 자해 가드 — 프렌드 카드로 '조커'를 지목한 판에서 여당 좌석(주공·공개
+ * 프렌드)이 조커콜을 선언하면 **선언만 뗀다**(같은 카드를 그냥 리드).
+ *
+ * 조커를 프렌드로 부른 것은 "조커 보유자가 내 편"이라는 공개 선언이다. 거기서
+ * 조커콜은 아군의 2인자 카드를 최약 취급(서열 −1)으로 강제 소모시키고, 콜 카드가
+ * 그 무늬 최저라 트릭까지 상대에 넘긴다. 야당의 조커콜은 아군 조커를 뽑는 정당한
+ * 수라 제외한다.
+ *
+ * 제보 2026-08-10 seed 573961911 트릭3 — 주공이 조커 프렌드를 부른 뒤 ♣3 조커콜,
+ * 프렌드 조커가 소모되고 트릭은 야당이 가져갔다. v7·v8·v9가 이 국면에서 조커콜을
+ * 1순위(40~47%)로 고른다.
+ *
+ * 인증(v9, 20,000시드 강제 페어드 · docs/jcall-cert.txt): 발화 판 주공 상금
+ * **+1,101±254** (n=329) · 여당 승수 +54. 자연 발화율은 기회의 7.0%.
+ * 롤백: createAgent({jcallGuard:false}).
+ */
+function jokerCallGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || !action.jokerCall) return action;
+    if (game.phase !== 'play') return action;
+    const fd = game.friendDecl;
+    if (!fd || fd.mode !== 'card' || !fd.card || !E.isJoker(fd.card)) return action;
+    if (game.hands[seat].some(c => E.isJoker(c))) return action;   // 내가 조커 보유 = 다른 국면
+    const ruling = seat === game.declarer ||
+                   (game.friendRevealed && game.friend !== null && seat === game.friend);
+    if (!ruling) return action;
+    // 같은 카드를 콜 없이 낼 수 있을 때만 — 없으면 손대지 않는다
+    if (!game._legalPlays(seat).some(m => !m.jokerCall && E.sameCard(m.card, action.card)))
+      return action;
+    return { type: 'play', card: action.card };
+  } catch (e) { return action; }
+}
+
+/**
  * 확정승 컷 가드 — 공개 후, 리드 무늬 보이드인 좌석이 상대팀이 최강인 점수
  * 트릭을 두고 비기루다 버림을 선택하면, '가시 확정승'인 최저 기루다 컷으로
  * 교체한다. keyCardGuard(아끼기)의 역방향 — 먹어야 할 때 먹는다.
@@ -409,8 +443,12 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
     if (cnt && before !== after) cnt[name] = (cnt[name] || 0) + 1;
     return after;
   };
-  let x = (opts.keyGuard === false ? action
-    : tally('key', action, keyCardGuard(game, seat, action, opts.guardTrace)));
+  // 조커콜 가드가 먼저다 — 뒤 가드들이 조커콜 액션을 그냥 통과시키기 때문에
+  // 여기서 선언을 떼어 놓아야 이후 검사가 일반 리드로 이어진다.
+  let x = (opts.jcallGuard === false ? action
+    : tally('jcall', action, jokerCallGuard(game, seat, action)));
+  x = (opts.keyGuard === false ? x
+    : tally('key', x, keyCardGuard(game, seat, x, opts.guardTrace)));
   if (opts.topGuard !== false) x = tally('top', x, topLeadGuard(game, seat, x));
   if (opts.feedGuard !== false) x = tally('tfeed', x, tfeedGuard(game, seat, x));
   if (opts.cutGuard !== false) x = tally('cut', x, cutGuard(game, seat, x));
@@ -501,6 +539,7 @@ async function createTable(opts = {}) {
 
 const api = { createAgent, createTable, loadMaster, applyGuards,
               keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
+              jokerCallGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
