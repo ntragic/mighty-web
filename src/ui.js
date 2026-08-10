@@ -349,8 +349,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.9.0';
-const APP_BUILD = '2026-08-09 빌드 — 가드 체인 단일화·c1 기본 OFF';
+const APP_VERSION = 'v2.9.1';
+const APP_BUILD = '2026-08-10 빌드 — 조커콜 자해 가드';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){

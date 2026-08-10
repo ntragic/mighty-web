@@ -48,10 +48,12 @@ const IDX=parseInt(process.argv[3],10);
     let win='';
     if(a&&a.card&&best){ const k=g._cardStrength({player:seat,card:a.card,jokerSuit:a.jokerSuit},pl);
       win=(k[0]>bk[0]||(k[0]===bk[0]&&k[1]>bk[1]))?'이김':'짐'; }
-    return {n:a&&a.card?E.cardName(a.card):String(i), p:pr[i]/z, win};
+    const nm = a&&a.card ? E.cardName(a.card)+(a.jokerCall?'(조커콜)':'') : String(i);
+    return {n:nm, p:pr[i]/z, win};
   }).sort((a,b)=>b.p-a.p);
   console.log('\n정책 분포:');
-  for(const r of rows) console.log(`  ${r.n.padEnd(6)} ${(r.p*100).toFixed(1).padStart(5)}%  ${r.win}`);
+  for(const r of rows) console.log(`  ${r.n.padEnd(12)} ${(r.p*100).toFixed(1).padStart(5)}%  ${r.win}`);
   const ag=await AI.createAgent({tier:'master',session:sess,ort});
-  console.log(`\n가드 적용 최종: ${E.cardName((await ag.act(g,seat)).card)}`);
+  const fin=await ag.act(g,seat);
+  console.log(`\n가드 적용 최종: ${E.cardName(fin.card)}${fin.jokerCall?'(조커콜)':''}`);
 })();

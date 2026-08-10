@@ -1,0 +1,142 @@
+<!--
+  itch.io 프로젝트 설명란(Edit game → Details)에 붙여넣는 HTML.
+
+  붙여넣는 곳: 설명 에디터 오른쪽 위 "<>" 버튼을 눌러 HTML 모드로 바꾼 뒤,
+  이 파일에서 아래 "여기부터" ~ "여기까지" 사이만 복사해 넣는다.
+
+  itch.io 새니타이저 제약 (2026-08 기준):
+    쓸 수 있다  p h2 h3 div span img a table thead tbody tr th td
+                strong b em i code pre ul ol li details summary hr br
+                + 요소별 인라인 style 속성
+    지워진다    svg  style 태그  script  iframe  video  audio
+                section article nav  form button input
+                custom- 로 시작하지 않는 class 이름
+  그래서 그림은 전부 PNG로 넣는다. docs/slides/slide-01.png ~ slide-12.png를
+  에디터의 이미지 버튼으로 업로드하면 itch가 URL을 만들어 주고, 아래
+  IMG-01 … IMG-12 자리의 src를 그 URL로 바꾸면 된다.
+
+  PNG 다시 굽기: python3 tools/gen-nn-slides.py
+-->
+
+<!-- ─────────────────────────── 여기부터 ─────────────────────────── -->
+
+<h2>AI는 어떻게 낼 카드를 고르는가</h2>
+
+<p>이 게임의 마스터 AI는 사람 기보를 배우지 않았다. 혼자 수십만 판을 두면서
+스스로 익혔다. 아래는 그 AI가 <strong>무엇을 보고</strong>, <strong>어떻게 한 수를
+정하는지</strong>를 그림으로 풀어 쓴 것이다. 필요한 수학은 고등학교 수준
+(벡터·행렬 곱셈·확률)까지다.</p>
+
+<p><strong>네 단계다.</strong> 게임판을 숫자로 옮겨 <em>본다</em> → 209가지 선택지에
+<em>점수를 매긴다</em> → 낼 수 없는 것을 지우고 <em>고른다</em> → 규칙 6개로
+<em>검사한다</em>. 1~3은 신경망이, 4는 사람이 쓴 규칙이 한다.</p>
+
+<p><img src="IMG-01" alt="네 단계 요약"></p>
+
+<h3>좌석은 번호가 아니라 거리로 센다</h3>
+<p>사람이 "내 왼쪽 사람"이라고 말하듯, AI도 좌석을 절대 번호가 아니라 자기 기준
+거리로 센다. 그래야 어느 자리에 앉든 배운 것을 그대로 쓴다.</p>
+<p><img src="IMG-02" alt="자기중심 좌석 번호"></p>
+
+<h3>1단계 · 카드를 숫자로 적는 법</h3>
+<p>카드는 52장 + 조커 1장. 칸을 53개 만들어 놓고 있으면 1, 없으면 0을 적는다.
+그게 전부다. 남의 손패는 절대 넣지 않는다 — AI가 보는 것은 그 좌석에 앉은 사람이
+실제로 볼 수 있는 것뿐이다.</p>
+<p><img src="IMG-03" alt="손패를 53칸으로 적기"></p>
+
+<h3>1단계 · 1,630개는 어디에 쓰이나</h3>
+<p>이런 표들과 숫자 몇십 개를 한 줄로 이어 붙인 것이 <strong>관측</strong>이다.
+길이는 1,630. 절반 이상이 "지난 트릭 기록"인데, 마이티가 정보 게임이라
+누가 언제 무엇을 냈는지가 손패 추정의 거의 전부이기 때문이다.</p>
+<p><img src="IMG-04" alt="관측 1,630칸 분해"></p>
+
+<table style="width:100%;border-collapse:collapse;font-size:14px">
+  <thead><tr>
+    <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #d9dee6">무엇을</th>
+    <th style="text-align:right;padding:8px 10px;border-bottom:1px solid #d9dee6">칸 수</th>
+    <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #d9dee6">쓰임</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 10px">지난 트릭 기록</td><td style="padding:7px 10px;text-align:right">891</td><td style="padding:7px 10px">누가 몇 번째로 무엇을 냈나, 누가 이겼나</td></tr>
+    <tr><td style="padding:7px 10px">내 패 · 이번 트릭</td><td style="padding:7px 10px;text-align:right">396</td><td style="padding:7px 10px">손패와 지금 테이블에 깔린 카드</td></tr>
+    <tr><td style="padding:7px 10px">계약 · 역할</td><td style="padding:7px 10px;text-align:right">116</td><td style="padding:7px 10px">주공이 누구고 기루다는 뭔지, 프렌드 선언</td></tr>
+    <tr><td style="padding:7px 10px">가시 집계</td><td style="padding:7px 10px;text-align:right">94</td><td style="padding:7px 10px">안 나온 카드, 누가 어떤 무늬가 떨어졌는지</td></tr>
+    <tr><td style="padding:7px 10px">좌석 이력</td><td style="padding:7px 10px;text-align:right">64</td><td style="padding:7px 10px">각자 무슨 무늬를 몇 장 냈는지</td></tr>
+    <tr><td style="padding:7px 10px">키카드 정황</td><td style="padding:7px 10px;text-align:right">37</td><td style="padding:7px 10px">마이티·조커가 어디 있을 것 같은지</td></tr>
+    <tr><td style="padding:7px 10px">패 강도</td><td style="padding:7px 10px;text-align:right">18</td><td style="padding:7px 10px">무늬별로 내가 최강인지</td></tr>
+    <tr><td style="padding:7px 10px">룰</td><td style="padding:7px 10px;text-align:right">14</td><td style="padding:7px 10px">이 판의 규칙 설정값</td></tr>
+  </tbody>
+</table>
+
+<h3>1단계 · 트릭 한 판을 숫자 81개로</h3>
+<p>트릭은 다섯 명이 순서대로 한 장씩 내는 묶음이다. 순서가 뜻을 갖기 때문에
+한 판을 통째로 한 덩어리로 적는다. 10판 + 진행 중 1판 = 11덩어리.</p>
+<p><img src="IMG-05" alt="트릭 토큰 구성"></p>
+
+<h3>2단계 · 신경망은 큰 곱셈표다</h3>
+<p>정확히 말할 수 있다. 관측을 세로로 세운 벡터라 하면, 신경망이 하는 일은
+<code>y = ReLU(Wx + b)</code>의 반복이다 — 행렬을 곱하고, 음수를 0으로 만들고,
+다시 곱한다. 세 번 반복한 뒤 209개 점수로 바꾼다.</p>
+<p>곱셈표 칸을 전부 세면 <strong>1,594,107개</strong>. 요즘 언어 모델은 이 수가
+수천억이다. 이건 브라우저에서 즉시 돌아야 해서 일부러 작게 만든 크기다.</p>
+<p><img src="IMG-06" alt="신경망 층 구조"></p>
+
+<h3>2단계 · 트릭 기록만 따로, 서로 쳐다보게</h3>
+<p>곱셈표는 891칸을 그냥 늘어선 숫자로 취급한다. 하지만 3번 트릭에서 누가
+기루다를 썼는지가 7번 트릭 판단을 바꾼다. 그래서 11덩어리만 따로 빼서
+서로 참조하게 만든 뒤 요약 64개로 줄여 다시 합친다.</p>
+<p><img src="IMG-07" alt="트릭 어텐션"></p>
+
+<h3>3단계 · 낼 수 없는 카드부터 지운다</h3>
+<p>점수가 나왔다고 아무거나 낼 수는 없다. 무늬를 따라야 하면 따라야 한다.
+그래서 불가능한 선택지의 점수를 −∞로 덮어쓴다. 남은 것 중 가장 높은 하나가
+실제로 나가는 수다.</p>
+<p><img src="IMG-08" alt="합법수 마스킹과 온도"></p>
+
+<h3>4단계 · 사람이 보면 바로 아는 실수를 규칙으로 막는다</h3>
+<p>신경망은 "이겼다"는 결과만 보고 배운다. 그래서 <strong>어차피 이긴 트릭에
+마이티를 버려도</strong> 결과가 같으니 고칠 이유를 못 느낀다. 사람 눈에는 치명적으로
+어색한 장면이다. 이런 자리를 규칙 6개가 받친다.</p>
+<p><img src="IMG-09" alt="가드 예시와 발화율"></p>
+
+<table style="width:100%;border-collapse:collapse;font-size:14px">
+  <thead><tr>
+    <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #d9dee6">규칙</th>
+    <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #d9dee6">잡는 장면</th>
+    <th style="text-align:right;padding:8px 10px;border-bottom:1px solid #d9dee6">요즘 발동</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 10px">key</td><td style="padding:7px 10px">이미 이긴 트릭에 마이티·조커를 버림</td><td style="padding:7px 10px;text-align:right">1.31%</td></tr>
+    <tr><td style="padding:7px 10px">top</td><td style="padding:7px 10px">주공이 기루다를 낼 때 낮은 것부터 던짐</td><td style="padding:7px 10px;text-align:right">0.00%</td></tr>
+    <tr><td style="padding:7px 10px">tfeed</td><td style="padding:7px 10px">못 이길 트릭에 점수 기루다를 태움</td><td style="padding:7px 10px;text-align:right">0.00%</td></tr>
+    <tr><td style="padding:7px 10px">cut</td><td style="padding:7px 10px">먹을 수 있는 점수 트릭을 그냥 넘김</td><td style="padding:7px 10px;text-align:right">0.08%</td></tr>
+    <tr><td style="padding:7px 10px">dlead</td><td style="padding:7px 10px">야당이 기루다를 리드해 주공을 도와줌</td><td style="padding:7px 10px;text-align:right">0.37%</td></tr>
+    <tr><td style="padding:7px 10px">c1</td><td style="padding:7px 10px">주공이 잡힐 자리에 점수 기루다를 리드 (기본 꺼짐)</td><td style="padding:7px 10px;text-align:right">0.19%</td></tr>
+  </tbody>
+</table>
+
+<p><strong>0%가 좋은 신호다.</strong> top과 tfeed는 요즘 한 번도 발동하지 않는다 —
+그 실수를 신경망이 이미 안 하기 때문이다. 규칙을 학습에 녹여 넣는 데 성공하면
+발동률이 떨어진다. cut은 0.50% → 0.16% → 0.08%로 줄어드는 중이다.</p>
+
+<h3>어떻게 배웠나</h3>
+<p>AI 다섯이 서로 붙어 판을 만들고, 이긴 쪽의 선택은 확률을 올리고 진 쪽은 내린다.
+여기에 두 가지를 더 얹는다 — 검증을 통과한 상황에 한해 정답 카드를 알려주는
+<strong>정답지</strong>, 그리고 "마이티는 누가 들고 있을까?" 같은 <strong>곁다리 문제</strong>다.
+곁다리 문제를 추가하자 마이티 위치 맞히기가 29%에서 75%로 올랐다.</p>
+<p><img src="IMG-10" alt="학습 3계열"></p>
+
+<h3>무엇을 고칠지 정하는 법</h3>
+<p>이상해 보이는 장면을 발견해도 바로 고치지 않는다. <strong>같은 패를 두 번 돌린다</strong> —
+한 번은 그대로, 한 번은 그 수만 바꿔서. 상금 차이가 확실할 때만 고친다.
+지금까지 승격 5건, 기각 13건이다. 눈에 명백해 보였는데 평균은 반대였던 경우가
+여럿 있었다.</p>
+<p><img src="IMG-11" alt="페어드 인증"></p>
+
+<h3>같은 두뇌, 세 곳에서</h3>
+<p>대국·코칭·복기가 모두 같은 경로를 쓴다. AI 자리마다 세대가 다른 모델을 뽑아
+앉히는데, 어느 자리가 누구인지는 판이 끝나야 공개한다 — 미리 알면 비딩을 읽을 수
+있어 난이도가 흐려진다.</p>
+<p><img src="IMG-12" alt="세 표면"></p>
+
+<!-- ─────────────────────────── 여기까지 ─────────────────────────── -->
