@@ -1,0 +1,14 @@
+=== 결정용 h2h (9,000판) ===
+-- v11ctl vs v9 --
+NEW=mighty_master_v11ctl.onnx vs OLD=mighty_master_v9.onnx · 유효 8295판
+NEW 좌석 판당 상금 우위  -20.2 ± 31.0
+좌석 양상금 판 비율      NEW 48.4% vs OLD 48.4%
+탑 리드 관례 채택률      NEW 100.0% [6956/6956] vs OLD 100.0% [6973/6973]
+→ 동등 (유의차 없음)
+
+-- v11ctl vs v11b --
+NEW=mighty_master_v11ctl.onnx vs OLD=mighty_master_v11b.onnx · 유효 7589판
+NEW 좌석 판당 상금 우위  +107.7 ± 36.4
+좌석 양상금 판 비율      NEW 51.4% vs OLD 48.7%
+탑 리드 관례 채택률      NEW 100.0% [6474/6474] vs OLD 100.0% [6410/6410]
+→ NEW 유의 우세
