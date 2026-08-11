@@ -14,7 +14,7 @@ const I18N_EN = {
   // 진영·역할
   '여당':'Attackers', '야당':'Defenders', '주공':'Declarer', '프렌드':'Friend',
   '여당 승리':'Attackers win', '야당 승리':'Defenders win', '관전':'Spectate',
-  '책사':'Strategist', '수문장':'Gatekeeper', '정석가':'Purist',
+  '책사':'Strategist', '수문장':'Gatekeeper', '정석가':'Purist', '선견가':'Foreseer',
   '여당 (주공)':'Attacker (declarer)', '여당 (프렌드)':'Attacker (friend)',
   '여당 (숨은 프렌드)':'Attacker (hidden friend)', '미정 (초구 프렌드)':'Undecided (first-trick friend)',
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
@@ -349,8 +349,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.9.2';
-const APP_BUILD = '2026-08-10 빌드 — 공개 전 컷 확장';
+const APP_VERSION = 'v2.10.0';
+const APP_BUILD = '2026-08-11 빌드 — 선견가(v13) 합류, 탐색 교사 증류';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -634,15 +634,19 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v9.onnx';
-/* v2.8 혼합 운영 — 상호 대결 동등이 실증된 세대를 좌석 성향차로 섞는다.
+const MASTER_MODEL='./model/mighty_master_v13.onnx';
+/* 혼합 운영 — 상호 대결 동등이 실증된 세대를 좌석 성향차로 섞는다.
  * 플레이 중 비노출(비딩 읽힘 방지 — 페르소나와 같은 원칙), 매치 종료 화면에서
- * 사후 공개. 코칭·AI 복기 판정은 항상 대표(MASTER_MODEL=v9). */
+ * 사후 공개. 코칭·AI 복기 판정은 항상 대표(MASTER_MODEL=v13).
+ * v2.10: 좌석 배분을 추첨에서 **고정 배분 후 섞기**로 바꿨다 — 네 좌석에
+ * 선견가(v13) 둘, 책사(v9) 하나, 수문장(v8) 하나. 추첨이면 한 세대가 네 좌석을
+ * 모두 차지하는 판이 생겨 성향차라는 취지가 흐려진다. */
 const MASTER_POOL=[
+  { id:'v13', file:'./model/mighty_master_v13.onnx', nick:'선견가' },
   { id:'v9', file:'./model/mighty_master_v9.onnx', nick:'책사' },
   { id:'v8', file:'./model/mighty_master_v8.onnx', nick:'수문장' },
-  { id:'v7', file:'./model/mighty_master_v7.onnx', nick:'정석가' },
 ];
+const SEAT_PLAN=['v13','v13','v9','v8'];     // AI 좌석 4개에 배분할 모델
 let masterSessions={};                       // id → onnx session (지연 로드 캐시)
 let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id — 매치 내 고정
 function poolOf(id){ return MASTER_POOL.find(m=>m.id===id); }
@@ -654,7 +658,12 @@ async function loadPoolModel(id){
 }
 /** 매치 시작 시 AI 좌석 모델 추첨 + 필요 모델 지연 로드 */
 async function assignSeatModels(){
-  for(let p=1;p<5;p++) seatModels[p]=MASTER_POOL[Math.floor(Math.random()*MASTER_POOL.length)].id;
+  const plan=SEAT_PLAN.slice();
+  for(let i=plan.length-1;i>0;i--){          // 피셔-예이츠 — 좌석 순서만 섞는다
+    const j=Math.floor(Math.random()*(i+1));
+    [plan[i],plan[j]]=[plan[j],plan[i]];
+  }
+  for(let p=1;p<5;p++) seatModels[p]=plan[p-1];
   await Promise.all([...new Set(seatModels.slice(1))].map(loadPoolModel));
 }
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
@@ -682,7 +691,7 @@ async function ensureMaster(){
       ortLib.env.wasm.numThreads = 1;            // COOP/COEP 헤더 없는 정적 호스팅 대응
     }catch(e){}
     masterSess=await MightyAI.loadMaster(ortLib, MASTER_MODEL);
-    masterSessions['v9']=masterSess;                 // 대표 모델은 풀 캐시와 공유
+    masterSessions['v13']=masterSess;                // 대표 모델은 풀 캐시와 공유
     if (!seatModels[1]) await assignSeatModels();    // 최초 로드 시 좌석 배정
     masterState='ready';
     await buildAgents();

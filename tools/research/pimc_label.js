@@ -37,6 +37,11 @@ const SAMPLE = parseFloat(process.env.SAMPLE || '0.25');
 const MARGIN = parseFloat(process.env.MARGIN || '0');
 const JC_SAMPLE = parseFloat(process.env.JC_SAMPLE || '1.0');
 const K_JC = parseInt(process.env.K_JC || '200', 10);
+// 특수카드 무력화 국면(조커콜·마이티 무늬 리드)은 이득이 여러 트릭 뒤에 실현된다.
+// 깊이 3에서 자르면 조커콜 가치가 평균 1,155 과소평가된다(keykill_probe 실측).
+// 그래서 이 국면만 끝까지 굴리고(DEPTH_JC=0) 결정화도 크게 준다.
+const DEPTH_JC = parseInt(process.env.DEPTH_JC || String(DEPTH), 10);
+const KEYKILL_ONLY = process.env.KEYKILL_ONLY === '1';
 
 const SUITS = ['S', 'D', 'H', 'C'];
 const allCards = () => {
@@ -154,13 +159,33 @@ async function valueOf(sess, g, seat) {
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
       const p = g.currentPlayer;
       const act = await ag[p].act(g, p);
-      // 조커콜을 낼 수 있는 국면인가 — 드물고 결정적이라 과표집한다
-      const isJC = g.phase === 'play' &&
-        g._legalPlays(p).some(m => m.jokerCall);
+      // 특수카드 무력화 국면인가 — 조커콜(조커 무력화) 또는 확정 야당의
+      // 마이티 무늬 리드(마이티 무력화). 드물고 결정적이라 과표집한다.
+      let isJC = false;
+      if (g.phase === 'play' && g.play.table.length === 0) {
+        const legal = g._legalPlays(p);
+        const fd = g.friendDecl;
+        const holdsFriendCard = fd && fd.mode === 'card' && fd.card &&
+          g.hands[p].some(c => E.sameCard(c, fd.card));
+        const oppSeat = p !== g.declarer && !holdsFriendCard &&
+          !(g.friendRevealed && p === g.friend);
+        if (legal.some(m => m.jokerCall)) isJC = true;
+        if (!isJC && oppSeat && !g.hands[p].some(c => E.isJoker(c))) {
+          const seen = new Set();
+          for (const t of g.play.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+          for (const c of g.hands[p]) seen.add(E.cardId(c));
+          const ms = g.mightyCard.suit;
+          if (!seen.has(E.cardId(g.mightyCard)) &&
+              legal.some(m => !m.jokerCall && !E.isJoker(m.card) && m.card.suit === ms
+                              && !E.sameCard(m.card, g.mightyCard)))
+            isJC = true;                    // 마이티 끌어내기 가능 국면
+        }
+      }
       const take = g.phase === 'play' && act.type === 'play' &&
-        (isJC ? rnd() < JC_SAMPLE : rnd() < SAMPLE);
+        (isJC ? rnd() < JC_SAMPLE : (!KEYKILL_ONLY && rnd() < SAMPLE));
       if (take) {
         const kUse = isJC ? K_JC : K;
+        const dUse = isJC ? DEPTH_JC : DEPTH;
         // 후보 — 정책 상위 TOPM
         let obs = M.encodeObs(g, p, []);
         const mask = M.legalMask(g, []);
@@ -187,10 +212,10 @@ async function valueOf(sess, g, seat) {
                 const a0 = M.actionToEngine(ci, sim, []);
                 if (!a0) continue;
                 try { sim.act(a0); } catch (e) { continue; }
-                const stopTrick = sim.play ? sim.play.trickNo + DEPTH : 99;
+                const stopTrick = sim.play ? sim.play.trickNo + dUse : 99;
                 let gd = 0;
                 while (sim.phase !== 'done' && sim.phase !== 'redeal' && gd++ < 200) {
-                  if (DEPTH > 0 && sim.play && sim.play.trickNo >= stopTrick
+                  if (dUse > 0 && sim.play && sim.play.trickNo >= stopTrick
                       && sim.play.table.length === 0) break;      // 트릭 경계에서 절단
                   const q = sim.currentPlayer;
                   sim.act(await ag[q].act(sim, q));
