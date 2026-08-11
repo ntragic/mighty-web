@@ -349,8 +349,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.10.0';
-const APP_BUILD = '2026-08-11 빌드 — 선견가(v13) 합류, 탐색 교사 증류';
+const APP_VERSION = 'v2.10.1';
+const APP_BUILD = '2026-08-11 빌드 — 마무리 국면 여유';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -399,6 +399,11 @@ const PRESETS = {
 };
 let settings = defaultSettings();
 let matchOver = false;
+// 마지막 트릭 전용 여유. 속도 설정·세팅 자동 진행과 무관하게 고정한다.
+//   HOLD  — 5장이 깔린 마무리 국면을 보여주는 시간(카드가 아직 화면에 있다)
+//   SETTLE— 트릭을 수거한 뒤 정산 화면으로 넘어가기 전 여유
+const FINAL_TRICK_HOLD = 1400;
+const FINAL_TRICK_SETTLE = 500;
 const SPD = () => ({fast:{bot:250,pre:250,show:550,collect:250},
                     normal:{bot:550,pre:450,show:900,collect:340},
                     slow:{bot:900,pre:650,show:1400,collect:420}})[settings.ui.speed];
@@ -1291,6 +1296,13 @@ async function playWithAnimation(p, action){
     renderTrick();
     logLine(tf('logTrick', h.trickNo, NAMES[h.winner], h.points));
     await sleep(claimSpeed().show);
+    // 마지막 트릭은 여기서 판이 끝난다. 5장이 깔린 이 화면이 마무리 국면이라
+    // 속도 설정·세팅 자동 진행과 무관하게 더 보여준다(제보: 너무 빨리 사라진다).
+    const isFinalTrick = game.phase==='done' || game.play.history.length>=E.HAND_SIZE;
+    if (isFinalTrick){
+      await sleep(FINAL_TRICK_HOLD);
+      if (myGen!==stateGen){ busy=false; return; }
+    }
     // 수거 애니메이션
     if (!REDUCED && !claimMode){
       const to=seatAnchor(h.winner);
@@ -1309,6 +1321,11 @@ async function playWithAnimation(p, action){
     SFX.collect();
     ghost=null;
     render();
+    // 마지막 트릭이면 정산으로 넘어가기 전에 빈 판을 한 박자 보여준다
+    if (isFinalTrick){
+      await sleep(FINAL_TRICK_SETTLE);
+      if (myGen!==stateGen){ busy=false; return; }
+    }
     if (game.friendRevealed && game.friendDecl && game.friendDecl.mode==='first' && game.play.history.length===1){
       toast(game.friend===null?t('초구를 주공이 승리 — 사실상 노프렌드'):tf('friendToast', NAMES[game.friend]));
     }
@@ -1467,7 +1484,10 @@ function renderCheat(){
 
 /* ---------------- 세팅(전승 확정) 자동 플레이 ---------------- */
 let claimMode=false, claimShown=false, claimBy=null;
-const CLAIM_SPD={bot:0, pre:0, show:16, collect:0};
+// 세팅 자동 진행 속도. show는 트릭 5장이 다 깔린 상태를 보여주는 시간이라
+// 0에 가까우면 무슨 일이 있었는지 못 보고 지나간다(제보). 나머지는 빠르게 두고
+// 이 구간만 살려 둔다.
+const CLAIM_SPD={bot:0, pre:60, show:520, collect:0};
 function claimSpeed(){ return claimMode ? CLAIM_SPD : SPD(); }
 function sideOf(p){
   if (p===game.declarer) return t('여당');

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "check": "node tools/build.mjs --check",
-    "test": "node tests/mighty-engine.test.js && node tests/topguard.test.js && node tests/tfeedguard.test.js && node tests/cutguard.test.js && node tests/jcallguard.test.js && node tests/smoke.test.js && node tests/replay-resume.test.js",
+    "test": "node tests/mighty-engine.test.js && node tests/topguard.test.js && node tests/tfeedguard.test.js && node tests/cutguard.test.js && node tests/jcallguard.test.js && node tests/timing.test.js && node tests/smoke.test.js && node tests/replay-resume.test.js",
     "test:engine": "node tests/mighty-engine.test.js",
     "test:ui": "node tests/smoke.test.js",
     "serve": "node tools/serve.mjs",
