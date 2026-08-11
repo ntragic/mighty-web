@@ -3624,8 +3624,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.10.1';
-const APP_BUILD = '2026-08-11 빌드 — 마무리 국면 여유';
+const APP_VERSION = 'v2.10.2';
+const APP_BUILD = '2026-08-11 빌드 — 마지막 트릭 잔상 수정';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -3674,11 +3674,10 @@ const PRESETS = {
 };
 let settings = defaultSettings();
 let matchOver = false;
-// 마지막 트릭 전용 여유. 속도 설정·세팅 자동 진행과 무관하게 고정한다.
-//   HOLD  — 5장이 깔린 마무리 국면을 보여주는 시간(카드가 아직 화면에 있다)
-//   SETTLE— 트릭을 수거한 뒤 정산 화면으로 넘어가기 전 여유
+// 마지막 트릭에서 5장이 깔린 마무리 국면을 보여주는 시간. 속도 설정·세팅 자동
+// 진행과 무관하게 고정한다 — 그 화면이 판의 결말이라 줄일 대상이 아니다.
+// 수거 애니메이션 다음은 곧장 결과 화면이다(중간에 빈 판을 보여주지 않는다).
 const FINAL_TRICK_HOLD = 1400;
-const FINAL_TRICK_SETTLE = 500;
 const SPD = () => ({fast:{bot:250,pre:250,show:550,collect:250},
                     normal:{bot:550,pre:450,show:900,collect:340},
                     slow:{bot:900,pre:650,show:1400,collect:420}})[settings.ui.speed];
@@ -4595,12 +4594,19 @@ async function playWithAnimation(p, action){
     }
     SFX.collect();
     ghost=null;
-    render();
-    // 마지막 트릭이면 정산으로 넘어가기 전에 빈 판을 한 박자 보여준다
+    // 마지막 트릭에서 엔진은 _finishGame()으로 바로 빠져 pl.table을 비우지 않는다
+    // (mighty-engine.js: trickNo===HAND_SIZE면 table=[] 앞에서 return). 그래서 여기서
+    // 그냥 render()하면 방금 수거한 5장이 테이블에 되살아난다(제보 2026-08-11).
+    // 룰 구현인 엔진을 건드리지 않고, 마지막 트릭은 빈 테이블로 그린 뒤 곧장
+    // 결과 화면으로 넘긴다.
     if (isFinalTrick){
-      await sleep(FINAL_TRICK_SETTLE);
-      if (myGen!==stateGen){ busy=false; return; }
+      ghost={plays:[], winner:null};      // 테이블을 비운 상태로 고정
+      render();
+      busy=false;
+      pump();                              // → showSettlement()
+      return;
     }
+    render();
     if (game.friendRevealed && game.friendDecl && game.friendDecl.mode==='first' && game.play.history.length===1){
       toast(game.friend===null?t('초구를 주공이 승리 — 사실상 노프렌드'):tf('friendToast', NAMES[game.friend]));
     }
