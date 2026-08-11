@@ -49,7 +49,13 @@ ok(/isFinalTrick[\s\S]{0,200}ghost=\{plays:\[\]/.test(tail),
 ok(/isFinalTrick[\s\S]{0,300}pump\(\)/.test(tail),
    '마지막 트릭에서 곧장 결과 화면으로 넘기지 않는다');
 
-// 5) 세대 카운터 무효화가 홀드 뒤에도 걸려 있어야 한다(되돌리기·새 라운드 경합)
+// 5) 획득 점수카드 더미는 라운드가 끝날 때까지 남아야 한다.
+//    엔진이 마지막 트릭 종료 즉시 phase를 done으로 바꾸므로, play만 보고 그리면
+//    마지막 트릭을 보여주는 동안 더미가 먼저 사라진다(제보 2026-08-11).
+ok(/const inPlay = G && \(G\.phase==='play' \|\| G\.phase==='done'\)/.test(src),
+   "좌석 렌더가 'done' 구간을 포함하지 않는다 — 마지막 트릭에서 획득 더미가 사라진다");
+
+// 6) 세대 카운터 무효화가 홀드 뒤에도 걸려 있어야 한다(되돌리기·새 라운드 경합)
 const after = src.slice(iHold, iHold + 200);
 ok(/myGen!==stateGen/.test(after), '홀드 후 stateGen 무효화 검사가 없다');
 

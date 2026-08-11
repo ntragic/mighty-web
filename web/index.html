@@ -3624,8 +3624,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.10.2';
-const APP_BUILD = '2026-08-11 빌드 — 마지막 트릭 잔상 수정';
+const APP_VERSION = 'v2.10.3';
+const APP_BUILD = '2026-08-11 빌드 — 마무리 국면 표시 유지';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -4070,7 +4070,11 @@ function renderSeats(){
   // (매치 요약·복기에서 다른 판을 열람할 때 주공·프렌드 배지가 라이브 판의
   //  것으로 남아 "역할이 밀려 보이는" 버그의 원인이었다)
   const G = replay ? replay.g : game;
-  const inPlay = G && G.phase==='play';
+  // 'done'을 포함한다 — 엔진은 마지막 트릭이 끝나는 즉시 phase를 done으로 바꾸므로
+  // play만 보면 마지막 트릭을 보여주는 동안 획득 더미와 트릭/점수 표기가 먼저
+  // 사라진다(제보 2026-08-11). 라운드가 실제로 끝나는 시점(새 라운드 시작)까지
+  // 유지하고, 그때 phase가 bidding이 되며 자연히 지워진다.
+  const inPlay = G && (G.phase==='play' || G.phase==='done');
   for(let p=0;p<5;p++){
     const seat=$('#seat-'+p);
     seat.classList.toggle('turn', G && G.currentPlayer===p && G.phase!=='done');
