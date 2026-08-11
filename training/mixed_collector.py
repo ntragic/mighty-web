@@ -11,7 +11,9 @@ import torch
 
 from mighty_engine import MightyGame, parse_card, is_point, same, is_joker
 import mighty_encode
-from mighty_encode import MightyEnv, aux_labels, conv_target, A_PLAY0, cidx, idx_card
+from mighty_encode import (MightyEnv, aux_labels, conv_target, A_PLAY0, cidx,
+                           idx_card, A_PLAY_JOKERCALL, episode_future,
+                           future_targets, FUT_DIM)
 
 PERSONAS = ('gambler', 'balanced', 'careful')
 TIERS = ('intermediate', 'advanced')
@@ -297,8 +299,10 @@ class MixedCollector:
                 ca = -1
                 if self.conv and is_play:
                     ai_ = int(acts_np[j])
-                    tc = conv_target(g_, p, idx_card(ai_ - A_PLAY0)
-                                     if A_PLAY0 <= ai_ < A_PLAY0 + 52 else None)
+                    tc = conv_target(g_, p,
+                                     idx_card(ai_ - A_PLAY0)
+                                     if A_PLAY0 <= ai_ < A_PLAY0 + 52 else None,
+                                     act_jcall=(ai_ == A_PLAY_JOKERCALL))
                     if tc is not None:
                         ca = A_PLAY0 + cidx(tc)
                 self.open[i][p].append([o, m, int(acts_np[j]), float(logps_np[j]),
@@ -377,6 +381,7 @@ class MixedCollector:
                 agg['seat_n'] += len(self.net_seats[i])
                 winners = {t['trickNo']: t['winner']
                            for t in (pl_T['history'] if pl_T else [])}
+                summ = episode_future(g)          # 미래 예측 헤드 라벨 원천
                 for seat in self.net_seats[i]:
                     segs = self.open[i][seat]
                     R = float(rew[seat])
@@ -385,11 +390,17 @@ class MixedCollector:
                     # 낸 점수카드 중 주공에게 간 비율 (사람이 읽는 협력 신호와 동일 정의)
                     if role == 1 and self.feed_coef and played_pts:
                         R += self.feed_coef * fed / played_pts
+                    # 내 팀 좌석 — 미래 트릭·점수를 누구 것으로 셀지
+                    if role in (0, 1):
+                        team = {x for x in (decl, fr) if x is not None}
+                    else:
+                        team = {p_ for p_ in range(5) if p_ != decl and p_ != fr}
                     for rec in segs:
                         _, sl, tl, tno, ca, mk, jk = rec.pop()
                         w = winners.get(tno)
                         lw = -1 if w is None else (w - seat) % 5
-                        traj.append(rec + [R, role, lab, sl, tl, lw, ca, mk, jk])
+                        fut = np.array(future_targets(summ, team, tno), dtype=np.float32)
+                        traj.append(rec + [R, role, lab, sl, tl, lw, ca, mk, jk, fut])
                 fresh.append(self._reset_env(i))
             if fresh:
                 self._rpc({'new': fresh})   # 같은 env id로 덮어쓴다 (drop 불필요)

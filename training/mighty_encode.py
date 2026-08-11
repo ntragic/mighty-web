@@ -448,7 +448,59 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
     return o
 
 
-def conv_target(game, me, act_card=None):
+def episode_future(game):
+    """끝난 판을 트릭별 승자·점수와 마이티·기루다 소진 시점으로 요약한다.
+    미래 예측 보조 헤드(docs/LOOKAHEAD-PLAN.md 1단계)의 라벨 원천이다.
+    에피소드가 끝나야 알 수 있으므로 수집기의 종료 처리에서 역채움한다."""
+    pl = getattr(game, 'play', None)
+    if not pl:
+        return None
+    gi = game.contract['giruda'] if game.contract else 'N'
+    win, pts = {}, {}
+    mighty_t, trump_t = -1, -1
+    for t in pl['history']:
+        no = t['trickNo']
+        win[no] = t['winner']
+        pts[no] = sum(1 for e in t['plays'] if is_point(e['card']))
+        for e in t['plays']:
+            c = e['card']
+            if is_joker(c):
+                continue
+            if same(c, game.mighty_card):
+                mighty_t = no
+            elif gi != 'N' and c[0] == gi:
+                trump_t = max(trump_t, no)          # 기루다가 마지막으로 나온 트릭
+    return {'win': win, 'pts': pts, 'mighty_t': mighty_t, 'trump_t': trump_t}
+
+
+FUT_DIM = 4
+
+
+def future_targets(summ, team, tno):
+    """트릭 tno(포함) 이후의 미래 요약 4종. 라벨 −1은 마스크(학습에서 제외).
+
+      0: 남은 트릭 중 우리 팀이 딸 개수 /10      — 템포의 직접 지표
+      1: 남은 트릭에서 우리 팀이 얻을 점수 /20   — 컷·보태기의 진짜 값
+      2: 마이티가 나올 때까지 남은 트릭 /10      — 이미 나왔으면 마스크
+      3: 기루다가 소진될 때까지 남은 트릭 /10    — 소진 루틴의 시야
+    """
+    if summ is None or tno is None or tno < 1:
+        return [-1.0] * FUT_DIM
+    ft = fp = 0
+    for no, w in summ['win'].items():
+        if no < tno:
+            continue
+        if w in team:
+            ft += 1
+            fp += summ['pts'][no]
+    mi = summ['mighty_t'] - tno
+    tg = summ['trump_t'] - tno
+    return [ft / 10.0, fp / 20.0,
+            mi / 10.0 if summ['mighty_t'] >= tno else -1.0,
+            tg / 10.0 if summ['trump_t'] >= tno else -1.0]
+
+
+def conv_target(game, me, act_card=None, act_jcall=False):
     """E2 관례 증류 교사 — 개입 인증을 통과한 클래스에서만 목표 카드를 돌려준다.
 
     좌석 가시 정보만 쓴다(전지적 판정 금지 — 잠금 판정은 배포 가드와 같은
@@ -463,10 +515,30 @@ def conv_target(game, me, act_card=None):
              (+166.8±113.7 유의 이득 — 2026-08-07 인증, 2,400시드.
               리드 무늬 선택까지 강제하는 any는 +69±260 중립이라 미인증 —
               클래스는 '기루다를 내기로 한 결정의 서열 교정'에 한정)
-    act_card: 정책이 이 상태에서 고른 카드(일반 카드 플레이일 때만, 아니면 None).
+      jcall: 프렌드 카드가 '조커'인 판에서 여당 좌석(주공·공개 프렌드, 조커 미보유)이
+             조커콜을 선언 → 선언을 떼고 같은 카드를 그냥 리드
+             (+1,101±254 유의 이득 — 2026-08-10 인증, 20,000시드 강제 페어드;
+              독립 배치 +1,052±205, 정책 자체 선택 판만 +765±511. jokerCallGuard)
+    act_card:  정책이 이 상태에서 고른 카드(일반 카드 플레이일 때만, 아니면 None).
+    act_jcall: 정책이 조커콜 액션(A_PLAY_JOKERCALL)을 골랐는가.
     반환: 목표 카드 또는 None.
     """
     if game.phase != 'play':
+        return None
+    # jcall — 조커 프렌드 판에서 여당의 조커콜. 목표는 '같은 카드를 콜 없이 리드'라
+    # 목표 카드 = 조커콜 카드 자신이다(액션 인덱스가 A_PLAY0+cidx로 바뀌면서 콜이 떨어진다).
+    if act_jcall:
+        fd = game.friend_decl
+        if fd and fd.get('mode') == 'card' and fd.get('card') and is_joker(fd['card']):
+            if not any(is_joker(c) for c in game.hands[me]):
+                ruling = (me == game.declarer
+                          or (game.friend_revealed and game.friend is not None
+                              and me == game.friend))
+                if ruling:
+                    jc = game.joker_call_card
+                    if any(same(m['card'], jc) for m in game.legal_plays(me)
+                           if not m.get('jokerCall')):
+                        return jc
         return None
     # tfeed — 공개 후 야당이, 여당이 최강인 기루다 리드 트릭에 이기지 못할 점수
     # 기루다를 태우면 최저 비점수 기루다 (2026-08-08 인증: 발화 판 주공 −895±446)

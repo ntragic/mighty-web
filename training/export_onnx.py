@@ -43,7 +43,7 @@ if __name__ == '__main__':
     hidden = ck.get('hidden', args.hidden)
     depth = ck.get('depth', args.depth)
     net = PolicyValueNet(hidden, depth, aux_head=ck.get('aux_head', False),
-                         attn=ck.get('attn', False))
+                         attn=ck.get('attn', False), fut_head=ck.get('fut_head', False))
     net.load_state_dict(ck['net']); net.eval()
     print(f'hidden {hidden} depth {depth} aux_head {ck.get("aux_head", False)}')
     model = PolicyOnly(net).eval()

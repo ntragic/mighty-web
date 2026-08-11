@@ -9,7 +9,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
 const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
 
-let fired = 0, held = 0;
+let fired = 0, held = 0, preFired = 0;
 for (let seed = 0; seed < 600; seed++) {
   const g = new E.MightyGame({ seed: 880000 + seed });
   const ag = new E.HeuristicAgent(E.PERSONAS.balanced, g.rng);
@@ -18,7 +18,7 @@ for (let seed = 0; seed < 600; seed++) {
   while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
     const p = g.currentPlayer;
     const a = ag.act(g);
-    if (g.phase === 'play' && a.type === 'play' && g.friendRevealed
+    if (g.phase === 'play' && a.type === 'play'
         && g.play.table.length > 0 && g.contract.giruda !== 'N') {
       const gi = g.contract.giruda;
       const pl = g.play;
@@ -31,6 +31,17 @@ for (let seed = 0; seed < 600; seed++) {
         const swapped = !E.sameCard(res.card, dump.card);
         if (swapped) {
           fired++;
+          if (!g.friendRevealed) {
+            // 공개 전 확장은 확정 야당 + 주공 최강 트릭에서만 발동해야 한다
+            const fd = g.friendDecl;
+            const holds = fd && fd.mode === 'card' && fd.card
+              && g.hands[p].some(x => E.sameCard(x, fd.card));
+            ok(p !== g.declarer && !holds, `공개 전인데 여당 좌석에 발동 seed=${seed}`);
+            let tb = [-2, -1], tp = -1;
+            for (const e of pl.table) { const k = g._cardStrength(e, pl); if (gt(k, tb)) { tb = k; tp = e.player; } }
+            ok(tp === g.declarer, `공개 전인데 주공 최강이 아닌 트릭에 발동 seed=${seed}`);
+            preFired++;
+          }
           // 교체 카드는 반드시 기루다·현재 최강을 이김·합법
           ok(res.card.suit === gi, `교체가 기루다 아님 seed=${seed}`);
           let bk = [-2, -1];
@@ -55,5 +66,5 @@ for (let seed = 0; seed < 600; seed++) {
 }
 ok(fired > 0, '교체 케이스 없음');
 ok(held > 0, '유지 케이스 없음');
-console.log(`cutguard: ${pass} passed, ${fail} failed (교체 ${fired} · 유지 ${held})`);
+console.log(`cutguard: ${pass} passed, ${fail} failed (교체 ${fired} · 그중 공개전 ${preFired} · 유지 ${held})`);
 process.exit(fail ? 1 : 0);
