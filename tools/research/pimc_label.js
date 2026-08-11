@@ -15,6 +15,10 @@
  *   env MODEL · SEED_BASE · TOPM(기본 4) · K(기본 32) · DEPTH(기본 3)
  *       SAMPLE(국면 샘플링 확률, 기본 0.25) · MARGIN(정책 1위와 탐색 1위가
  *       같으면 기록하지 않는 최소 이득, 기본 0 = 전부 기록)
+ *       JC_SAMPLE(조커콜 국면 샘플링 확률, 기본 1.0) · K_JC(조커콜 국면 결정화 수,
+ *       기본 200) — 조커콜은 기회가 1.2만 판에 242회로 극히 드물어 균등
+ *       샘플링하면 CE 신호가 컷에 묻힌다(v12에서 실측: 이득형 94.5→85.9%,
+ *       자해형 9.1→12.8%로 악화). 과표집하고 결정화도 늘려 라벨 품질을 올린다.
  */
 'use strict';
 const fs = require('fs');
@@ -31,6 +35,8 @@ const K = parseInt(process.env.K || '32', 10);
 const DEPTH = parseInt(process.env.DEPTH || '3', 10);
 const SAMPLE = parseFloat(process.env.SAMPLE || '0.25');
 const MARGIN = parseFloat(process.env.MARGIN || '0');
+const JC_SAMPLE = parseFloat(process.env.JC_SAMPLE || '1.0');
+const K_JC = parseInt(process.env.K_JC || '200', 10);
 
 const SUITS = ['S', 'D', 'H', 'C'];
 const allCards = () => {
@@ -137,7 +143,7 @@ async function valueOf(sess, g, seat) {
   for (let s = 0; s < E.NUM_PLAYERS; s++)
     ag.push(await AI.createAgent({ tier: 'master', session: sess, ort }));
 
-  let labeled = 0, changed = 0;
+  let labeled = 0, changed = 0, jcLabeled = 0;
   for (let i = 0; i < N; i++) {
     const seed = SEED0 + i;
     const rng = E.makeRng(seed);
@@ -148,7 +154,13 @@ async function valueOf(sess, g, seat) {
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
       const p = g.currentPlayer;
       const act = await ag[p].act(g, p);
-      if (g.phase === 'play' && act.type === 'play' && rnd() < SAMPLE) {
+      // 조커콜을 낼 수 있는 국면인가 — 드물고 결정적이라 과표집한다
+      const isJC = g.phase === 'play' &&
+        g._legalPlays(p).some(m => m.jokerCall);
+      const take = g.phase === 'play' && act.type === 'play' &&
+        (isJC ? rnd() < JC_SAMPLE : rnd() < SAMPLE);
+      if (take) {
+        const kUse = isJC ? K_JC : K;
         // 후보 — 정책 상위 TOPM
         let obs = M.encodeObs(g, p, []);
         const mask = M.legalMask(g, []);
@@ -165,7 +177,7 @@ async function valueOf(sess, g, seat) {
         const cands = idx.slice(0, TOPM);
         if (cands.length > 1) {
           const dets = [];
-          for (let k = 0; k < K; k++) { const d = determinize(g, p, rnd); if (d) dets.push(d); }
+          for (let k = 0; k < kUse; k++) { const d = determinize(g, p, rnd); if (d) dets.push(d); }
           if (dets.length >= 8) {
             const scores = [];
             for (const ci of cands) {
@@ -199,10 +211,11 @@ async function valueOf(sess, g, seat) {
               if (gain >= MARGIN) {
                 ws.write(JSON.stringify({
                   seed, dealer: g.dealer, cfg: g.config, upto: actions.length, seat: p,
-                  target: best.i, policyTop: polTop, gain: +gain.toFixed(4),
+                  target: best.i, policyTop: polTop, gain: +gain.toFixed(4), jc: isJC ? 1 : 0,
                   actions: actions.map(a => JSON.parse(JSON.stringify(a))),
                 }) + '\n');
                 labeled++;
+                if (isJC) jcLabeled++;
               }
             }
           }
@@ -215,6 +228,6 @@ async function valueOf(sess, g, seat) {
       process.stderr.write(`  ${i + 1}/${N}판 · 라벨 ${labeled} · 정책과 다른 목표 ${changed}\n`);
   }
   ws.end();
-  console.log(`라벨 ${labeled}건 · 그중 정책 1위와 다른 목표 ${changed}건 ` +
-    `(${(100 * changed / Math.max(1, labeled)).toFixed(1)}%) → ${OUT}`);
+  console.log(`라벨 ${labeled}건 (조커콜 국면 ${jcLabeled}건) · 정책 1위와 다른 목표 ` +
+    `${changed}건 (${(100 * changed / Math.max(1, labeled)).toFixed(1)}%) → ${OUT}`);
 })();
