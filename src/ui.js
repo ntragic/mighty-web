@@ -270,6 +270,10 @@ const TF = {
   fdHidden:(cn)=> LANG==='en' ? ` · friend <b>${cn}</b> (hidden)` : ` · 프렌드 <b>${cn}</b> (미공개)`,
   fdSelf:(cn)=> LANG==='en' ? ` · friend ${cn} (held by declarer — solo)` : ` · 프렌드 ${cn} (주공 보유·셀프)`,
   fdKnown:(nm)=> LANG==='en' ? ` · friend <b>${nm}</b>` : ` · 프렌드 <b>${nm}</b>`,
+  // 초구 프렌드는 지목한 카드가 없다. 그래서 공개 후 카드 프렌드와 표시가 같아져
+  // "무슨 카드로 불렀는지 사라졌다"로 읽힌다(제보). 방식을 남겨 끝까지 구분한다.
+  fdKnownFirst:(nm)=> LANG==='en' ? ` · friend <b>${nm}</b> (first trick)`
+                                  : ` · 프렌드 <b>${nm}</b> (초구)`,
   // 공개 후에도 '무슨 카드로 불렀는지'가 판을 읽는 정보라 카드와 이름을 함께 남긴다
   fdKnownCard:(cn,nm)=> LANG==='en' ? ` · friend <b>${cn}</b> → <b>${nm}</b>`
                                     : ` · 프렌드 <b>${cn}</b> → <b>${nm}</b>`,
@@ -349,8 +353,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.10.0';
-const APP_BUILD = '2026-08-11 빌드 — 선견가(v13) 합류, 탐색 교사 증류';
+const APP_VERSION = 'v2.10.5';
+const APP_BUILD = '2026-08-12 빌드 — 초구 프렌드 표기';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -399,6 +403,10 @@ const PRESETS = {
 };
 let settings = defaultSettings();
 let matchOver = false;
+// 마지막 트릭에서 5장이 깔린 마무리 국면을 보여주는 시간. 속도 설정·세팅 자동
+// 진행과 무관하게 고정한다 — 그 화면이 판의 결말이라 줄일 대상이 아니다.
+// 수거 애니메이션 다음은 곧장 결과 화면이다(중간에 빈 판을 보여주지 않는다).
+const FINAL_TRICK_HOLD = 1400;
 const SPD = () => ({fast:{bot:250,pre:250,show:550,collect:250},
                     normal:{bot:550,pre:450,show:900,collect:340},
                     slow:{bot:900,pre:650,show:1400,collect:420}})[settings.ui.speed];
@@ -791,7 +799,11 @@ function renderSeats(){
   // (매치 요약·복기에서 다른 판을 열람할 때 주공·프렌드 배지가 라이브 판의
   //  것으로 남아 "역할이 밀려 보이는" 버그의 원인이었다)
   const G = replay ? replay.g : game;
-  const inPlay = G && G.phase==='play';
+  // 'done'을 포함한다 — 엔진은 마지막 트릭이 끝나는 즉시 phase를 done으로 바꾸므로
+  // play만 보면 마지막 트릭을 보여주는 동안 획득 더미와 트릭/점수 표기가 먼저
+  // 사라진다(제보 2026-08-11). 라운드가 실제로 끝나는 시점(새 라운드 시작)까지
+  // 유지하고, 그때 phase가 bidding이 되며 자연히 지워진다.
+  const inPlay = G && (G.phase==='play' || G.phase==='done');
   for(let p=0;p<5;p++){
     const seat=$('#seat-'+p);
     seat.classList.toggle('turn', G && G.currentPlayer===p && G.phase!=='done');
@@ -873,7 +885,7 @@ function friendDeclText(){
   if (fd.mode==='none') return t(' · 노프렌드');
   if (fd.mode==='first'){
     if (!game.friendRevealed) return tf('fdFirstUnknown');
-    return game.friend===null ? t(' · 초구(주공 셀프)') : tf('fdKnown', NAMES[game.friend]);
+    return game.friend===null ? t(' · 초구(주공 셀프)') : tf('fdKnownFirst', NAMES[game.friend]);
   }
   if (!game.friendRevealed) return tf('fdHidden', cardLabel(fd.card));
   return game.friend===null ? tf('fdSelf', cardLabel(fd.card))
@@ -1291,6 +1303,13 @@ async function playWithAnimation(p, action){
     renderTrick();
     logLine(tf('logTrick', h.trickNo, NAMES[h.winner], h.points));
     await sleep(claimSpeed().show);
+    // 마지막 트릭은 여기서 판이 끝난다. 5장이 깔린 이 화면이 마무리 국면이라
+    // 속도 설정·세팅 자동 진행과 무관하게 더 보여준다(제보: 너무 빨리 사라진다).
+    const isFinalTrick = game.phase==='done' || game.play.history.length>=E.HAND_SIZE;
+    if (isFinalTrick){
+      await sleep(FINAL_TRICK_HOLD);
+      if (myGen!==stateGen){ busy=false; return; }
+    }
     // 수거 애니메이션
     if (!REDUCED && !claimMode){
       const to=seatAnchor(h.winner);
@@ -1308,6 +1327,18 @@ async function playWithAnimation(p, action){
     }
     SFX.collect();
     ghost=null;
+    // 마지막 트릭에서 엔진은 _finishGame()으로 바로 빠져 pl.table을 비우지 않는다
+    // (mighty-engine.js: trickNo===HAND_SIZE면 table=[] 앞에서 return). 그래서 여기서
+    // 그냥 render()하면 방금 수거한 5장이 테이블에 되살아난다(제보 2026-08-11).
+    // 룰 구현인 엔진을 건드리지 않고, 마지막 트릭은 빈 테이블로 그린 뒤 곧장
+    // 결과 화면으로 넘긴다.
+    if (isFinalTrick){
+      ghost={plays:[], winner:null};      // 테이블을 비운 상태로 고정
+      render();
+      busy=false;
+      pump();                              // → showSettlement()
+      return;
+    }
     render();
     if (game.friendRevealed && game.friendDecl && game.friendDecl.mode==='first' && game.play.history.length===1){
       toast(game.friend===null?t('초구를 주공이 승리 — 사실상 노프렌드'):tf('friendToast', NAMES[game.friend]));
@@ -1467,7 +1498,10 @@ function renderCheat(){
 
 /* ---------------- 세팅(전승 확정) 자동 플레이 ---------------- */
 let claimMode=false, claimShown=false, claimBy=null;
-const CLAIM_SPD={bot:0, pre:0, show:16, collect:0};
+// 세팅 자동 진행 속도. show는 트릭 5장이 다 깔린 상태를 보여주는 시간이라
+// 0에 가까우면 무슨 일이 있었는지 못 보고 지나간다(제보). 나머지는 빠르게 두고
+// 이 구간만 살려 둔다.
+const CLAIM_SPD={bot:0, pre:60, show:520, collect:0};
 function claimSpeed(){ return claimMode ? CLAIM_SPD : SPD(); }
 function sideOf(p){
   if (p===game.declarer) return t('여당');

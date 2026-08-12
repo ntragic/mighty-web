@@ -13,6 +13,8 @@ training/traces.jsonl
 training/jcall_states.jsonl
 training/pimc_labels_*.jsonl
 training/jc_labels_*.jsonl
+training/r2_labels_*.jsonl
+training/*_labels_*.jsonl
 training/__pycache__/
 __pycache__/
 *.pyc

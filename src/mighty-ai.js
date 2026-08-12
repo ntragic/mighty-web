@@ -363,6 +363,76 @@ function jokerCallGuard(game, seat, action) {
 }
 
 /**
+ * 기루다 보존 가드 — 못 이기는 트릭(현재 최강이 상대팀)에서 기루다를 버리려 할 때,
+ * 비기루다 합법수가 있으면 그쪽으로 바꾼다. **남은 패 3장 이하에서만** 발동한다.
+ *
+ * 기루다는 남기면 나중에 컷으로 트릭을 확정 회수한다. 그 값이 후반일수록 커지는데,
+ * 남은 카드가 적을수록 "그 기루다가 실제로 컷으로 쓰일" 확실성이 올라가기 때문이다.
+ * 중반에는 더 높은 기루다에 잡히거나 쓸 기회가 안 와서 이득이 상쇄된다 —
+ * 전 구간 인증이 발화 354판 +23±82 중립이었던 이유다(docs/trumpsave-cert.txt).
+ *
+ * 제보 2026-08-11 seed 343735975 트릭9: 마이티가 이미 나와 승패가 결정된 트릭에
+ * 야당이 기루다 점수카드(♣10)를 버리고 ♠10을 남겼다. 기루다를 남겼으면 마지막
+ * 트릭을 확정 컷으로 먹는다. PIMC 400벌: ♠10 버리기 +439±41 대 ♣10 버리기
+ * −220±70 — 차이 659점.
+ *
+ * 인증(v13, 60,000시드 페어드 · docs/trumpsave-late.txt): 발화 좌석 상금
+ * **+131.6±71.5**(n=322). 더 좁힌 남은 2장 한정은 +357.9±154.3(n=95)으로 효과가
+ * 크지만 교정 국면이 3분의 1이라, 그 부분집합을 포함하는 3장 기준을 택했다.
+ *
+ * 대체재가 점수카드가 아닐 때만 발동하는 변형은 **발화 0회**였다 — 모델은
+ * 비기루다 대체재가 점수카드일 때만 기루다를 버린다. 그 조건을 걸면 문제 국면이
+ * 전부 빠진다.
+ *
+ * 팀 판정은 좌석 가시 정보만 쓴다. 공개 후에는 팀이 보이고, 공개 전에는 확정
+ * 야당(비주공·카드 프렌드 미보유)이 주공 최강 트릭에서만 성립한다 — cutGuard의
+ * 공개 전 확장과 같은 논리다.
+ * 롤백: createAgent({trumpSaveGuard:false}).
+ */
+const TRUMP_SAVE_MAX_HAND = 3;
+
+function trumpSaveGuard(game, seat, action) {
+  try {
+    if (!action || action.type !== 'play' || game.phase !== 'play' || action.jokerCall) return action;
+    const pl = game.play;
+    if (!pl || !pl.table.length) return action;                    // 리드는 대상 아님
+    if (game.hands[seat].length > TRUMP_SAVE_MAX_HAND) return action;
+    const gi = game.contract ? game.contract.giruda : 'N';
+    if (gi === 'N') return action;
+    const c = action.card;
+    if (E.isJoker(c) || c.suit !== gi || E.sameCard(c, game.mightyCard)) return action;
+    const gt = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+    let bk = [-2, -1], bp = -1;
+    for (const e of pl.table) {
+      const k = game._cardStrength(e, pl);
+      if (gt(k, bk)) { bk = k; bp = e.player; }
+    }
+    if (bp < 0) return action;
+    if (gt(game._cardStrength({ player: seat, card: c }, pl), bk)) return action;  // 이기면 정당
+    // 그 트릭의 현재 최강이 상대팀인가
+    if (game.friendRevealed) {
+      const mine = seat === game.declarer || (game.friend !== null && seat === game.friend);
+      const best = bp === game.declarer || (game.friend !== null && bp === game.friend);
+      if (mine === best) return action;                            // 아군이 최강이면 방치 정당
+    } else {
+      const fd = game.friendDecl;
+      const holds = fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(x => E.sameCard(x, fd.card));
+      if (seat === game.declarer || holds) return action;
+      if (bp !== game.declarer) return action;
+    }
+    const beats = card => gt(game._cardStrength({ player: seat, card }, pl), bk);
+    const alts = game._legalPlays(seat).filter(m => !m.jokerCall && !E.isJoker(m.card)
+      && !E.sameCard(m.card, game.mightyCard) && m.card.suit !== gi && !beats(m.card));
+    if (!alts.length) return action;
+    // 점수 아닌 것 우선, 그중 최저
+    alts.sort((a, b) => (E.isPointCard(a.card) ? 1 : 0) - (E.isPointCard(b.card) ? 1 : 0)
+      || a.card.rank - b.card.rank);
+    return { type: 'play', card: alts[0].card };
+  } catch (e) { return action; }
+}
+
+/**
  * 확정승 컷 가드 — 공개 후, 리드 무늬 보이드인 좌석이 상대팀이 최강인 점수
  * 트릭을 두고 비기루다 버림을 선택하면, '가시 확정승'인 최저 기루다 컷으로
  * 교체한다. keyCardGuard(아끼기)의 역방향 — 먹어야 할 때 먹는다.
@@ -467,6 +537,10 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
   if (opts.topGuard !== false) x = tally('top', x, topLeadGuard(game, seat, x));
   if (opts.feedGuard !== false) x = tally('tfeed', x, tfeedGuard(game, seat, x));
   if (opts.cutGuard !== false) x = tally('cut', x, cutGuard(game, seat, x));
+  // 컷 다음이다 — cutGuard가 '먹어야 할 때 기루다로 먹기'를 먼저 보고, 그래도
+  // 못 먹는 트릭이면 여기서 기루다를 아낀다. 순서를 바꾸면 먹을 수 있는 트릭에서
+  // 기루다를 빼버린다.
+  if (opts.trumpSaveGuard !== false) x = tally('tsave', x, trumpSaveGuard(game, seat, x));
   if (opts.dleadGuard !== false) x = tally('dlead', x, await dleadGuard(session, ort, game, seat, x));
   if (opts.c1Guard === true) x = tally('c1', x, await c1Guard(session, ort, game, seat, x));
   return x;
@@ -554,7 +628,7 @@ async function createTable(opts = {}) {
 
 const api = { createAgent, createTable, loadMaster, applyGuards,
               keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
-              jokerCallGuard,
+              jokerCallGuard, trumpSaveGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;

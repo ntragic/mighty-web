@@ -1,6 +1,6 @@
 # 세션 인수인계 (신규 Claude 세션용)
 
-기준일 2026-08-11 · 게임 v2.10.0 라이브 · 브랜치 `feat/prereveal-cut-and-distill` · PR 대기.
+기준일 2026-08-12 · 게임 v2.10.4 라이브 · 브랜치 `feat/exit-round2` · PR 대기.
 
 이 문서는 새 세션이 맥락 없이 이 저장소를 이어받을 때 첫 번째로 읽는 글이다.
 학습 측(DGX Spark)에 넘기는 인계는 `docs/HANDOFF.md`가 따로 있고 기준 버전이
@@ -11,7 +11,7 @@ v0.17.0에서 멈춰 있으니 혼동하지 마라 — 룰 동기화 절차만 �
 
 ## 1. 지금 상태
 
-itch.io에 v2.10.0(빌드 #1873636)이 올라가 있다.
+itch.io에 v2.10.4(빌드 #1876674)가 올라가 있다.
 마스터 티어는 단일 모델이 아니라 세 세대를 좌석에 섞어 돌린다. 매치 시작 시
 좌석 배분을 정해 매치 내내 고정하고, 플레이 중에는 어느 좌석이 어느 모델인지
 노출하지 않으며(비딩이 읽히면 난이도가 흐려진다) 매치 종료 화면에서만 공개한다.
@@ -29,10 +29,10 @@ itch.io에 v2.10.0(빌드 #1873636)이 올라가 있다.
 대결에서 기력이 수렴했다(v13 대 v9 h2h +18±27 동등). 우열이 아니라 성향차로
 운영한다는 원칙은 그대로다. 코칭·복기 판정 대표는 v13이다.
 
-배포 경로에는 후처리 가드 7종이 걸려 있고, 실플레이 에이전트·코칭·AI 복기
+배포 경로에는 후처리 가드 8종이 걸려 있고, 실플레이 에이전트·코칭·AI 복기
 시뮬이 **같은 최종 경로**를 재사용한다. v2.9.0부터 그 경로는 함수 하나다 —
 `src/mighty-ai.js`의 `applyGuards()`. 순서는 jokerCallGuard → keyCardGuard → topLeadGuard →
-tfeedGuard → cutGuard → (async) dleadGuard → c1Guard 이고, 각 가드는
+tfeedGuard → cutGuard → trumpSaveGuard → (async) dleadGuard → c1Guard 이고, 각 가드는
 `createAgent({xxxGuard:false})`로 개별 해제된다. 예외적으로 **c1Guard만 기본
 OFF**라 `{c1Guard:true}`로 켠다(v9에서 근거 소멸). 가드를 추가·삭제·재정렬할
 땐 `applyGuards`만 고치면 세 표면에 동시에 반영된다 — 예전에는 세 곳에 체인이
