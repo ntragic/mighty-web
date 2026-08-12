@@ -349,8 +349,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.10.3';
-const APP_BUILD = '2026-08-11 빌드 — 마무리 국면 표시 유지';
+const APP_VERSION = 'v2.10.4';
+const APP_BUILD = '2026-08-12 빌드 — 기루다 보존 가드';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){

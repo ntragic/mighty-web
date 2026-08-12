@@ -35,7 +35,7 @@ const SEED0 = parseInt(process.env.SEED_BASE || '4100000', 10);
     if (g.phase === 'done') done++;
   }
   console.log(`${path.basename(MODEL)} 전좌석 마스터 · ${done}/${N}판 완주 · 플레이 액션 ${plays}회`);
-  for (const k of ['jcall', 'key', 'top', 'tfeed', 'cut', 'dlead', 'c1']) {
+  for (const k of ['jcall', 'key', 'top', 'tfeed', 'cut', 'tsave', 'dlead', 'c1']) {
     const c = cnt[k] || 0;
     console.log(`  ${k.padEnd(6)} ${String(c).padStart(5)}회  (${(100 * c / plays).toFixed(2)}%)`);
   }
