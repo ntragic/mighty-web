@@ -55,7 +55,16 @@ ok(/isFinalTrick[\s\S]{0,300}pump\(\)/.test(tail),
 ok(/const inPlay = G && \(G\.phase==='play' \|\| G\.phase==='done'\)/.test(src),
    "좌석 렌더가 'done' 구간을 포함하지 않는다 — 마지막 트릭에서 획득 더미가 사라진다");
 
-// 6) 세대 카운터 무효화가 홀드 뒤에도 걸려 있어야 한다(되돌리기·새 라운드 경합)
+// 6) 프렌드 표기는 공개 후에도 '어떻게 정해진 프렌드인지'가 남아야 한다.
+//    카드 프렌드는 카드가, 초구 프렌드는 '초구'가 그 자리를 채운다. 초구를
+//    fdKnown(이름만)으로 되돌리면 카드 프렌드와 구분이 안 된다(제보 2026-08-12).
+ok(/fdKnownCard:\(cn,nm\)/.test(src), '카드 프렌드 공개 후 표기(fdKnownCard)가 없다');
+ok(/fdKnownFirst:\(nm\)/.test(src), '초구 프렌드 공개 후 표기(fdKnownFirst)가 없다');
+ok(/mode==='first'[\s\S]{0,300}fdKnownFirst/.test(src),
+   "초구 프렌드 분기가 fdKnownFirst를 쓰지 않는다");
+ok(/fdKnownFirst[\s\S]{0,120}초구/.test(src), '초구 표기에 방식 표시가 없다');
+
+// 7) 세대 카운터 무효화가 홀드 뒤에도 걸려 있어야 한다(되돌리기·새 라운드 경합)
 const after = src.slice(iHold, iHold + 200);
 ok(/myGen!==stateGen/.test(after), '홀드 후 stateGen 무효화 검사가 없다');
 

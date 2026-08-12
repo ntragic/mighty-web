@@ -3619,6 +3619,10 @@ const TF = {
   fdHidden:(cn)=> LANG==='en' ? ` · friend <b>${cn}</b> (hidden)` : ` · 프렌드 <b>${cn}</b> (미공개)`,
   fdSelf:(cn)=> LANG==='en' ? ` · friend ${cn} (held by declarer — solo)` : ` · 프렌드 ${cn} (주공 보유·셀프)`,
   fdKnown:(nm)=> LANG==='en' ? ` · friend <b>${nm}</b>` : ` · 프렌드 <b>${nm}</b>`,
+  // 초구 프렌드는 지목한 카드가 없다. 그래서 공개 후 카드 프렌드와 표시가 같아져
+  // "무슨 카드로 불렀는지 사라졌다"로 읽힌다(제보). 방식을 남겨 끝까지 구분한다.
+  fdKnownFirst:(nm)=> LANG==='en' ? ` · friend <b>${nm}</b> (first trick)`
+                                  : ` · 프렌드 <b>${nm}</b> (초구)`,
   // 공개 후에도 '무슨 카드로 불렀는지'가 판을 읽는 정보라 카드와 이름을 함께 남긴다
   fdKnownCard:(cn,nm)=> LANG==='en' ? ` · friend <b>${cn}</b> → <b>${nm}</b>`
                                     : ` · 프렌드 <b>${cn}</b> → <b>${nm}</b>`,
@@ -3698,8 +3702,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.10.4';
-const APP_BUILD = '2026-08-12 빌드 — 기루다 보존 가드';
+const APP_VERSION = 'v2.10.5';
+const APP_BUILD = '2026-08-12 빌드 — 초구 프렌드 표기';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -4230,7 +4234,7 @@ function friendDeclText(){
   if (fd.mode==='none') return t(' · 노프렌드');
   if (fd.mode==='first'){
     if (!game.friendRevealed) return tf('fdFirstUnknown');
-    return game.friend===null ? t(' · 초구(주공 셀프)') : tf('fdKnown', NAMES[game.friend]);
+    return game.friend===null ? t(' · 초구(주공 셀프)') : tf('fdKnownFirst', NAMES[game.friend]);
   }
   if (!game.friendRevealed) return tf('fdHidden', cardLabel(fd.card));
   return game.friend===null ? tf('fdSelf', cardLabel(fd.card))
