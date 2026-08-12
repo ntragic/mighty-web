@@ -1,0 +1,4 @@
+mighty_master_v9.onnx vs mighty_master_v11b.onnx · 클래스 all · 결정화 200벌
+국면 280건 · 선택 동일 158건 · 갈린 122건
+갈린 국면에서 A − B 가치차 +37 ± 56
+→ 유의차 없음

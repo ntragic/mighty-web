@@ -1998,6 +1998,12 @@ const O = {}; let _d = 0;
 for (const [name, n] of _sec) { O[name] = _d; _d += n; }
 const OBS_DIM = _d;   // 702 (v4 모델은 앞 688)
 
+/** 가치 헤드 출력 스케일 — value는 좌석 관점 기대상금/2000이다
+ *  (training/mighty_encode.py의 PRIZE_SCALE·export_onnx.py 주석과 같은 값).
+ *  깊이 제한 롤아웃에서 종료 상금과 가치 헤드를 섞어 평균낼 때 반드시 이걸로 나눈다 —
+ *  섞인 스케일은 이득값을 국면 사이에서 비교할 때(--weight-by-gain) 편향이 된다. */
+const PRIZE_SCALE = 2000;
+
 /** 룰 설정 → 관측값. training/mighty_encode.py encode_rules와 반드시 같아야 한다. */
 function encodeRules(cfg) {
   const sc = (cfg && cfg.scoring) || {};
@@ -2420,7 +2426,7 @@ async function chooseAction(sess, ort, game, seat, pickBuffer) {
   return best;
 }
 
-const api = { OBS_DIM, ACTION_DIM, encodeObs, legalMask, actionToEngine, chooseAction, modelObsDim,
+const api = { OBS_DIM, ACTION_DIM, PRIZE_SCALE, encodeObs, legalMask, actionToEngine, chooseAction, modelObsDim,
               cidx, idxCard, setAblateFrev, setFriendCallFix };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyMaster = api;

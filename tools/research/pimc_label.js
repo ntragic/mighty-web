@@ -221,7 +221,7 @@ async function valueOf(sess, g, seat) {
                   sim.act(await ag[q].act(sim, q));
                 }
                 const v = sim.phase === 'done'
-                  ? sim.result.prizes[p] / 1000                   // 상금 스케일 맞춤
+                  ? sim.result.prizes[p] / M.PRIZE_SCALE          // 가치 헤드와 같은 스케일
                   : await valueOf(sess, sim, p);
                 sum += v; n++;
               }

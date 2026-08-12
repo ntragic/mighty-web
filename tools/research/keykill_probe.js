@@ -206,7 +206,7 @@ function features(g, seat) {
                     const q = sim.currentPlayer;
                     sim.act(await ag[q].act(sim, q));
                   }
-                  const v = sim.phase === 'done' ? sim.result.prizes[p] / 1000
+                  const v = sim.phase === 'done' ? sim.result.prizes[p] / M.PRIZE_SCALE
                     : await valueOf(sess, sim, p);
                   sum += v; n++;
                 }
@@ -238,7 +238,7 @@ function features(g, seat) {
     console.log(`조커콜이 1순위인 비율 — 깊이3 ${(100 * top1(jc, 'jcR3') / jc.length).toFixed(0)}% ` +
       `→ 끝까지 ${(100 * top1(jc, 'jcR0') / jc.length).toFixed(0)}%`);
     const dv = jc.filter(r => r.jcV3 != null && r.jcV0 != null)
-      .map(r => (r.jcV0 - r.jcV3) * 1000);
+      .map(r => (r.jcV0 - r.jcV3) * M.PRIZE_SCALE);   // 스케일 환원 — 상금 단위로 표시
     if (dv.length) {
       const m = dv.reduce((a, b) => a + b, 0) / dv.length;
       console.log(`조커콜 가치 변화(끝까지 − 깊이3) 평균 ${m >= 0 ? '+' : ''}${m.toFixed(0)} (n=${dv.length})`);

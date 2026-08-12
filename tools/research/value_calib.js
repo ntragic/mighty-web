@@ -4,12 +4,14 @@ const path=require('path'), ort=require('onnxruntime-node');
 const E=require(path.join(__dirname,'../../src/mighty-engine.js'));
 const AI=require(path.join(__dirname,'../../src/mighty-ai.js'));
 const M=require(path.join(__dirname,'../../src/mighty-master.js'));
-const MODEL=path.join(__dirname,'../../web/model/mighty_master_v6b.onnx');
+// env MODEL로 모델을 바꿔 잰다 — 가치 헤드를 탐색 말단 평가자로 쓸 때의 품질 비교용
+const MODEL=process.env.MODEL||path.join(__dirname,'../../web/model/mighty_master_v6b.onnx');
+const NGAME=parseInt(process.env.NGAME||'200',10);
 (async()=>{
   const sess=await ort.InferenceSession.create(MODEL);
   const PER=['gambler','balanced','careful'];
   const rows=[]; let seat=0;
-  for(let i=0;i<200;i++){
+  for(let i=0;i<NGAME;i++){
     const rng=E.makeRng(880000+i), g=new E.MightyGame({seed:880000+i});
     const ag=[];
     for(let s=0;s<5;s++) ag.push(s===seat
@@ -36,6 +38,7 @@ const MODEL=path.join(__dirname,'../../web/model/mighty_master_v6b.onnx');
   const n=rows.length;
   const mx=rows.reduce((a,r)=>a+r.v,0)/n, my=rows.reduce((a,r)=>a+r.y,0)/n;
   let sxy=0,sx=0,sy=0; for(const r of rows){sxy+=(r.v-mx)*(r.y-my); sx+=(r.v-mx)**2; sy+=(r.y-my)**2;}
+  console.log(`${path.basename(MODEL)} · ${NGAME}판`);
   console.log(`표본 ${n} | 상관 ${(sxy/Math.sqrt(sx*sy)).toFixed(3)}`);
   for(const lo of [1,4,7,10]){
     const g2=rows.filter(r=>r.t>=lo&&r.t<lo+3); if(!g2.length) continue;
