@@ -4,12 +4,12 @@
  *   중급(intermediate) 규칙 기반 휴리스틱. 팀이 확정된 뒤에만 협력한다.
  *   고급(advanced)     + 프렌드 미공개 구간의 확률적 아군 추론, 정체 추론 카운터,
  *                        마이티·조커 가드, 낮은 탐색 잡음.
- *   마스터(master)     신경망(mighty_master_v4.onnx). 자가대전 + 휴리스틱 파트너
+ *   마스터(master)     신경망. 자가대전 + 휴리스틱 파트너
  *                        혼합 학습. 관측 688차원.
  *
  * 사용:
  *   const AI = require('./mighty-ai.js');
- *   const session = await AI.loadMaster(ort, 'mighty_master_v4.onnx');   // 마스터만 필요
+ *   const session = await AI.loadMaster(ort, 'mighty_master_v13.onnx');  // 신경망 좌석에만 필요
  *   const agent = await AI.createAgent({ tier: 'master', session, ort });
  *   // 게임 루프에서 그 좌석 차례일 때:
  *   game.act(await agent.act(game, seat));
@@ -546,8 +546,10 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
   return x;
 }
 
-/** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
-async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
+/** onnxruntime 세션 생성. ort와 모델 경로는 호출자가 넘긴다
+ *  (v2.11부터 세 티어가 각자 다른 세대를 쓰므로 기본값을 두지 않는다). */
+async function loadMaster(ort, modelPath) {
+  if (!modelPath) throw new Error('loadMaster: modelPath required');
   return ort.InferenceSession.create(modelPath);
 }
 

@@ -2718,12 +2718,12 @@ else window.MightyAnalysis = api;
  *   중급(intermediate) 규칙 기반 휴리스틱. 팀이 확정된 뒤에만 협력한다.
  *   고급(advanced)     + 프렌드 미공개 구간의 확률적 아군 추론, 정체 추론 카운터,
  *                        마이티·조커 가드, 낮은 탐색 잡음.
- *   마스터(master)     신경망(mighty_master_v4.onnx). 자가대전 + 휴리스틱 파트너
+ *   마스터(master)     신경망. 자가대전 + 휴리스틱 파트너
  *                        혼합 학습. 관측 688차원.
  *
  * 사용:
  *   const AI = require('./mighty-ai.js');
- *   const session = await AI.loadMaster(ort, 'mighty_master_v4.onnx');   // 마스터만 필요
+ *   const session = await AI.loadMaster(ort, 'mighty_master_v13.onnx');  // 신경망 좌석에만 필요
  *   const agent = await AI.createAgent({ tier: 'master', session, ort });
  *   // 게임 루프에서 그 좌석 차례일 때:
  *   game.act(await agent.act(game, seat));
@@ -3260,8 +3260,10 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
   return x;
 }
 
-/** onnxruntime 세션 생성 (마스터 티어 전용). ort는 호출자가 넘긴다. */
-async function loadMaster(ort, modelPath = 'mighty_master_v4.onnx') {
+/** onnxruntime 세션 생성. ort와 모델 경로는 호출자가 넘긴다
+ *  (v2.11부터 세 티어가 각자 다른 세대를 쓰므로 기본값을 두지 않는다). */
+async function loadMaster(ort, modelPath) {
+  if (!modelPath) throw new Error('loadMaster: modelPath required');
   return ort.InferenceSession.create(modelPath);
 }
 
@@ -3370,6 +3372,7 @@ const I18N_EN = {
   '여당':'Attackers', '야당':'Defenders', '주공':'Declarer', '프렌드':'Friend',
   '여당 승리':'Attackers win', '야당 승리':'Defenders win', '관전':'Spectate',
   '책사':'Strategist', '수문장':'Gatekeeper', '정석가':'Purist', '선견가':'Foreseer',
+  '조율가':'Balancer', '기억가':'Recaller', '수련생':'Apprentice',
   '여당 (주공)':'Attacker (declarer)', '여당 (프렌드)':'Attacker (friend)',
   '여당 (숨은 프렌드)':'Attacker (hidden friend)', '미정 (초구 프렌드)':'Undecided (first-trick friend)',
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
@@ -3464,6 +3467,14 @@ const I18N_EN = {
   '룰 변경은 다음 판부터 적용됩니다':'Rule changes apply from the next round',
   '리그 룰로 초기화':'Reset to league rules', '완료':'Done', '룰 설정':'Settings',
   // 마스터 티어
+  'AI 모델 로딩 중…':'Loading AI models…',
+  'AI 준비 완료':'AI ready',
+  'AI 모델을 불러오지 못했습니다. 규칙 기반으로 대체 진행합니다.':
+    'Could not load the AI models. Falling back to rule-based play.',
+  'AI 모델을 불러오지 못했습니다 — 규칙 기반으로 진행합니다':
+    'Could not load the AI models — playing rule-based',
+  '세 티어 모두 신경망 — 좌석 수와 세대로 난이도를 조절합니다':
+    'All three tiers use neural networks — difficulty scales by seat count and generation',
   '마스터 AI 로딩 중…':'Loading Master AI…',
   '마스터 AI 로딩 중… (최초 1회, 약 16MB)':'Loading Master AI… (one-time, ~16 MB)',
   '마스터 AI 준비 완료':'Master AI ready',
@@ -3705,11 +3716,17 @@ const TF = {
   exportBlocked:(c,kb)=> LANG==='en'
     ? `Download unavailable. ${c} round(s), ${kb} KB — copy the text below.`
     : `다운로드를 쓸 수 없습니다. ${c}개 라운드, ${kb} KB — 아래 내용을 복사하세요.`,
+  nnLoading:(mb)=> LANG==='en' ? `Loading AI models… (one-time, ~${mb} MB)`
+                               : `AI 모델 로딩 중… (최초 1회, 약 ${mb}MB)`,
+  nnReady:(n)=> LANG==='en' ? `Ready — ${n} of 4 seats play with a neural network.`
+                            : `준비 완료 — 네 좌석 중 ${n}자리가 신경망으로 플레이합니다.`,
+  nnFirstUse:(mb)=> LANG==='en' ? `Models download on first use (~${mb} MB).`
+                                : `첫 사용 시 모델을 내려받습니다(약 ${mb}MB).`,
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.10.6';
-const APP_BUILD = '2026-08-14 빌드 — 혼합 풀 조정';
+const APP_VERSION = 'v2.11.0';
+const APP_BUILD = '2026-08-14 빌드 — 전 티어 신경망';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -3857,15 +3874,14 @@ function renderSetGeneral(b,S){
     inp.onchange=()=>{ S.names[p]=inp.value; applyNames(); saveSettings(); renderSettings(); render(); };
     row.append(inp); b.append(row);
   }
-  b.append(segRow(t('난이도'),t('중급·고급은 규칙 기반, 마스터는 신경망(16MB 다운로드)'),
+  b.append(segRow(t('난이도'),t('세 티어 모두 신경망 — 좌석 수와 세대로 난이도를 조절합니다'),
     [{v:'intermediate',l:t('중급')},{v:'advanced',l:t('고급')},{v:'master',l:t('마스터')}],
     ()=>TIER_OF[S.ui.difficulty]||'intermediate',
-    v=>{ S.ui.difficulty=v; if(v==='master') ensureMaster(); else buildAgents(); }));
-  if (S.ui.difficulty==='master')
-    b.append(el('div','hint', masterState==='ready' ? t('마스터 AI 로드 완료 — 신경망 추론으로 플레이합니다.')
-      : masterState==='loading' ? t('마스터 AI 로딩 중…')
-      : masterState==='failed' ? t('마스터 AI를 불러오지 못했습니다. 고급 전략으로 대체 진행합니다.')
-      : t('마스터 AI는 첫 사용 시 모델을 내려받습니다.')));
+    v=>{ S.ui.difficulty=v; ensureNN(); }));
+  b.append(el('div','hint', masterState==='ready' ? tf('nnReady', nnSeatCount(currentTier()))
+    : masterState==='loading' ? t('AI 모델 로딩 중…')
+    : masterState==='failed' ? t('AI 모델을 불러오지 못했습니다. 규칙 기반으로 대체 진행합니다.')
+    : tf('nnFirstUse', nnSizeMB(currentTier()))));
   // v2 코칭 — 기본 OFF. 켜면 마스터 모델을 로드해 내 차례에 추천 카드를 표시한다
   b.append(segRow(t('코칭 (마스터 추천 카드)'), t('플레이 중 마스터가 낼 카드를 손패에 표시합니다'),
     [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
@@ -3998,39 +4014,72 @@ let agentsReady = false;
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
 const MASTER_MODEL='./model/mighty_master_v13.onnx';
-/* 혼합 운영 — 좌석마다 다른 세대를 앉혀 성향차를 낸다.
+/* 티어별 좌석 구성 — 난이도를 실측으로 벌린다.
+ *
+ * v2.11 이전에는 중급·고급이 규칙기반, 마스터만 신경망이었다. 그런데 사람 자리를
+ * 고정 기준 좌석으로 두고 네 좌석을 채워 재보니(tools/research/table_difficulty.js,
+ * 3,000판) **규칙기반 두 티어가 구분되지 않았다** — 중급 −3.4±78.6 vs 고급
+ * −8.2±79.8. 이름만 다른 같은 난이도였다.
+ *
+ * 그래서 중급부터 신경망을 넣되 좌석 수로 난이도를 조절한다. 낮을수록 어렵다:
+ *   중급  v5 1좌석 + 규칙기반 3   −158.8 ± 75.6   (내려받기 4MB)
+ *   고급  v8·v6b 각 2좌석         −249.8 ± 64.4   (13MB)
+ *   마스터 v13 + v11ctl 각 2좌석  −316.0 ± 59.6   (13MB)
+ * 신경망 좌석을 0→1→2로 늘릴 때 난이도가 크게 움직이고 그 뒤로는 포화한다.
+ *
+ * 세대 선택 근거(docs/MODELS.md 기력 사다리·docs/difficulty*.txt):
+ * - 마스터는 최고 기력 둘. v12(+132.4)가 v13(+123.0)과 동률 1위지만 둘 다
+ *   고공약에서 조커를 아끼는 사각이 있다. v11ctl은 판당 40 낮은 대신 공약 20에서
+ *   조커를 75.2%로 내는 유일한 모델이고 조커콜 자해도 0%다. 두 조합의 실측
+ *   난이도가 −316 vs −318로 구분되지 않아 결함 프로필로 갈랐다.
+ * - 고급은 구세대 중 테이블 난이도가 중간인 v8·v6b. v5는 관례를 안 배운 세대라
+ *   개인 기량은 낮은데 네 좌석을 채우면 오히려 까다롭다(−278.5).
+ * - v9는 v2.10.6에서 고공약 프렌드 결함으로 하차했다.
+ *
  * 플레이 중 비노출(비딩 읽힘 방지 — 페르소나와 같은 원칙), 매치 종료 화면에서
- * 사후 공개. 코칭·AI 복기 판정은 항상 대표(MASTER_MODEL=v13).
- * v2.10: 좌석 배분을 추첨에서 **고정 배분 후 섞기**로 바꿨다 — 추첨이면 한
- * 세대가 네 좌석을 모두 차지하는 판이 생겨 성향차라는 취지가 흐려진다.
- * v2.10.6: 책사(v9)를 풀에서 내렸다. 고공약(여유 0) 판에서 프렌드가 조커를
- * 아끼는 결함이 제보로 드러났고(seed 386134368 트릭3), 같은 국면에서 v13·v8은
- * 조커를 1순위로 내는데 v9만 3순위로 밀었다. 그 자리는 v13이 받는다 — v8을
- * 늘리면 성향은 다양해지나 v8이 v9/v13보다 판당 86 약해(9,000판 h2h) 기력이
- * 내려간다. 상세는 docs/MODELS.md. */
-const MASTER_POOL=[
-  { id:'v13', file:'./model/mighty_master_v13.onnx', nick:'선견가' },
-  { id:'v8', file:'./model/mighty_master_v8.onnx', nick:'수문장' },
-];
-const SEAT_PLAN=['v13','v13','v13','v8'];    // AI 좌석 4개에 배분할 모델
+ * 사후 공개. 코칭·AI 복기 판정은 티어와 무관하게 항상 대표(MASTER_MODEL=v13). */
+const NN_POOL={
+  v13:   { file:'./model/mighty_master_v13.onnx',    nick:'선견가' },
+  v11ctl:{ file:'./model/mighty_master_v11ctl.onnx', nick:'조율가' },
+  v8:    { file:'./model/mighty_master_v8.onnx',     nick:'수문장' },
+  v6b:   { file:'./model/mighty_master_v6b.onnx',    nick:'기억가' },
+  v5:    { file:'./model/mighty_master_v5.onnx',     nick:'수련생' },
+};
+const HEUR='H';                              // 규칙기반 좌석 표식
+const TIER_PLAN={
+  intermediate: ['v5',  HEUR,     HEUR,  HEUR    ],
+  advanced:     ['v8',  'v6b',    'v8',  'v6b'   ],
+  master:       ['v13', 'v11ctl', 'v13', 'v11ctl'],
+};
 let masterSessions={};                       // id → onnx session (지연 로드 캐시)
-let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id — 매치 내 고정
-function poolOf(id){ return MASTER_POOL.find(m=>m.id===id); }
+let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id 또는 HEUR — 매치 내 고정
+function poolOf(id){ return NN_POOL[id]||null; }
+function planFor(tier){ return TIER_PLAN[tier]||TIER_PLAN.intermediate; }
+/** 그 티어가 쓰는 신경망 id 목록 (중복 제거) */
+function nnIdsFor(tier){ return [...new Set(planFor(tier).filter(x=>x!==HEUR))]; }
+/** 그 티어의 신경망 좌석 수 · 내려받기 용량(MB) — 설정 화면 안내용 */
+function nnSeatCount(tier){ return planFor(tier).filter(x=>x!==HEUR).length; }
+const NN_MB={ v13:6.5, v11ctl:6.5, v8:6.5, v6b:6.5, v5:4 };
+function nnSizeMB(tier){
+  const n=nnIdsFor(tier).reduce((a,id)=>a+(NN_MB[id]||6.5),0);
+  return Number.isInteger(n) ? n : n.toFixed(1);
+}
 async function loadPoolModel(id){
   if (masterSessions[id]) return masterSessions[id];
   const m=poolOf(id);
+  if (!m) throw new Error('unknown model: '+id);
   masterSessions[id]=await MightyAI.loadMaster(ortLib, m.file);
   return masterSessions[id];
 }
-/** 매치 시작 시 AI 좌석 모델 추첨 + 필요 모델 지연 로드 */
-async function assignSeatModels(){
-  const plan=SEAT_PLAN.slice();
+/** 매치 시작 시 좌석 배정 + 그 티어에 필요한 모델만 지연 로드 */
+async function assignSeatModels(tier){
+  const plan=planFor(tier).slice();
   for(let i=plan.length-1;i>0;i--){          // 피셔-예이츠 — 좌석 순서만 섞는다
     const j=Math.floor(Math.random()*(i+1));
     [plan[i],plan[j]]=[plan[j],plan[i]];
   }
   for(let p=1;p<5;p++) seatModels[p]=plan[p-1];
-  await Promise.all([...new Set(seatModels.slice(1))].map(loadPoolModel));
+  await Promise.all(nnIdsFor(tier).map(loadPoolModel));
 }
 const ORT_LOCAL='./ort/ort.wasm.min.js';                      // 번들 동봉(오프라인 가능)
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
@@ -4041,54 +4090,80 @@ function loadScript(src){
     document.head.appendChild(s);
   });
 }
-async function ensureMaster(){
-  if (masterState==='ready'||masterState==='loading') return masterState==='ready';
-  masterState='loading'; renderSettings();
-  toast(t('마스터 AI 로딩 중… (최초 1회, 약 16MB)'), 2600);
+/** onnxruntime 로드 (1회) */
+async function ensureOrt(){
+  if (ortLib) return ortLib;
+  if (!window.ort){
+    try{ await loadScript(ORT_LOCAL); }           // 로컬 번들 우선
+    catch(e){ await loadScript(ORT_CDN); }        // 없으면 CDN 폴백
+  }
+  ortLib=window.ort;
+  if (!ortLib) throw new Error('onnxruntime unavailable');
   try{
-    if (!window.ort){
-      try{ await loadScript(ORT_LOCAL); }         // 로컬 번들 우선
-      catch(e){ await loadScript(ORT_CDN); }      // 없으면 CDN 폴백
-    }
-    ortLib=window.ort;
-    if (!ortLib) throw new Error('onnxruntime unavailable');
-    try{
-      ortLib.env.wasm.wasmPaths = new URL('./ort/', document.baseURI).href;
-      ortLib.env.wasm.numThreads = 1;            // COOP/COEP 헤더 없는 정적 호스팅 대응
-    }catch(e){}
-    masterSess=await MightyAI.loadMaster(ortLib, MASTER_MODEL);
-    masterSessions['v13']=masterSess;                // 대표 모델은 풀 캐시와 공유
-    if (!seatModels[1]) await assignSeatModels();    // 최초 로드 시 좌석 배정
+    ortLib.env.wasm.wasmPaths = new URL('./ort/', document.baseURI).href;
+    ortLib.env.wasm.numThreads = 1;              // COOP/COEP 헤더 없는 정적 호스팅 대응
+  }catch(e){}
+  return ortLib;
+}
+/** 현재 티어가 쓰는 신경망을 로드하고 좌석을 배정한다.
+ *  실패하면 그 티어의 규칙기반 좌석으로 떨어진다(게임은 계속 된다). */
+async function ensureNN(){
+  const tier = TIER_OF[settings.ui.difficulty] || 'intermediate';
+  const need = nnIdsFor(tier);
+  if (!need.length){ masterState='ready'; return true; }        // 규칙기반 전용 티어
+  if (masterState==='loading') return false;
+  if (masterState==='ready' && need.every(id=>masterSessions[id]) && seatModels[1]) return true;
+  masterState='loading'; renderSettings();
+  toast(tf('nnLoading', nnSizeMB(tier)), 2600);
+  try{
+    await ensureOrt();
+    await assignSeatModels(tier);
     masterState='ready';
-    await buildAgents();
-    toast(t('마스터 AI 준비 완료'), 1600);
+    await buildAgents(true);
+    toast(t('AI 준비 완료'), 1600);
   }catch(e){
     masterState='failed';
-    await buildAgents();
-    toast(t('마스터 AI 로드 실패 — 고급 전략으로 진행합니다'), 2600);
+    await buildAgents(true);
+    toast(t('AI 모델을 불러오지 못했습니다 — 규칙 기반으로 진행합니다'), 2600);
   }
   renderSettings();
   return masterState==='ready';
 }
+/** 코칭·AI 복기 판정용 대표 모델(v13) — 티어와 무관하게 항상 같은 저울을 쓴다. */
+async function ensureMaster(){
+  await ensureNN();
+  if (masterSess) return true;
+  try{
+    await ensureOrt();
+    masterSess = masterSessions['v13'] || await MightyAI.loadMaster(ortLib, MASTER_MODEL);
+    masterSessions['v13']=masterSess;
+    return true;
+  }catch(e){ return false; }
+}
 function masterActive(){ return currentTier()==='master'; }
 function currentTier(){
   const d = settings.ui.difficulty || 'intermediate';
-  const tier = TIER_OF[d] || 'intermediate';
-  if (tier==='master' && masterState!=='ready') return 'advanced';   // 폴백
-  return tier;
+  return TIER_OF[d] || 'intermediate';
 }
+/** 그 티어 좌석이 실제로 신경망을 쓰는가 (로드 실패 시 규칙기반으로 떨어진다) */
+function nnSeatsActive(){ return masterState==='ready' && !!seatModels[1]; }
 async function buildAgents(reassign){
   const tier = currentTier();
-  if (reassign || !botTable || botTable.tier !== tier){
-    // v2.8 혼합 운영 — 마스터 티어는 좌석별 배정 모델 세션 사용 (미배정/미로드는 대표로 폴백)
-    const sessions = tier==='master'
-      ? [null,1,2,3,4].map((_,p)=>p===0?null:(masterSessions[seatModels[p]]||masterSess))
-      : null;
+  const useNN = nnSeatsActive();
+  const key = tier + (useNN?':nn':'');
+  if (reassign || !botTable || botTable.tier !== key){
+    // 좌석별로 신경망/규칙기반이 섞인다 — NN 좌석은 master 티어 + 그 좌석 세션.
+    const tiers=[tier,tier,tier,tier,tier];
+    const sessions=[null,null,null,null,null];
+    if (useNN) for(let p=1;p<5;p++){
+      const id=seatModels[p];
+      if (id && id!==HEUR && masterSessions[id]){ tiers[p]='master'; sessions[p]=masterSessions[id]; }
+    }
     botTable = await MightyAI.createTable({
-      tiers: [tier, tier, tier, tier, tier],
-      rng: Math.random, session: masterSess, ort: ortLib, sessions,
+      tiers, rng: Math.random, session: masterSess, ort: ortLib,
+      sessions: useNN ? sessions : null,
     });
-    botTable.tier = tier;
+    botTable.tier = key;
   }
   for (let p=1; p<5; p++) agents[p] = botTable.agents[p];
   agentsReady = true;
@@ -5065,8 +5140,7 @@ async function openAnalysis(rec, seat){
     if (analysisBusy) return;
     analysisBusy=true;
     try{
-      await ensureMaster();
-      if (masterState!=='ready'){ $('#an-status').textContent=t('분석은 마스터 모델이 필요합니다'); return; }
+      if (!await ensureMaster()){ $('#an-status').textContent=t('분석은 마스터 모델이 필요합니다'); return; }
       const tick=()=>new Promise(r=>setTimeout(r,0));   // 프레임 양보 (메인 스레드 청크 실행)
       const st=()=>$('#an-status');
       const res=await MightyAnalysis.analyzeRound(masterSess, ortLib, rec, seat,
@@ -5292,7 +5366,7 @@ async function coachUpdate(){
   coachTipHide();
   if (!settings.ui.coach || !game || replay) return;
   if (game.phase!=='play' || game.currentPlayer!==HUMAN || busy) return;
-  if (masterState!=='ready'){ ensureMaster(); return; }
+  if (!masterSess){ ensureMaster(); return; }        // 코칭은 대표 모델이 필요하다
   try{
     // 마스터 좌석의 실제 플레이 경로와 완전히 동일해야 한다:
     // chooseAction(정책) → actionToEngine → keyCardGuard(낭비 차단 후처리).
@@ -5324,8 +5398,7 @@ async function openMatchSummary(){
     <div class="btnrow"><button class="btn ghost" id="an-close">${t('닫기')}</button></div>`;
   $('#modal').classList.add('show');
   $('#an-close').onclick=()=>showFinal();
-  await ensureMaster();
-  if (masterState!=='ready'){ const st=$('#an-status'); if(st) st.textContent=t('분석은 마스터 모델이 필요합니다'); return; }
+  if (!await ensureMaster()){ const st=$('#an-status'); if(st) st.textContent=t('분석은 마스터 모델이 필요합니다'); return; }
   const tick=()=>new Promise(r=>setTimeout(r,0));
   for (let i=0;i<recs.length;i++){
     const rec=recs[i];
@@ -6020,7 +6093,7 @@ function showFinal(){
     <div style="margin:4px 0 18px">
     ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
       <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
-        (currentTier()==='master'&&seatModels[p]?` <span class="style-tag">${t(poolOf(seatModels[p]).nick)}</span>`:'')}</div>
+        (nnSeatsActive()&&poolOf(seatModels[p])?` <span class="style-tag">${t(poolOf(seatModels[p]).nick)}</span>`:'')}</div>
       <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
     </div>`).join('')}</div>
     ${statsLineHtml()}
@@ -6086,11 +6159,11 @@ function renderLanding(){
   box.append(mk(t('언어'), [{v:'ko',l:'한국어'},{v:'en',l:'English'}], ()=>LANG, v=>setLang(v)));
   box.append(mk(t('난이도'), [{v:'intermediate',l:t('중급')},{v:'advanced',l:t('고급')},{v:'master',l:t('마스터')}],
     ()=>TIER_OF[settings.ui.difficulty]||'intermediate',
-    v=>{ settings.ui.difficulty=v; saveSettings(); if(v==='master') ensureMaster(); else buildAgents(); }));
+    v=>{ settings.ui.difficulty=v; saveSettings(); ensureNN(); }));
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -6099,7 +6172,7 @@ loadSettings().then(()=>{
   settings.ui.lang = LANG;
   document.documentElement.lang = LANG;
   applyNames(); applyStatic(); renderLanding();
-  buildAgents().then(()=>{ if(settings.ui.difficulty==='master') ensureMaster(); });
+  buildAgents().then(()=>ensureNN());          // 전 티어가 신경망을 쓴다 — 티어에 맞는 모델만 로드
 });
 $('#start-btn').onclick=()=>{ SFX.unlock(); $('#start').style.display='none'; newMatch(); };
 renderLanding();
