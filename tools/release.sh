@@ -21,12 +21,26 @@ node tests/mighty-engine.test.js > /dev/null && echo "엔진 테스트 통과"
 node tests/smoke.test.js > /dev/null 2>&1 && echo "UI 스모크 통과"
 node tests/replay-resume.test.js > /dev/null 2>&1 && echo "복기 재개 테스트 통과"
 
+# 배포에 넣을 모델은 빌드 결과가 실제로 참조하는 것만 고른다.
+# web/model에는 연구·비교용 세대가 함께 있어(v4·v7·v9·v11b·v12·v14…) 통째로
+# 담으면 zip이 90MB를 넘는다. 참조 목록은 index.html에서 뽑으므로 src/ui.js의
+# TIER_PLAN이 그대로 단일 소스가 된다.
+MODELS=$(grep -o 'mighty_master_[0-9a-z]*\.onnx' web/index.html | sort -u)
+[ -z "$MODELS" ] && { echo "실패: index.html이 참조하는 모델을 찾지 못했다"; exit 1; }
+for m in $MODELS; do
+  [ -f "web/model/$m" ] || { echo "실패: 참조 모델이 없다 — web/model/$m"; exit 1; }
+done
+echo "배포 모델: $(echo $MODELS | tr ' ' ' ')"
+UNUSED=$(cd web/model && ls *.onnx 2>/dev/null | grep -vxF "$MODELS" | tr '\n' ' ')
+[ -n "$UNUSED" ] && echo "번들 제외(연구용 보관): $UNUSED"
+
 mkdir -p dist
 ZIP="$(pwd)/dist/mighty-itch-$VER.zip"
 rm -f "$ZIP"
 cp docs/CHANGELOG.md web/CHANGELOG.md
-( cd web && zip -qr "$ZIP" index.html CHANGELOG.md model ort )
+MODEL_PATHS=$(for m in $MODELS; do echo "model/$m"; done)
+( cd web && zip -qr "$ZIP" index.html CHANGELOG.md ort $MODEL_PATHS )
 rm -f web/CHANGELOG.md
 
-echo "완료 → dist/mighty-itch-$VER.zip"
-unzip -l "$ZIP" | tail -4
+echo "완료 → dist/mighty-itch-$VER.zip ($(du -h "$ZIP" | cut -f1))"
+unzip -l "$ZIP" | tail -3

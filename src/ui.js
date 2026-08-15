@@ -368,8 +368,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.11.0';
-const APP_BUILD = '2026-08-14 빌드 — 전 티어 신경망';
+const APP_VERSION = 'v2.11.1';
+const APP_BUILD = '2026-08-15 빌드 — 딜 직후 정지 수정';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -796,16 +796,30 @@ async function buildAgents(reassign){
   const key = tier + (useNN?':nn':'');
   if (reassign || !botTable || botTable.tier !== key){
     // 좌석별로 신경망/규칙기반이 섞인다 — NN 좌석은 master 티어 + 그 좌석 세션.
-    const tiers=[tier,tier,tier,tier,tier];
+    // 신경망이 안 실린 좌석은 규칙기반으로 간다. 마스터 티어는 규칙기반 등가가
+    // 없으므로 고급으로 떨어뜨린다 — 이 폴백이 없으면 모델 로드 전 초기 빌드에서
+    // 다섯 좌석 전부 session 없는 master가 되어 createAgent가 던지고, agentsReady가
+    // 서지 않아 딜 직후 정지한다(v2.11.0 배포본 결함).
+    const base = tier==='master' ? 'advanced' : tier;
+    const tiers=[base,base,base,base,base];
     const sessions=[null,null,null,null,null];
     if (useNN) for(let p=1;p<5;p++){
       const id=seatModels[p];
       if (id && id!==HEUR && masterSessions[id]){ tiers[p]='master'; sessions[p]=masterSessions[id]; }
     }
-    botTable = await MightyAI.createTable({
-      tiers, rng: Math.random, session: masterSess, ort: ortLib,
-      sessions: useNN ? sessions : null,
-    });
+    try{
+      botTable = await MightyAI.createTable({
+        tiers, rng: Math.random, session: masterSess, ort: ortLib,
+        sessions: useNN ? sessions : null,
+      });
+    }catch(e){
+      // 어떤 이유로든 좌석을 못 만들면 순수 규칙기반으로 되돌린다.
+      // 여기서 던지면 agentsReady가 서지 않아 판 자체가 멈춘다.
+      masterState='failed';
+      botTable = await MightyAI.createTable({
+        tiers:[base,base,base,base,base], rng: Math.random,
+      });
+    }
     botTable.tier = key;
   }
   for (let p=1; p<5; p++) agents[p] = botTable.agents[p];
@@ -2569,7 +2583,10 @@ async function botStep(){
   let action;
   try{ action = await agents[p].act(game, p); }
   catch(e){
-    if (masterActive()){ masterState='failed'; await buildAgents(); }
+    // 신경망 좌석이 실패하면 티어와 무관하게 규칙기반으로 떨어뜨리고 다시 만든다.
+    // (v2.11.0에서 중급·고급에도 NN 좌석이 생겼는데 이 복구가 마스터 전용이라
+    //  실패 시 같은 에이전트를 다시 불러 또 던지고 판이 멈췄다.)
+    if (masterState==='ready'||masterState==='loading'){ masterState='failed'; await buildAgents(true); }
     action = await agents[p].act(game, p);
   }
   if (myGen!==stateGen){ busy=false; return; }
