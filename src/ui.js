@@ -368,8 +368,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.11.2';
-const APP_BUILD = '2026-08-15 빌드 — 좌석 배정·라벨 수정';
+const APP_VERSION = 'v2.11.3';
+const APP_BUILD = '2026-08-15 빌드 — 이른 마이티 리드 억제';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){

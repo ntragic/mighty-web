@@ -560,7 +560,7 @@ async function loadMaster(ort, modelPath) {
  */
 async function createAgent(opts = {}) {
   const { tier = 'intermediate', persona = 'balanced', rng = Math.random,
-          session = null, ort = null, revealPersona = false } = opts;
+          session = null, ort = null, revealPersona = false, weights = null } = opts;
   if (!TIERS.includes(tier)) throw new Error('unknown tier: ' + tier);
 
   if (tier === 'master') {
@@ -582,7 +582,9 @@ async function createAgent(opts = {}) {
     };
   }
 
-  const agent = new E.HeuristicAgent(E.PERSONAS[persona], rng, { tier });
+  // weights: 연구용 가중치 오버라이드 (구동작 고정 등). 배포 경로는 넘기지 않는다.
+  const agent = new E.HeuristicAgent(
+    weights ? { ...E.PERSONAS[persona], weights } : E.PERSONAS[persona], rng, { tier });
   return {
     tier, label: TIER_LABEL[tier],
     // 성향은 기본적으로 감춘다 — 화면에 새어나가면 상대를 읽는 단서가 된다.
