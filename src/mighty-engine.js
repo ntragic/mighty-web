@@ -862,7 +862,11 @@ const HEURISTIC_WEIGHTS = {
   // v2: 카운팅 기반
   beatRisk: 0.3,      // 미출현 상위 카드 1장당 뒤집힐 위험 가중
   friendGuard: 2.5,   // 여당이 이기는 트릭에 프렌드가 기루다/고카드 낭비 억제
-  mightyGate: 2.5,    // 저가치 트릭 마이티 소진 억제
+  mightyGate: 2.5,    // 저가치 트릭 마이티 소진 억제(팔로우)
+  // 이른 마이티 리드 억제 — 남은 트릭에 비례(T9부터 0). 0이면 억제 없음(구동작).
+  // 페어드 실측(발화 561딜): 0 → 8에서 발화 딜 여당 상금 +559 ±178, 전체 +203 ±54.
+  // 10·12도 같은 값에서 평탄해 최솟값 8을 쓴다.
+  mightyLeadGate: 8,
   // 고급 티어: 프렌드 미공개 구간의 아군 확률 (실측 기반 — 공개 전 비주공 승자의
   // 83%가 실제 야당, 17%가 숨은 프렌드)
   hiddenAllyPrior: 0.8,    // 야당 시점: 비주공 승자가 동료 야당일 확률
@@ -1289,8 +1293,17 @@ class HeuristicAgent {
           else s -= (1 - p.friendCoop) * 2;
         }
       } else if (sameCard(c, ctx.mighty)) {
-        s = ctx.pl.trickNo <= 2 && game.friendDecl && game.friendDecl.mode === 'card'
-            && isJoker(game.friendDecl.card) ? 8 : 2 + winProb * 3; // 조커프렌드면 초반 마이티 리드
+        // 조커프렌드 확인용 초반 마이티 리드는 관례다 — 그대로 둔다.
+        const probe = ctx.pl.trickNo <= 2 && game.friendDecl && game.friendDecl.mode === 'card'
+                      && isJoker(game.friendDecl.card);
+        if (probe) s = 8;
+        else {
+          // 마이티는 언제 내도 이긴다. 그래서 '지금 이길 트릭'을 사려고 리드에 쓰면
+          // 나중에 상대가 가져갈 큰 트릭을 끊을 보험을 버리는 셈이다. 남은 트릭이
+          // 많을수록 아낀다. 리드 점수는 winProb이 항상 1이라 상수 2.75였고,
+          // 대안 리드는 기루다 위험으로 감점돼 마이티가 늘 1위였다(제보 재현).
+          s = 2 + winProb * 3 - this.w.mightyLeadGate * Math.max(0, 9 - ctx.pl.trickNo) / 8;
+        }
       } else {
         s = winProb * 5 - (c.rank <= 9 ? 0.5 : 0) + (c.rank === 14 ? 1.5 : 0);
       }

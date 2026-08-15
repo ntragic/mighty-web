@@ -10,6 +10,7 @@
  * 사용: node table_difficulty.js <구성> [판수]
  *   구성: intermediate | advanced | NN이름(v13 등) | 'v13,v8' (혼합 — 좌석 순환)
  *   env REF(기준 좌석 티어, 기본 advanced) · SEED_BASE
+ *       REF_WOVR(기준 좌석 가중치 고정, 예: '{"mightyLeadGate":0}')
  */
 'use strict';
 const path = require('path');
@@ -19,6 +20,7 @@ const E = require(P('../../src/mighty-engine.js'));
 const AI = require(P('../../src/mighty-ai.js'));
 const SEED0 = parseInt(process.env.SEED_BASE || '73000000', 10);
 const REF = process.env.REF || 'advanced';
+const REF_WOVR = process.env.REF_WOVR ? JSON.parse(process.env.REF_WOVR) : null;
 const PER = ['gambler', 'balanced', 'careful'];
 
 (async () => {
@@ -41,7 +43,9 @@ const PER = ['gambler', 'balanced', 'careful'];
     const ag = [];
     for (let s = 0; s < E.NUM_PLAYERS; s++) {
       if (s === 0) {                                  // 사람 대역 — 전 구성에서 동일
-        ag.push(await AI.createAgent({ tier: REF, persona: PER[s % 3], rng }));
+        // REF_WOVR로 기준 좌석 가중치를 고정할 수 있다. 규칙기반 자체를 고칠 때
+        // 기준 좌석까지 같이 세지면 상대 실력이 함께 올라 난이도 비교가 무의미해진다.
+        ag.push(await AI.createAgent({ tier: REF, persona: PER[s % 3], rng, weights: REF_WOVR }));
         continue;
       }
       const pick = spec[(s - 1) % spec.length];       // 혼합이면 좌석 순환
