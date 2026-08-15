@@ -3372,7 +3372,7 @@ const I18N_EN = {
   '여당':'Attackers', '야당':'Defenders', '주공':'Declarer', '프렌드':'Friend',
   '여당 승리':'Attackers win', '야당 승리':'Defenders win', '관전':'Spectate',
   '책사':'Strategist', '수문장':'Gatekeeper', '정석가':'Purist', '선견가':'Foreseer',
-  '조율가':'Balancer', '기억가':'Recaller', '수련생':'Apprentice',
+  '조율가':'Balancer', '기억가':'Recaller', '수련생':'Apprentice', '규칙기반':'Rule-based',
   '여당 (주공)':'Attacker (declarer)', '여당 (프렌드)':'Attacker (friend)',
   '여당 (숨은 프렌드)':'Attacker (hidden friend)', '미정 (초구 프렌드)':'Undecided (first-trick friend)',
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
@@ -3725,8 +3725,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.11.1';
-const APP_BUILD = '2026-08-15 빌드 — 딜 직후 정지 수정';
+const APP_VERSION = 'v2.11.2';
+const APP_BUILD = '2026-08-15 빌드 — 좌석 배정·라벨 수정';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -4054,7 +4054,15 @@ const TIER_PLAN={
 let masterSessions={};                       // id → onnx session (지연 로드 캐시)
 let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id 또는 HEUR — 매치 내 고정
 function poolOf(id){ return NN_POOL[id]||null; }
-function planFor(tier){ return TIER_PLAN[tier]||TIER_PLAN.intermediate; }
+/** 티어 좌석 구성. 모르는 티어를 조용히 중급으로 떨어뜨리지 않는다 —
+ *  v2.11.0에서 assignSeatModels()를 인자 없이 불러 마스터 판에 중급 구성이
+ *  앉는 결함이 났다(제보: 마스터인데 라벨 없는 좌석). 호출부를 바로 드러낸다. */
+function planFor(tier){
+  const p=TIER_PLAN[tier];
+  if (p) return p;
+  console.warn('planFor: 알 수 없는 티어', tier, '— 중급 구성으로 대체');
+  return TIER_PLAN.intermediate;
+}
 /** 그 티어가 쓰는 신경망 id 목록 (중복 제거) */
 function nnIdsFor(tier){ return [...new Set(planFor(tier).filter(x=>x!==HEUR))]; }
 /** 그 티어의 신경망 좌석 수 · 내려받기 용량(MB) — 설정 화면 안내용 */
@@ -6110,7 +6118,7 @@ function showFinal(){
     <div style="margin:4px 0 18px">
     ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
       <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
-        (nnSeatsActive()&&poolOf(seatModels[p])?` <span class="style-tag">${t(poolOf(seatModels[p]).nick)}</span>`:'')}</div>
+        (nnSeatsActive()?` <span class="style-tag">${t(poolOf(seatModels[p])?poolOf(seatModels[p]).nick:'규칙기반')}</span>`:'')}</div>
       <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
     </div>`).join('')}</div>
     ${statsLineHtml()}
@@ -6125,8 +6133,10 @@ function showFinal(){
 }
 function newMatch(){
   matchHistory=[];
-  // v2.8: 매치마다 좌석 모델(성향) 재추첨 — 로드는 비동기, 완료 전엔 대표로 폴백
-  if (masterState==='ready') assignSeatModels().then(()=>buildAgents(true));
+  // v2.8: 매치마다 좌석 모델(성향) 재추첨 — 로드는 비동기, 완료 전엔 규칙기반 폴백.
+  // 티어를 반드시 넘긴다. v2.11.0에서 인자 없이 불러 planFor(undefined)가 중급
+  // 구성으로 떨어졌고, 마스터를 골라도 v5 한 좌석 + 규칙기반 셋이 앉았다.
+  if (masterState==='ready') assignSeatModels(currentTier()).then(()=>buildAgents(true));
   buildAgents(true);                      // 매치마다 좌석 성향 재배정
   matchLog = [];
   totals=[0,0,0,0,0]; roundNo=0; matchOver=false;
