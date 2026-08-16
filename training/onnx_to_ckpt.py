@@ -100,8 +100,10 @@ def main():
 
     os.makedirs(dst, exist_ok=True)
     path = os.path.join(dst, 'latest.pt')
+    # export_onnx가 확인하는 키까지 채워야 내보내기가 통과한다
     torch.save({'net': net.state_dict(), 'hidden': hidden, 'depth': depth,
                 'aux_head': False, 'attn': attn, 'fut_head': False,
+                'obs_dim': OBS_DIM, 'action_dim': ACTION_DIM,
                 'restored_from': os.path.basename(src)}, path)
     print(f'검증 통과 → {path}')
 
