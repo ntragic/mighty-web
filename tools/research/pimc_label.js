@@ -65,6 +65,11 @@ const K_CLASS = parseInt(process.env.K_CLASS || String(K_JC), 10);
 const DEPTH_CLASS = parseInt(process.env.DEPTH_CLASS || '0', 10);
 const SLACK_MAX = process.env.SLACK_MAX === undefined ? null : parseInt(process.env.SLACK_MAX, 10);
 const SLACK_MIN = process.env.SLACK_MIN === undefined ? null : parseInt(process.env.SLACK_MIN, 10);
+// KEY_SAMPLE: 프렌드 키카드(마이티·조커) 소비 국면 표집 확률. 개입 일반보다 좁다.
+const KEY_SAMPLE = parseFloat(process.env.KEY_SAMPLE || '0');
+// BID_MAX: 이 공약을 넘는 판은 표집하지 않는다. 19·20은 희소하고 계약이 이미
+// 깨져 있어 라벨이 퇴화한다(공약 20 강제 545건 중 이득>0.05가 4건이었다).
+const BID_MAX = parseInt(process.env.BID_MAX || '99', 10);
 
 /** 여당 여유 = (확보 점수 + 남은 점수) − 공약. 0이면 남은 점수를 전부 먹어야 한다.
  *  전부 공개 정보다 — 획득 더미와 지나간 트릭만 센다. */
@@ -78,6 +83,24 @@ function attackSlack(g) {
   for (const e of g.play.table)
     if (!E.isJoker(e.card) && e.card.rank >= 10) played++;
   return got + (20 - played) - g.contract.count;
+}
+
+/** 프렌드 키카드 소비 국면인가 — 마이티·조커를 지금 낼 수 있고 선택지가 있다.
+ *  2026-08-16 방향 전환: 개입 일반이 아니라 "키카드를 언제 쓰는가"가 표적이다.
+ *  주공 의도 읽기(주공이 약해지는 시점·내가 이어받을 카드 유무·공약 붕괴 직전)가
+ *  걸리는 지점이라 사람 주공과의 협력 품질을 좌우한다. 좌석 가시 정보만 쓴다. */
+function keySpendClass(g, p) {
+  if (g.phase !== 'play' || p === g.declarer) return null;
+  const fd = g.friendDecl;
+  const iAmFriend = fd && fd.mode === 'card' && fd.card &&
+    g.hands[p].some(c => E.sameCard(c, fd.card));
+  if (!iAmFriend) return null;
+  const hasKey = g.hands[p].some(c => E.isJoker(c) || E.sameCard(c, g.mightyCard));
+  if (!hasKey) return null;
+  const legal = g._legalPlays(p);
+  if (legal.length < 2) return null;
+  const canSpend = legal.some(mv => E.isJoker(mv.card) || E.sameCard(mv.card, g.mightyCard));
+  return canSpend ? 'keyspend' : null;
 }
 
 /** 프렌드 개입 국면인가 — 좌석 가시 정보만 쓴다. 'weaklead' | 'oppwin' | null */
@@ -273,15 +296,20 @@ async function valueOf(sess, g, seat) {
         }
       }
       // 프렌드 개입 국면 — 조커콜과 같은 이유로 드물고 결정적이라 따로 표집한다
-      let cls = CLASS_SAMPLE > 0 ? interveneClass(g, p) : null;
+      // KEY_SAMPLE>0이면 키카드 소비 국면을 우선 잡는다(개입 일반보다 좁고 중요하다)
+      let cls = (KEY_SAMPLE > 0 && rnd() < KEY_SAMPLE) ? keySpendClass(g, p) : null;
+      if (!cls) cls = CLASS_SAMPLE > 0 ? interveneClass(g, p) : null;
       const slack = cls ? attackSlack(g) : null;
       if (cls && SLACK_MAX !== null && slack > SLACK_MAX) cls = null;   // 여유가 넉넉하면 제외
       if (cls && SLACK_MIN !== null && slack < SLACK_MIN) cls = null;   // 이미 깨진 계약도 제외
+      if (cls && g.contract && g.contract.count > BID_MAX) cls = null;  // 희소 고공약 포기
+      const isKey = cls === 'keyspend' && !isJC;      // 선택 시점에 KEY_SAMPLE로 이미 걸렀다
       const isCls = !!cls && !isJC;
       const take = g.phase === 'play' && act.type === 'play' &&
         (isJC ? rnd() < JC_SAMPLE
+              : isKey ? true
               : isCls ? rnd() < CLASS_SAMPLE
-              : (!KEYKILL_ONLY && !CLASS_SAMPLE && rnd() < SAMPLE));
+              : (!KEYKILL_ONLY && !CLASS_SAMPLE && !KEY_SAMPLE && rnd() < SAMPLE));
       if (take) {
         const kUse = isJC ? K_JC : isCls ? K_CLASS : K;
         const dUse = isJC ? DEPTH_JC : isCls ? DEPTH_CLASS : DEPTH;
