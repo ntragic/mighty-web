@@ -33,11 +33,19 @@ ok(nn('advanced').length <= nn('master').length, '고급 NN 좌석이 마스터�
 ok(nn('intermediate').length >= 1, '중급에 신경망 좌석이 없다 — v2.11 설계와 어긋난다');
 ok(nn('master').length === 4, '마스터는 네 좌석 모두 신경망이어야 한다');
 
-// 마스터는 최고 기력 두 세대를 각 2좌석 (docs/MODELS.md 기력 사다리)
+// 마스터는 최고 기력 두 세대를 각 2좌석 (docs/MODELS.md 기력 사다리).
+// 예외: 한 세대를 사람이 직접 평가하는 평가판은 전좌석 단일 세대를 허용한다.
+// 배포 브랜치로 되돌릴 때 EVAL 표식과 함께 이 완화도 같이 지운다.
+const EVAL_BUILD = /평가판 \(eval\//.test(src);
 const mset = [...new Set(nn('master'))];
-ok(mset.length === 2, `마스터 풀이 2종이 아니다: ${mset.join(',')}`);
-for (const id of mset)
-  ok(nn('master').filter(x => x === id).length === 2, `마스터 ${id} 좌석이 2개가 아니다`);
+if (EVAL_BUILD) {
+  ok(mset.length === 1, `평가판 마스터가 단일 세대가 아니다: ${mset.join(',')}`);
+  console.log(`  평가판 구성 — 마스터 전좌석 ${mset[0]}`);
+} else {
+  ok(mset.length === 2, `마스터 풀이 2종이 아니다: ${mset.join(',')}`);
+  for (const id of mset)
+    ok(nn('master').filter(x => x === id).length === 2, `마스터 ${id} 좌석이 2개가 아니다`);
+}
 
 // v9는 고공약 프렌드 결함으로 v2.10.6에서 하차 — 어느 티어에도 없어야 한다
 for (const tier of ['intermediate', 'advanced', 'master'])

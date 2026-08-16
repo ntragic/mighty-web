@@ -369,7 +369,7 @@ const TF = {
 const tf = (k,...a) => TF[k](...a);
 
 const APP_VERSION = 'v2.11.3';
-const APP_BUILD = '2026-08-15 빌드 — 이른 마이티 리드 억제';
+const APP_BUILD = '2026-08-16 평가판 — 마스터 전좌석 v15 (배포본 아님)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -682,6 +682,7 @@ const MASTER_MODEL='./model/mighty_master_v13.onnx';
  * 플레이 중 비노출(비딩 읽힘 방지 — 페르소나와 같은 원칙), 매치 종료 화면에서
  * 사후 공개. 코칭·AI 복기 판정은 티어와 무관하게 항상 대표(MASTER_MODEL=v13). */
 const NN_POOL={
+  v15:   { file:'./model/mighty_master_v15.onnx',    nick:'견습생' },
   v13:   { file:'./model/mighty_master_v13.onnx',    nick:'선견가' },
   v11ctl:{ file:'./model/mighty_master_v11ctl.onnx', nick:'조율가' },
   v8:    { file:'./model/mighty_master_v8.onnx',     nick:'수문장' },
@@ -689,10 +690,14 @@ const NN_POOL={
   v5:    { file:'./model/mighty_master_v5.onnx',     nick:'수련생' },
 };
 const HEUR='H';                              // 규칙기반 좌석 표식
+// ── 평가판 (eval/v15) ────────────────────────────────────────────────
+// 마스터 네 좌석 전부 v15다. 사람이 v15만 상대해 인상을 잡기 위한 구성이며
+// 배포본이 아니다. 지표로는 v13과 구분되지 않았다(개입률 38.2% vs 38.1%,
+// 교사 일치만 0.548→0.586). 배포본 마스터는 v13·v11ctl 각 2좌석이다.
 const TIER_PLAN={
   intermediate: ['v5',  HEUR,     HEUR,  HEUR    ],
   advanced:     ['v8',  'v6b',    'v8',  'v6b'   ],
-  master:       ['v13', 'v11ctl', 'v13', 'v11ctl'],
+  master:       ['v15', 'v15',    'v15', 'v15'   ],
 };
 let masterSessions={};                       // id → onnx session (지연 로드 캐시)
 let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id 또는 HEUR — 매치 내 고정
@@ -1672,6 +1677,8 @@ function recStart(seed, cfg, dealer, g){
   roundRec = {
     round: roundNo, seed, dealer, cfg: JSON.parse(JSON.stringify(cfg)),
     version: APP_VERSION, tier: currentTier(), names: NAMES.slice(),
+    // 좌석별 신경망 세대 — 어느 모델이 그 수를 뒀는지 복기에서 바로 알 수 있다
+    seats: seatModels.slice(),
     hands0: g.hands.map(h => h.map(E.cardId)),
     floor0: g.floor.map(E.cardId),
     actions: [], result: null, ts: new Date().toISOString(),
