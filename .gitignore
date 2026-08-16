@@ -19,6 +19,8 @@ training/pimc_labels_*.jsonl
 training/jc_labels_*.jsonl
 training/r2_labels_*.jsonl
 training/*_labels_*.jsonl
+training/replay_labels.jsonl
+training/ckpt_v13/
 training/__pycache__/
 __pycache__/
 *.pyc

@@ -61,7 +61,7 @@ def pya(a):
 
 def build(paths, limit=None):
     """라벨 jsonl → (obs, mask, target) 텐서 재료"""
-    obs_l, mask_l, tgt_l, gain_l, jc_l = [], [], [], [], []
+    obs_l, mask_l, tgt_l, gain_l, jc_l, cls_l = [], [], [], [], [], []
     bad = 0
     files = []
     for p in paths:
@@ -87,17 +87,19 @@ def build(paths, limit=None):
                 obs_l.append(o); mask_l.append(m)
                 tgt_l.append(r['target']); gain_l.append(r.get('gain', 0.0))
                 jc_l.append(int(r.get('jc', 0)))
+                # 프렌드 개입 국면(weaklead·oppwin) — 2026-08-16 제보 2건에서 온 클래스
+                cls_l.append(1.0 if r.get('cls') else 0.0)
             except Exception:
                 bad += 1
             if limit and len(obs_l) >= limit:
                 break
         if limit and len(obs_l) >= limit:
             break
-    print(f'라벨 {len(obs_l)}건 적재 (조커콜 국면 {sum(jc_l)}건) · 재현 실패 {bad}건 · '
-          f'파일 {len(files)}개')
+    print(f'라벨 {len(obs_l)}건 적재 (조커콜 {sum(jc_l)}건 · 프렌드 개입 {int(sum(cls_l))}건) · '
+          f'재현 실패 {bad}건 · 파일 {len(files)}개')
     return (np.stack(obs_l), np.stack(mask_l),
             np.array(tgt_l, dtype=np.int64), np.array(gain_l, dtype=np.float32),
-            np.array(jc_l, dtype=np.float32))
+            np.array(jc_l, dtype=np.float32), np.array(cls_l, dtype=np.float32))
 
 
 def main():
@@ -115,6 +117,9 @@ def main():
     ap.add_argument('--jc-weight', type=float, default=1.0,
                     help='조커콜 국면 라벨의 CE 가중치. 과표집해도 전체의 1%% 수준이라 '
                          '균등 가중이면 신호가 컷에 묻힌다(v12 실측)')
+    ap.add_argument('--cls-weight', type=float, default=1.0,
+                    help='프렌드 개입 국면(weaklead·oppwin) 라벨의 CE 가중치. 조커콜과 같은 이유로 '
+                         '드물어서 균등 가중이면 신호가 묻힌다')
     ap.add_argument('--weight-by-gain', action='store_true',
                     help='탐색 이득 크기로 CE 가중 (작은 이득은 노이즈일 수 있다)')
     args = ap.parse_args()
@@ -134,7 +139,7 @@ def main():
     for p_ in anchor.parameters():
         p_.requires_grad_(False)
 
-    obs_np, mask_np, tgt_np, gain_np, jc_np = build(args.labels, args.limit or None)
+    obs_np, mask_np, tgt_np, gain_np, jc_np, cls_np = build(args.labels, args.limit or None)
     if len(obs_np) < 100:
         sys.exit('라벨이 너무 적다')
     obs = torch.as_tensor(obs_np, device=dev)
@@ -147,6 +152,10 @@ def main():
     w = w * torch.where(jc > 0, torch.full_like(w, args.jc_weight), torch.ones_like(w))
     print(f'  조커콜 라벨 {int(jc.sum().item())}건 · CE 가중 x{args.jc_weight} '
           f'(실효 비중 {100 * (w * jc).sum().item() / w.sum().item():.1f}%)')
+    cls_t = torch.as_tensor(cls_np, device=dev)
+    w = w * torch.where(cls_t > 0, torch.full_like(w, args.cls_weight), torch.ones_like(w))
+    print(f'  프렌드 개입 라벨 {int(cls_t.sum().item())}건 · CE 가중 x{args.cls_weight} '
+          f'(실효 비중 {100 * (w * cls_t).sum().item() / w.sum().item():.1f}%)')
 
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr)
     n = len(obs)
