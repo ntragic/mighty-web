@@ -33,3 +33,4 @@ _archive/
 *.deb
 *.zip
 *.tar.gz
+training/ckpt_v16/

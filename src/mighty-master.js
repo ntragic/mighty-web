@@ -45,7 +45,11 @@ const _sec = [['phase5',5],['hand53',53],['giruda6',6],['count8',8],['declarer_r
   ['rule_ctx14',14],
   // Phase B: 트릭 토큰 시퀀스(완료10+진행1, 토큰당 81) — v6 어텐션 모델 전용.
   // 앞 739만 읽는 v5 이하 모델은 그대로 동작한다. python encode와 반드시 동일.
-  ['trick_tok891',891]];
+  ['trick_tok891',891],
+  // v16: 주공 의도 추론 파생량. 원재료(공약·획득점수·탑카드)는 이미 있었으나
+  // 뺄셈·집계·소재추정이 없어 신경망이 매번 다시 만들어야 했다. 관측 끝에 붙여
+  // 앞 1630만 읽는 v15 이하 모델은 그대로 동작한다. python encode와 반드시 동일.
+  ['slack4',4],['table_pts3',3],['suit_top_cand16',16]];
 const O = {}; let _d = 0;
 for (const [name, n] of _sec) { O[name] = _d; _d += n; }
 const OBS_DIM = _d;   // 702 (v4 모델은 앞 688)
@@ -332,6 +336,65 @@ function encodeObs(game, me, pickBuffer) {
       o[O.key_cand9 + 4 + (r - 1)] = jCan ? 1 : 0;
     }
     o[O.key_cand9 + 8] = game.hands[me].length / 10;
+  }
+
+  // ---- v16: 주공 의도 추론 파생량 (python encode와 반드시 동일) ----
+  if (ph === 'play' && ct) {
+    const pl4 = game.play;
+    // (1) 공약 여유 — "공약 − 여당 확보 − 남은 점수". 재료는 count8·team_pts3에
+    //     있었지만 뺄셈이 없었다. 0 이하면 남은 점수를 전부 먹어야 한다.
+    let playedPts = 0;
+    for (const t of pl4.history)
+      for (const e of t.plays) if (!isJoker(e.card) && e.card.rank >= 10) playedPts++;
+    for (const e of pl4.table) if (!isJoker(e.card) && e.card.rank >= 10) playedPts++;
+    const leftPts = 20 - playedPts;
+    // 여당 확보 점수 — 내 시점에서 확정된 것만 센다(team_pts3와 같은 규칙)
+    const declP = game.declarer;
+    let rulingPts = pl4.capturedPoints[declP];
+    if (game.friendRevealed && game.friend != null && game.friend !== declP)
+      rulingPts += pl4.capturedPoints[game.friend];
+    else if (game.friendDecl && game.friendDecl.mode === 'card' && game.friendDecl.card &&
+             me !== declP && game.hands[me].some(c => sameCard(c, game.friendDecl.card)))
+      rulingPts += pl4.capturedPoints[me];
+    const slack = rulingPts + leftPts - ct.count;
+    o[O.slack4 + 0] = Math.min(1, Math.max(0, (slack + 10) / 20));   // 부호 있는 여유
+    o[O.slack4 + 1] = slack <= 0 ? 1 : 0;                            // 한 장도 못 잃는다
+    o[O.slack4 + 2] = leftPts / 20;
+    o[O.slack4 + 3] = Math.min(1, Math.max(0, ct.count - rulingPts) / 20); // 더 필요한 점수
+
+    // (2) 이번 트릭에 걸린 점수 — table4x54에 카드로만 있어 매번 세야 했다.
+    let tp = 0;
+    for (const e of pl4.table) if (!isJoker(e.card) && e.card.rank >= 10) tp++;
+    o[O.table_pts3 + 0] = tp / 5;
+    if (tp > 0) {
+      let best = null, bk = [-2, -1];
+      for (const e of pl4.table) {
+        const k = game._cardStrength(e, pl4);
+        if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+      }
+      if (best) {
+        const ally = best.player === declP ||
+          (game.friendRevealed && game.friend === best.player && best.player !== me);
+        o[O.table_pts3 + (ally ? 2 : 1)] = 1;    // 1=뺏기는 중 · 2=아군이 먹는 중
+      }
+    }
+
+    // (3) 무늬별 탑카드 소재 추정 — top_out8은 "밖에 무엇이 남았나"까지만 말하고
+    //     누가 들고 있을 법한지는 없었다. key_cand9의 무늬판이다.
+    const seen2 = new Set();
+    for (const t of pl4.history) for (const e of t.plays) seen2.add(cardId(e.card));
+    for (const e of pl4.table) seen2.add(cardId(e.card));
+    for (const c of game.hands[me]) seen2.add(cardId(c));
+    if (me === declP && game.discard) for (const c of game.discard) seen2.add(cardId(c));
+    for (let si = 0; si < 4; si++) {
+      const su = SUITS[si];
+      let topOut = 0;
+      for (let r = 14; r >= 2; r--) if (!seen2.has(su + r)) { topOut = r; break; }
+      for (let r = 1; r < 5; r++) {
+        const p = (me + r) % 5;
+        o[O.suit_top_cand16 + si * 4 + (r - 1)] = (topOut && !voidM[p][si]) ? 1 : 0;
+      }
+    }
   }
 
   // ---- Phase B: 트릭 토큰 (python encode의 트릭 토큰 절과 반드시 동일) ----
