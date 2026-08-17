@@ -61,6 +61,10 @@ const KEYKILL_ONLY = process.env.KEYKILL_ONLY === '1';
 const REC_DIR = process.env.REC_DIR || '';
 const FORCE_BID = parseInt(process.env.FORCE_BID || '0', 10);
 const CLASS_SAMPLE = parseFloat(process.env.CLASS_SAMPLE || '0');
+// CLASS_ONLY: 개입 클래스를 하나로 한정한다(예: weaklead). 표적이 한 클래스일 때
+//   다른 클래스 라벨이 섞이면 이동 예산(KL)을 나눠 쓰게 된다.
+const CLASS_ONLY = process.env.CLASS_ONLY || '';
+const ORT_THREADS = parseInt(process.env.ORT_THREADS || '0', 10);
 const K_CLASS = parseInt(process.env.K_CLASS || String(K_JC), 10);
 const DEPTH_CLASS = parseInt(process.env.DEPTH_CLASS || '0', 10);
 const SLACK_MAX = process.env.SLACK_MAX === undefined ? null : parseInt(process.env.SLACK_MAX, 10);
@@ -241,7 +245,11 @@ async function valueOf(sess, g, seat) {
     console.error(`복기 기록 ${RECS.length}건 로드 (${REC_DIR})`);
   }
   const N = REC_DIR ? RECS.length : parseInt(process.argv[3] || '300', 10);
-  const sess = await ort.InferenceSession.create(MODEL);
+  // ORT_THREADS: 배치 1 추론이라 스레드를 늘려도 이득이 없고, 갈래를 병렬로 돌리면
+  // 서로 코어를 뺏어 3갈래가 단일 실행보다 5배 느려진다(2026-08-17 실측).
+  // 병렬 라벨링에서는 갈래당 2~4로 묶어라.
+  const sess = await ort.InferenceSession.create(MODEL, ORT_THREADS
+    ? { intraOpNumThreads: ORT_THREADS, interOpNumThreads: 1 } : undefined);
   const ws = fs.createWriteStream(OUT);
   let seedCounter = 12345;
   const rnd = () => { seedCounter = (seedCounter * 1103515245 + 12345) & 0x7fffffff;
@@ -299,6 +307,7 @@ async function valueOf(sess, g, seat) {
       // KEY_SAMPLE>0이면 키카드 소비 국면을 우선 잡는다(개입 일반보다 좁고 중요하다)
       let cls = (KEY_SAMPLE > 0 && rnd() < KEY_SAMPLE) ? keySpendClass(g, p) : null;
       if (!cls) cls = CLASS_SAMPLE > 0 ? interveneClass(g, p) : null;
+      if (cls && CLASS_ONLY && cls !== CLASS_ONLY) cls = null;
       const slack = cls ? attackSlack(g) : null;
       if (cls && SLACK_MAX !== null && slack > SLACK_MAX) cls = null;   // 여유가 넉넉하면 제외
       if (cls && SLACK_MIN !== null && slack < SLACK_MIN) cls = null;   // 이미 깨진 계약도 제외

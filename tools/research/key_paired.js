@@ -28,7 +28,8 @@ const NEW = process.argv[2] || P('../../web/model/mighty_master_v16e.onnx');
 const OLD = process.argv[3] || P('../../web/model/mighty_master_v13.onnx');
 const N = parseInt(process.argv[4] || '2000', 10);
 const SEED0 = parseInt(process.env.SEED_BASE || '64000000', 10);
-const TRICK_MAX = parseInt(process.env.TRICK_MAX || '2', 10);
+const TRICK_MAX = parseInt(process.env.TRICK_MAX ||
+  (process.env.CLASS === 'weaklead' ? '99' : '2'), 10);
 // 긴 실행이 중간에 끊겨도 표본이 살아남도록 차이값을 즉시 적는다
 const OUT = process.env.OUT || '';
 // K>0이면 실제 손패 한 벌 대신 결정화 K벌을 평균낸다. 상금 분산이 2,700이라
@@ -113,6 +114,35 @@ function keyChance(g, p) {
   return legal.some(mv => E.isJoker(mv.card) || E.sameCard(mv.card, g.mightyCard));
 }
 
+/** weaklead 국면 — 아군이 명목상 최강이나 확정승이 아니고 뒤에 2명 이상 남았다.
+ *  lastseat_probe.js의 CLASS=weaklead와 같은 술어다(좌석 가시 정보만). */
+function weakleadChance(g, p) {
+  if (g.phase !== 'play' || p === g.declarer || g.play.table.length === 0) return false;
+  const fd = g.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        g.hands[p].some(c => E.sameCard(c, fd.card)))) return false;
+  let best = null, bk = [-2, -1];
+  for (const e of g.play.table) {
+    const k = g._cardStrength(e, g.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return false;
+  const ally = best.player === g.declarer ||
+    (g.friendRevealed && g.friend === best.player && best.player !== p);
+  if (!ally || E.NUM_PLAYERS - 1 - g.play.table.length < 2) return false;
+  const legal = g._legalPlays(p);
+  if (legal.length < 2) return false;
+  return legal.some(mv => {
+    const k = g._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: p,
+                               jokerCall: mv.jokerCall }, g.play);
+    return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
+  });
+}
+
+// CLASS: keyspend(기본, 트릭 TRICK_MAX 이하) | weaklead(트릭 제한 없음)
+const CLASS = process.env.CLASS || 'keyspend';
+const chanceOf = CLASS === 'weaklead' ? weakleadChance : keyChance;
+
 async function topAction(sess, g, seat) {
   let obs = M.encodeObs(g, seat, []);
   const mask = M.legalMask(g, []);
@@ -159,7 +189,7 @@ async function rollout(g0, seat, actIdx, agents) {
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
       const p = g.currentPlayer;
       if (!used && p === S && g.phase === 'play' && g.play.trickNo <= TRICK_MAX
-          && keyChance(g, p)) {
+          && chanceOf(g, p)) {
         used = true;
         const aNew = await topAction(sNew, g, p);
         const aOld = await topAction(sOld, g, p);
