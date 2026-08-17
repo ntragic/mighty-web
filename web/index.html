@@ -4478,11 +4478,16 @@ const BID_CHIP_HOLD = 900;    // 비딩 종료 후 남겨 두는 시간
 let bidRevealN = 0;           // 지금까지 공개한 비딩 착수 수
 let bidChipTimer = null;
 let bidChipClear = null;
+// 비딩이 끝난 뒤 한 번만 처리했다는 표식. 이게 없으면 플레이 중 render()마다
+// 공개 큐가 다시 돌아 칩이 카드 낼 때마다 되살아난다(제보 2026-08-17).
+let bidChipsDone = false;
 
 function bidActions(){
   if (!roundRec) return [];
   return roundRec.actions.filter(x => x.ph === 'bidding');
 }
+/** 타이머·DOM·카운터만 정리한다. bidChipsDone은 건드리지 않는다 —
+ *  여기서 되돌리면 플레이 중에 다시 공개가 시작된다. */
 function clearBidChips(){
   if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
   if (bidChipClear){ clearTimeout(bidChipClear); bidChipClear = null; }
@@ -4492,6 +4497,8 @@ function clearBidChips(){
     if (c){ c.className = 'bidchip'; c.innerHTML = ''; }
   }
 }
+/** 새 라운드·되돌리기용 — 표식까지 초기화해 다음 비딩에서 다시 보이게 한다. */
+function resetBidChips(){ clearBidChips(); bidChipsDone = false; }
 /** 공개된 착수까지만 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
 function paintBidChips(){
   const acts = bidActions();
@@ -4517,21 +4524,11 @@ function paintBidChips(){
     c.innerHTML = `<span class="cl">${label}</span><span class="ord">${rec.ord}</span>`;
   }
 }
-/** 0.5초 간격으로 하나씩 공개. 비딩이 끝나면 남은 것을 마치고 잠깐 뒤 지운다. */
+/** 0.5초 간격으로 하나씩 공개 (비딩 중에만 돈다). */
 function pumpBidChips(){
   if (bidChipTimer) return;
   const acts = bidActions();
-  if (bidRevealN >= acts.length){
-    // 다 공개했다. 비딩이 끝났으면 잠깐 두고 지운다.
-    if (game && game.phase !== 'bidding' && !bidChipClear){
-      const myGen = stateGen;
-      bidChipClear = setTimeout(() => {
-        bidChipClear = null;
-        if (myGen === stateGen) clearBidChips();
-      }, BID_CHIP_HOLD);
-    }
-    return;
-  }
+  if (bidRevealN >= acts.length) return;
   const myGen = stateGen;
   bidChipTimer = setTimeout(() => {
     bidChipTimer = null;
@@ -4542,12 +4539,28 @@ function pumpBidChips(){
   }, BID_CHIP_STEP);
 }
 function renderBidChips(){
-  if (replay){ clearBidChips(); return; }
+  if (replay || !game || !roundRec){ clearBidChips(); return; }
   const acts = bidActions();
-  if (!acts.length){ clearBidChips(); return; }
-  if (bidRevealN > acts.length) bidRevealN = acts.length;   // 되돌리기로 줄어든 경우
+  if (!acts.length){ resetBidChips(); return; }
+  if (game.phase === 'bidding'){
+    bidChipsDone = false;
+    if (bidRevealN > acts.length) bidRevealN = acts.length;   // 되돌리기로 줄어든 경우
+    paintBidChips();
+    pumpBidChips();
+    return;
+  }
+  // 비딩이 끝났다. 남은 것을 한 번에 보여주고 잠깐 뒤 지운 다음 **다시 그리지 않는다**.
+  // 여기서 빠져나가지 않으면 플레이 중 render()마다 칩이 되살아난다.
+  if (bidChipsDone) return;
+  bidChipsDone = true;
+  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
+  bidRevealN = acts.length;
   paintBidChips();
-  pumpBidChips();
+  const myGen = stateGen;
+  bidChipClear = setTimeout(() => {
+    bidChipClear = null;
+    if (myGen === stateGen) clearBidChips();
+  }, BID_CHIP_HOLD);
 }
 
 /* ---------------- 공약 퍽 ---------------- */
@@ -5290,7 +5303,7 @@ async function doUndo(){
   undoUsed[gp]++;
   selDiscard = []; bidSel = {giruda:null,count:null}; reviseSel = {on:false,giruda:null,count:null};
   friendCustom = false; ghost = null; busy = false;
-  claimMode = false; claimShown = false; bidFlash = null; clearBidChips();
+  claimMode = false; claimShown = false; bidFlash = null; resetBidChips();
   logLine(tf('logUndo', gp === 'bidding' ? t('비딩') : t('플레이')));
   toast(tf('undoDone', gp === 'bidding' ? t('비딩') : t('플레이')), 1500);
   render(); pump();
@@ -6353,7 +6366,7 @@ function startRound(inc){
   if (inc!==false) roundNo++;
   selDiscard=[]; bidSel={giruda:null,count:null}; reviseSel={on:false,giruda:null,count:null};
   friendCustom=false; ghost=null; busy=false;
-  claimMode=false; claimShown=false; claimBy=null; bidFlash=null; clearBidChips();
+  claimMode=false; claimShown=false; claimBy=null; bidFlash=null; resetBidChips();
   if (botTable && botTable.reset) botTable.reset();
   trumpSeenThisRound=false;
   const cfg = buildEngineConfig();

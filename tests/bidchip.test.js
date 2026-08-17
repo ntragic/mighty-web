@@ -85,6 +85,26 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
   console.log(`비딩 종료 후 남은 칩 ${chips().length}개 (phase ${MUI.game ? MUI.game.phase : '?'})`);
   ok(cleared, '비딩이 끝났는데 칩이 지워지지 않았다');
 
+  // 5) 플레이 중 카드를 여러 장 내도 칩이 되살아나지 않는다.
+  //    제보(2026-08-17): 카드를 낼 때마다 칩이 다시 떴다. render()마다 공개 큐가
+  //    처음부터 다시 돌던 것이 원인이었다.
+  let plays = 0, revived = 0;
+  const t2 = Date.now();
+  while (Date.now() - t2 < 25000 && plays < 8) {
+    await sleep(60);
+    const g = MUI.game;
+    if (!g || g.phase === 'done' || MUI.matchOver) break;
+    if (chips().length) revived = Math.max(revived, chips().length);
+    if (MUI.busy || g.currentPlayer !== 0) continue;
+    if (g.phase === 'play') {
+      const legal = g._legalPlays(0).filter(m => !m.jokerCall);
+      if (legal.length) { MUI.humanAct({ type: 'play', card: legal[0].card }); plays++; }
+    } else if (g.phase === 'floor') MUI.humanAct({ type: 'exchange', discard: g.hands[0].slice(0, 3) });
+    else if (g.phase === 'friend') MUI.humanAct({ type: 'friend', mode: 'first' });
+  }
+  console.log(`플레이 ${plays}수 진행 · 되살아난 칩 최대 ${revived}개`);
+  ok(revived === 0, `플레이 중에 칩이 되살아났다 (${revived}개)`);
+
   console.log(pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FAIL:', e && e.message); process.exit(1); });
