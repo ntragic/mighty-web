@@ -74,23 +74,23 @@ body{
    포커 칩 모양(원형·톱니 테두리·적층 그림자). 비딩이 끝나면 지운다.
    흐름에 넣지 않고 절대배치라 칩이 생겨도 좌석 레이아웃이 흔들리지 않는다. */
 .seat .bidchip{position:absolute; top:62px; left:50%; z-index:14; pointer-events:none;
-  width:46px; height:46px; border-radius:50%; display:grid; place-items:center; gap:0;
+  width:69px; height:69px; border-radius:50%; display:grid; place-items:center; gap:0;
   background:
-    repeating-conic-gradient(from 0deg, var(--chip-edge) 0deg 12deg, transparent 12deg 24deg),
+    repeating-conic-gradient(from 0deg, var(--chip-edge) 0deg 10deg, transparent 10deg 20deg),
     radial-gradient(circle at 50% 42%, var(--chip-face) 0 58%, var(--chip-rim) 60% 100%);
   border:1px solid rgba(0,0,0,.45);
   box-shadow:0 1px 0 rgba(255,255,255,.18) inset, 0 3px 0 rgba(0,0,0,.35), 0 6px 14px rgba(0,0,0,.45);
   opacity:0; transform:translate(-50%,-6px) scale(.55); transition:opacity .18s, transform .22s cubic-bezier(.2,1.5,.4,1)}
 .seat .bidchip.show{opacity:1; transform:translate(-50%,0) scale(1)}
-.seat .bidchip .cl{font-size:.9rem; font-weight:700; line-height:1; letter-spacing:-.5px;
+.seat .bidchip .cl{font-size:1.35rem; font-weight:700; line-height:1; letter-spacing:-.5px;
   text-shadow:0 1px 2px rgba(0,0,0,.5); font-variant-numeric:tabular-nums}
-.seat .bidchip .ord{position:absolute; top:-5px; right:-5px; min-width:15px; height:15px;
+.seat .bidchip .ord{position:absolute; top:-6px; right:-6px; min-width:21px; height:21px;
   border-radius:999px; background:var(--panel); border:1px solid var(--panel-line);
-  color:var(--txt-dim); font-size:.58rem; font-weight:600; display:grid; place-items:center; padding:0 3px}
+  color:var(--txt-dim); font-size:.78rem; font-weight:600; display:grid; place-items:center; padding:0 4px}
 /* 공약 칩은 무늬색, 패스 칩은 무채색 */
 .seat .bidchip{--chip-face:#3B4A56; --chip-rim:#243039; --chip-edge:rgba(255,255,255,.14)}
 .seat .bidchip.pass{--chip-face:#4A4A4A; --chip-rim:#2B2B2B}
-.seat .bidchip.pass .cl{color:var(--txt-dim); font-size:.66rem}
+.seat .bidchip.pass .cl{color:var(--txt-dim); font-size:1rem}
 .seat .bidchip.red{--chip-face:#7A2B33; --chip-rim:#4A171D}
 .seat .bidchip.red .cl{color:#FFD9DC}
 .seat .bidchip.blk{--chip-face:#2F3A44; --chip-rim:#1A222A}
