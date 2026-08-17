@@ -33,6 +33,10 @@ const GEN = process.env.GEN || MODELS[0];
 const SEED0 = parseInt(process.env.SEED_BASE || '77000000', 10);
 const PIMC_N = parseInt(process.env.PIMC_N || '0', 10);
 const K = parseInt(process.env.K || '64', 10);
+// CLASS: lastseat(기본) = 마지막 순번 확정승 | weaklead = 아군이 명목상 최강이나
+// 확정승 아니고 뒤에 2명+ | oppwin = 최강이 야당. 8/16 제보(컷 미실행)를 비율이
+// 아니라 후회로 재측정하기 위해 넣었다 — 비율 일치는 국면 선택 오류를 못 잡는다.
+const CLASS = process.env.CLASS || 'lastseat';
 const A_PLAY0 = 149, A_JS0 = 201, A_JOKER = 205;
 const SUITS4 = ['S', 'D', 'H', 'C'];
 
@@ -108,7 +112,8 @@ function determinize(g, seat, rnd) {
 /** 클래스 판정 — 맞으면 {legal, winners} 반환 */
 function classOf(g, p) {
   if (g.phase !== 'play' || p === g.declarer) return null;
-  if (g.play.table.length !== E.NUM_PLAYERS - 1) return null;      // 마지막 순번만
+  if (g.play.table.length === 0) return null;                      // 리드는 제외
+  if (CLASS === 'lastseat' && g.play.table.length !== E.NUM_PLAYERS - 1) return null;
   const fd = g.friendDecl;
   if (!(fd && fd.mode === 'card' && fd.card &&
         g.hands[p].some(c => E.sameCard(c, fd.card)))) return null;
@@ -120,9 +125,14 @@ function classOf(g, p) {
   if (!best) return null;
   const ally = best.player === g.declarer ||
     (g.friendRevealed && g.friend === best.player && best.player !== p);
-  if (ally) return null;                                            // 야당이 이기는 중만
+  const behind = E.NUM_PLAYERS - 1 - g.play.table.length;
+  if (CLASS === 'weaklead') {
+    if (!ally || behind < 2) return null;                           // 아군 최강 + 뒤에 2명+
+  } else {
+    if (ally) return null;                                          // 야당이 이기는 중만
+  }
   const pts = g.play.table.filter(e => !E.isJoker(e.card) && e.card.rank >= 10).length;
-  if (pts === 0) return null;                                       // 점수가 걸린 트릭만
+  if (CLASS === 'lastseat' && pts === 0) return null;               // 마지막 순번은 점수 걸린 것만
   const legal = g._legalPlays(p);
   if (legal.length < 2) return null;
   const winners = legal.filter(mv => {
@@ -220,7 +230,7 @@ async function topAction(sess, g, seat) {
     if ((i + 1) % 100 === 0) process.stderr.write(`  ${i + 1}/${N}딜 · 국면 ${states} · PIMC ${pimcDone}\n`);
   }
 
-  console.log(`생성 모델 ${GEN} · 완료 딜 ${deals}/${N} · 클래스 국면 ${states}개 (딜당 ${(states / Math.max(1, deals)).toFixed(2)})`);
+  console.log(`클래스 ${CLASS} · 생성 모델 ${GEN} · 완료 딜 ${deals}/${N} · 클래스 국면 ${states}개 (딜당 ${(states / Math.max(1, deals)).toFixed(2)})`);
   console.log('\n모델      확정승 채택률   교사 대비 후회(상금)');
   for (const id of MODELS) {
     const r = regret[id];
@@ -234,7 +244,7 @@ async function topAction(sess, g, seat) {
     const m = pimcGain.reduce((a, b) => a + b, 0) / Math.max(1, pimcGain.length);
     const v = pimcGain.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, pimcGain.length - 1);
     console.log(`\n교사(PIMC ${K}벌 · ${pimcDone}국면) 확정승이 최선인 비율 ${(100 * pimcWin / pimcDone).toFixed(1)}%`);
-    console.log(`  확정승 − 비확정승 상금차 평균 +${m.toFixed(0)} ± ${(1.96 * Math.sqrt(v / Math.max(1, pimcGain.length))).toFixed(0)} (n=${pimcGain.length})`);
+    console.log(`  확정승 − 비확정승 상금차 평균 ${m >= 0 ? "+" : ""}${m.toFixed(0)} ± ${(1.96 * Math.sqrt(v / Math.max(1, pimcGain.length))).toFixed(0)} (n=${pimcGain.length})`);
   }
   console.log('\n마지막 순번이라 위험이 0이다 — 교사값이 높으면 회피는 순손실이다.');
   process.exit(0);
