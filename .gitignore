@@ -34,3 +34,7 @@ _archive/
 *.zip
 *.tar.gz
 training/ckpt_v16/
+training/ckpt_v16a/
+training/ckpt_v16b/
+training/ckpt_v16d/
+web/model/mighty_master_v16*.onnx

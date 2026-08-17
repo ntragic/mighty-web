@@ -14,6 +14,7 @@ mighty_encode.py — 마이티 RL 관측/행동 인코딩 + 환경 래퍼 (DGX S
   보이드 행렬·무늬별 미출현 카운트 포함 → 으뜸무늬 추정/정리 학습의 기반.
 """
 from __future__ import annotations
+import os
 import numpy as np
 from mighty_engine import (MightyGame, SUITS, JOKER, NUM_PLAYERS, HAND_SIZE,
                            is_joker, is_point, same, card_id)
@@ -120,6 +121,9 @@ O_TOK     = L.add('trick_tok891', TOK_N * TOK_D)
 O_SLACK   = L.add('slack4', 4)            # 부호있는 여유 + 여유<=0 + 남은점수 + 더필요한점수
 O_TBLPTS  = L.add('table_pts3', 3)        # 이번 트릭 점수 + 뺏기는중 + 아군이먹는중
 O_STCAND  = L.add('suit_top_cand16', 16)  # 무늬×rel좌석 — 그 무늬 바깥최고를 가질 수 있나
+# 대조군용: 1이면 v16 파생량 3종을 0으로 막는다. 구조·파라미터·업데이트 수를
+# 그대로 두고 **정보만** 빼는 대조군을 만든다 — v11 때 대조군이 결론을 냈다.
+MASK_V16 = os.environ.get('MIGHTY_MASK_V16') == '1'
 OBS_DIM = L.dim
 
 RULE_DIM = 14
@@ -484,6 +488,11 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
             for r in range(1, 5):
                 p_ = (me + r) % 5
                 o[O_STCAND + si * 4 + (r - 1)] = 1.0 if (top_out and not void[p_][si]) else 0.0
+
+    if MASK_V16:
+        o[O_SLACK:O_SLACK + 4] = 0.0
+        o[O_TBLPTS:O_TBLPTS + 3] = 0.0
+        o[O_STCAND:O_STCAND + 16] = 0.0
 
     rv = encode_rules(game.config)
     for i, v in enumerate(rv):
