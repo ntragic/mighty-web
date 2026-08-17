@@ -9,7 +9,8 @@
  *
  * 사용:
  *   const AI = require('./mighty-ai.js');
- *   const session = await AI.loadMaster(ort, 'mighty_master_v13.onnx');  // 신경망 좌석에만 필요
+ *   const session = await AI.loadMaster(ort, MODEL_PATH);   // 신경망 좌석에만 필요
+ *   // ※ 주석에 모델 파일명을 적지 마라 — 릴리스가 index.html에서 긁어 번들에 넣는다
  *   const agent = await AI.createAgent({ tier: 'master', session, ort });
  *   // 게임 루프에서 그 좌석 차례일 때:
  *   game.act(await agent.act(game, seat));

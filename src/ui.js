@@ -368,8 +368,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.11.3';
-const APP_BUILD = '2026-08-15 빌드 — 이른 마이티 리드 억제';
+const APP_VERSION = 'v2.12.0';
+const APP_BUILD = '2026-08-17 빌드 — 마스터 v16e 전좌석 (프렌드 키카드 타이밍)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -656,7 +656,10 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v13.onnx';
+// 코칭·AI 복기 판정에 쓰는 대표 모델 — 티어와 무관하게 항상 이것으로 판정한다.
+// 마스터 티어가 쓰는 세대와 같게 두면 이미 로드한 세션을 재사용해 추가 내려받기가
+// 없다. v2.12.0에서 v13 → v16e (JUDGE_ID로 단일화).
+const JUDGE_ID='v16e';
 /* 티어별 좌석 구성 — 난이도를 실측으로 벌린다.
  *
  * v2.11 이전에는 중급·고급이 규칙기반, 마스터만 신경망이었다. 그런데 사람 자리를
@@ -680,19 +683,22 @@ const MASTER_MODEL='./model/mighty_master_v13.onnx';
  * - v9는 v2.10.6에서 고공약 프렌드 결함으로 하차했다.
  *
  * 플레이 중 비노출(비딩 읽힘 방지 — 페르소나와 같은 원칙), 매치 종료 화면에서
- * 사후 공개. 코칭·AI 복기 판정은 티어와 무관하게 항상 대표(MASTER_MODEL=v13). */
+ * 사후 공개. 코칭·AI 복기 판정은 티어와 무관하게 항상 대표(JUDGE_ID). */
 const NN_POOL={
-  v13:   { file:'./model/mighty_master_v13.onnx',    nick:'선견가' },
-  v11ctl:{ file:'./model/mighty_master_v11ctl.onnx', nick:'조율가' },
+  v16e:  { file:'./model/mighty_master_v16e.onnx',   nick:'절제가' },
   v8:    { file:'./model/mighty_master_v8.onnx',     nick:'수문장' },
   v6b:   { file:'./model/mighty_master_v6b.onnx',    nick:'기억가' },
   v5:    { file:'./model/mighty_master_v5.onnx',     nick:'수련생' },
 };
+// 보존 세대(v13 선견가 · v11ctl 조율가) — 배포에서는 내렸지만 파일은 web/model에,
+// 이력과 특징은 docs/MODELS.md '보존 세대' 절에 그대로 남겼다. 되돌리는 방법도
+// 거기 적어 뒀다. **여기에 파일명을 적지 마라** — 릴리스가 index.html에서 모델
+// 파일명을 긁어 번들을 고르므로, 주석에 적어 두기만 해도 배포물이 13MB 커진다.
 const HEUR='H';                              // 규칙기반 좌석 표식
 const TIER_PLAN={
-  intermediate: ['v5',  HEUR,     HEUR,  HEUR    ],
-  advanced:     ['v8',  'v6b',    'v8',  'v6b'   ],
-  master:       ['v13', 'v11ctl', 'v13', 'v11ctl'],
+  intermediate: ['v5',   HEUR,   HEUR,   HEUR  ],
+  advanced:     ['v8',   'v6b',  'v8',   'v6b' ],
+  master:       ['v16e', 'v16e', 'v16e', 'v16e'],
 };
 let masterSessions={};                       // id → onnx session (지연 로드 캐시)
 let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id 또는 HEUR — 매치 내 고정
@@ -786,7 +792,8 @@ async function ensureMaster(){
   if (masterSess) return true;
   try{
     await ensureOrt();
-    masterSess = masterSessions['v13'] || await MightyAI.loadMaster(ortLib, MASTER_MODEL);
+    masterSess = masterSessions[JUDGE_ID]
+      || await MightyAI.loadMaster(ortLib, NN_POOL[JUDGE_ID].file);
     masterSessions['v13']=masterSess;
     return true;
   }catch(e){ return false; }

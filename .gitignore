@@ -37,4 +37,9 @@ training/ckpt_v16/
 training/ckpt_v16a/
 training/ckpt_v16b/
 training/ckpt_v16d/
-web/model/mighty_master_v16*.onnx
+# v16 실험 세대 — 채택된 v16e만 커밋하고 나머지는 제외한다
+web/model/mighty_master_v16a.onnx
+web/model/mighty_master_v16b.onnx
+web/model/mighty_master_v16d.onnx
+web/model/mighty_master_v16f.onnx
+web/model/mighty_master_v16g.onnx
