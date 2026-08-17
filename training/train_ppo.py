@@ -462,9 +462,10 @@ def main():
             print(f'[warm] 신규 파라미터 초기화: {missing.missing_keys}')
         try:
             opt.load_state_dict(st['opt'])
-        except ValueError:
-            print('[warm] 옵티마이저 파라미터 불일치 — 새로 시작')
-        start = st['update']
+        except (ValueError, KeyError):
+            # KeyError: ONNX 역복원·net2net 체크포인트에는 옵티마이저 상태가 없다
+            print('[warm] 옵티마이저 상태 없음/불일치 — 새로 시작')
+        start = st.get('update', 0)
         print(f'resumed @ update {start}')
 
     if args.partners and args.workers > 0:

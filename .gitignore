@@ -4,6 +4,10 @@ node_modules/
 # 빌드·배포 산출물 (릴리스 시 생성)
 dist/
 
+# 라이브 모드 런타임 흔적 (config.json은 프로젝트 설정이라 커밋한다)
+.impeccable/live/inject-journal.json
+.impeccable/live/*.log
+
 # 학습 산출물 — 체크포인트는 용량이 커서 제외 (모델은 web/model 에 배포본만 둔다)
 training/ckpt*/
 training/_superseded/
@@ -15,6 +19,8 @@ training/pimc_labels_*.jsonl
 training/jc_labels_*.jsonl
 training/r2_labels_*.jsonl
 training/*_labels_*.jsonl
+training/replay_labels.jsonl
+training/ckpt_v13/
 training/__pycache__/
 __pycache__/
 *.pyc
@@ -27,3 +33,13 @@ _archive/
 *.deb
 *.zip
 *.tar.gz
+training/ckpt_v16/
+training/ckpt_v16a/
+training/ckpt_v16b/
+training/ckpt_v16d/
+# v16 실험 세대 — 채택된 v16e만 커밋하고 나머지는 제외한다
+web/model/mighty_master_v16a.onnx
+web/model/mighty_master_v16b.onnx
+web/model/mighty_master_v16d.onnx
+web/model/mighty_master_v16f.onnx
+web/model/mighty_master_v16g.onnx

@@ -43,6 +43,95 @@ const K_JC = parseInt(process.env.K_JC || '200', 10);
 const DEPTH_JC = parseInt(process.env.DEPTH_JC || String(DEPTH), 10);
 const KEYKILL_ONLY = process.env.KEYKILL_ONLY === '1';
 
+// --- 복기 기반 재학습 (2026-08-16) ---------------------------------------
+// REC_DIR: 복기 내보내기(.md)가 든 디렉터리. 주면 자가대전 대신 그 기록을 재생하며
+//   라벨한다. 내보내기에 seed·dealer·cfg·actions가 다 있어 출력 포맷이 그대로 맞는다.
+// FORCE_BID: 바닥패 교환 때 공약을 이 값으로 올린다(같은 기루다라 변경 비용 없음).
+//   ※ 20 강제는 실패했다(2026-08-16 실측). 계약이 '빡빡한' 게 아니라 '가망 없는'
+//     것이 되어 무슨 수를 둬도 같이 지고, 탐색이 수를 구분하지 못한다 —
+//     개입 라벨 545건 중 이득>0.05가 4건, 정책 불일치 2.4%. 쓰지 마라.
+//     제보 국면은 공약 15에서 판이 진행되며 여유가 0이 된 경우였다. 그런 국면은
+//     공약을 올려 만드는 게 아니라 SLACK_MAX로 골라낸다.
+// SLACK_MIN·SLACK_MAX: 여당 여유(확보 + 남은 점수 − 공약)로 개입 국면을 거른다.
+//   자가대전 실측(371국면): 여유 0 이하가 30.5%, 2 이하가 53.1%. 강제 없이도 충분하다.
+//   여유가 음수면 계약이 이미 수학적으로 깨져 무슨 수를 둬도 같이 지므로 제외한다
+//   (FORCE_BID=20이 실패한 것과 같은 이유). 표적은 0~2 — 빡빡하지만 가능한 구간.
+// CLASS_SAMPLE·K_CLASS: 프렌드 개입 국면(weaklead·oppwin) 과표집. 조커콜에서 쓴
+//   JC_SAMPLE·K_JC와 같은 방식이다.
+const REC_DIR = process.env.REC_DIR || '';
+const FORCE_BID = parseInt(process.env.FORCE_BID || '0', 10);
+const CLASS_SAMPLE = parseFloat(process.env.CLASS_SAMPLE || '0');
+const K_CLASS = parseInt(process.env.K_CLASS || String(K_JC), 10);
+const DEPTH_CLASS = parseInt(process.env.DEPTH_CLASS || '0', 10);
+const SLACK_MAX = process.env.SLACK_MAX === undefined ? null : parseInt(process.env.SLACK_MAX, 10);
+const SLACK_MIN = process.env.SLACK_MIN === undefined ? null : parseInt(process.env.SLACK_MIN, 10);
+// KEY_SAMPLE: 프렌드 키카드(마이티·조커) 소비 국면 표집 확률. 개입 일반보다 좁다.
+const KEY_SAMPLE = parseFloat(process.env.KEY_SAMPLE || '0');
+// BID_MAX: 이 공약을 넘는 판은 표집하지 않는다. 19·20은 희소하고 계약이 이미
+// 깨져 있어 라벨이 퇴화한다(공약 20 강제 545건 중 이득>0.05가 4건이었다).
+const BID_MAX = parseInt(process.env.BID_MAX || '99', 10);
+
+/** 여당 여유 = (확보 점수 + 남은 점수) − 공약. 0이면 남은 점수를 전부 먹어야 한다.
+ *  전부 공개 정보다 — 획득 더미와 지나간 트릭만 센다. */
+function attackSlack(g) {
+  const decl = g.declarer;
+  const fr = g.friendRevealed ? g.friend : null;
+  const got = g.play.capturedPoints[decl] + (fr !== null && fr !== undefined ? g.play.capturedPoints[fr] : 0);
+  let played = 0;
+  for (const t of g.play.history)
+    played += t.plays.filter(e => !E.isJoker(e.card) && e.card.rank >= 10).length;
+  for (const e of g.play.table)
+    if (!E.isJoker(e.card) && e.card.rank >= 10) played++;
+  return got + (20 - played) - g.contract.count;
+}
+
+/** 프렌드 키카드 소비 국면인가 — 마이티·조커를 지금 낼 수 있고 선택지가 있다.
+ *  2026-08-16 방향 전환: 개입 일반이 아니라 "키카드를 언제 쓰는가"가 표적이다.
+ *  주공 의도 읽기(주공이 약해지는 시점·내가 이어받을 카드 유무·공약 붕괴 직전)가
+ *  걸리는 지점이라 사람 주공과의 협력 품질을 좌우한다. 좌석 가시 정보만 쓴다. */
+function keySpendClass(g, p) {
+  if (g.phase !== 'play' || p === g.declarer) return null;
+  const fd = g.friendDecl;
+  const iAmFriend = fd && fd.mode === 'card' && fd.card &&
+    g.hands[p].some(c => E.sameCard(c, fd.card));
+  if (!iAmFriend) return null;
+  const hasKey = g.hands[p].some(c => E.isJoker(c) || E.sameCard(c, g.mightyCard));
+  if (!hasKey) return null;
+  const legal = g._legalPlays(p);
+  if (legal.length < 2) return null;
+  const canSpend = legal.some(mv => E.isJoker(mv.card) || E.sameCard(mv.card, g.mightyCard));
+  return canSpend ? 'keyspend' : null;
+}
+
+/** 프렌드 개입 국면인가 — 좌석 가시 정보만 쓴다. 'weaklead' | 'oppwin' | null */
+function interveneClass(g, p) {
+  if (g.phase !== 'play' || g.play.table.length === 0) return null;
+  if (p === g.declarer) return null;
+  const fd = g.friendDecl;
+  const iAmFriend = fd && fd.mode === 'card' && fd.card &&
+    g.hands[p].some(c => E.sameCard(c, fd.card));
+  if (!iAmFriend) return null;
+  let best = null, bk = [-2, -1];
+  for (const e of g.play.table) {
+    const k = g._cardStrength(e, g.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return null;
+  const legal = g._legalPlays(p);
+  if (legal.length < 2) return null;
+  const canWin = legal.some(mv => {
+    const mine = g._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: p,
+                                   jokerCall: mv.jokerCall }, g.play);
+    return !(bk[0] > mine[0] || (bk[0] === mine[0] && bk[1] > mine[1]));
+  });
+  if (!canWin) return null;
+  const ally = best.player === g.declarer ||
+    (g.friendRevealed && g.friend === best.player && best.player !== p);
+  const behind = E.NUM_PLAYERS - 1 - g.play.table.length;
+  if (!ally) return 'oppwin';
+  return behind >= 2 ? 'weaklead' : null;
+}
+
 const SUITS = ['S', 'D', 'H', 'C'];
 const allCards = () => {
   const out = [E.JOKER];
@@ -136,7 +225,22 @@ async function valueOf(sess, g, seat) {
 
 (async () => {
   const OUT = process.argv[2] || 'pimc_labels.jsonl';
-  const N = parseInt(process.argv[3] || '300', 10);
+  // 복기 모드면 판 수는 기록 수로 정해진다
+  const RECS = [];
+  if (REC_DIR) {
+    for (const f of fs.readdirSync(REC_DIR).sort()) {
+      if (!f.endsWith('.md')) continue;
+      const raw = fs.readFileSync(path.join(REC_DIR, f), 'utf8');
+      for (const m of raw.matchAll(/```json\n([\s\S]*?)\n```/g)) {
+        try {
+          const r = JSON.parse(m[1]);
+          if (r && r.actions && r.cfg) RECS.push(r);
+        } catch (e) { /* 기록이 아닌 코드블록은 건너뛴다 */ }
+      }
+    }
+    console.error(`복기 기록 ${RECS.length}건 로드 (${REC_DIR})`);
+  }
+  const N = REC_DIR ? RECS.length : parseInt(process.argv[3] || '300', 10);
   const sess = await ort.InferenceSession.create(MODEL);
   const ws = fs.createWriteStream(OUT);
   let seedCounter = 12345;
@@ -148,17 +252,27 @@ async function valueOf(sess, g, seat) {
   for (let s = 0; s < E.NUM_PLAYERS; s++)
     ag.push(await AI.createAgent({ tier: 'master', session: sess, ort }));
 
-  let labeled = 0, changed = 0, jcLabeled = 0;
+  let labeled = 0, changed = 0, jcLabeled = 0, clsLabeled = 0, forced = 0;
   for (let i = 0; i < N; i++) {
-    const seed = SEED0 + i;
+    const R = REC_DIR ? RECS[i] : null;
+    const seed = R ? R.seed : SEED0 + i;
     const rng = E.makeRng(seed);
-    const g = new E.MightyGame({ seed });
-    g.start(Math.floor(rng() * E.NUM_PLAYERS));
+    const g = new E.MightyGame(R ? R.cfg : { seed });
+    g.start(R ? R.dealer : Math.floor(rng() * E.NUM_PLAYERS));
     const actions = [];
-    let guard = 0;
+    let guard = 0, step = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
       const p = g.currentPlayer;
-      const act = await ag[p].act(g, p);
+      // 복기 모드는 기록된 착수를 그대로 흘린다 — 나머지 경로는 자가대전과 같다
+      let act = R ? (step < R.actions.length ? R.actions[step++].a : null)
+                  : await ag[p].act(g, p);
+      if (!act) break;
+      // 공약 강제: 바닥패 교환에 revise를 실어 계약만 올린다(기루다 동일 → 비용 0)
+      if (!R && FORCE_BID && g.phase === 'floor' && act.type === 'exchange'
+          && !act.revise && g.contract && g.contract.count < FORCE_BID) {
+        act = { ...act, revise: { count: FORCE_BID, giruda: g.contract.giruda } };
+        forced++;
+      }
       // 특수카드 무력화 국면인가 — 조커콜(조커 무력화) 또는 확정 야당의
       // 마이티 무늬 리드(마이티 무력화). 드물고 결정적이라 과표집한다.
       let isJC = false;
@@ -181,11 +295,24 @@ async function valueOf(sess, g, seat) {
             isJC = true;                    // 마이티 끌어내기 가능 국면
         }
       }
+      // 프렌드 개입 국면 — 조커콜과 같은 이유로 드물고 결정적이라 따로 표집한다
+      // KEY_SAMPLE>0이면 키카드 소비 국면을 우선 잡는다(개입 일반보다 좁고 중요하다)
+      let cls = (KEY_SAMPLE > 0 && rnd() < KEY_SAMPLE) ? keySpendClass(g, p) : null;
+      if (!cls) cls = CLASS_SAMPLE > 0 ? interveneClass(g, p) : null;
+      const slack = cls ? attackSlack(g) : null;
+      if (cls && SLACK_MAX !== null && slack > SLACK_MAX) cls = null;   // 여유가 넉넉하면 제외
+      if (cls && SLACK_MIN !== null && slack < SLACK_MIN) cls = null;   // 이미 깨진 계약도 제외
+      if (cls && g.contract && g.contract.count > BID_MAX) cls = null;  // 희소 고공약 포기
+      const isKey = cls === 'keyspend' && !isJC;      // 선택 시점에 KEY_SAMPLE로 이미 걸렀다
+      const isCls = !!cls && !isJC;
       const take = g.phase === 'play' && act.type === 'play' &&
-        (isJC ? rnd() < JC_SAMPLE : (!KEYKILL_ONLY && rnd() < SAMPLE));
+        (isJC ? rnd() < JC_SAMPLE
+              : isKey ? true
+              : isCls ? rnd() < CLASS_SAMPLE
+              : (!KEYKILL_ONLY && !CLASS_SAMPLE && !KEY_SAMPLE && rnd() < SAMPLE));
       if (take) {
-        const kUse = isJC ? K_JC : K;
-        const dUse = isJC ? DEPTH_JC : DEPTH;
+        const kUse = isJC ? K_JC : isCls ? K_CLASS : K;
+        const dUse = isJC ? DEPTH_JC : isCls ? DEPTH_CLASS : DEPTH;
         // 후보 — 정책 상위 TOPM
         let obs = M.encodeObs(g, p, []);
         const mask = M.legalMask(g, []);
@@ -237,10 +364,14 @@ async function valueOf(sess, g, seat) {
                 ws.write(JSON.stringify({
                   seed, dealer: g.dealer, cfg: g.config, upto: actions.length, seat: p,
                   target: best.i, policyTop: polTop, gain: +gain.toFixed(4), jc: isJC ? 1 : 0,
+                  cls: cls || undefined, slack: slack === null ? undefined : slack,
+                  src: R ? 'replay' : (FORCE_BID ? 'forcedbid' : 'selfplay'),
+                  bid: g.contract ? g.contract.count : undefined,
                   actions: actions.map(a => JSON.parse(JSON.stringify(a))),
                 }) + '\n');
                 labeled++;
                 if (isJC) jcLabeled++;
+                if (isCls) clsLabeled++;
               }
             }
           }
@@ -253,6 +384,7 @@ async function valueOf(sess, g, seat) {
       process.stderr.write(`  ${i + 1}/${N}판 · 라벨 ${labeled} · 정책과 다른 목표 ${changed}\n`);
   }
   ws.end();
-  console.log(`라벨 ${labeled}건 (조커콜 국면 ${jcLabeled}건) · 정책 1위와 다른 목표 ` +
+  console.log(`라벨 ${labeled}건 (조커콜 ${jcLabeled} · 프렌드 개입 ${clsLabeled}` +
+    (forced ? ` · 공약강제 ${forced}판` : '') + `) · 정책 1위와 다른 목표 ` +
     `${changed}건 (${(100 * changed / Math.max(1, labeled)).toFixed(1)}%) → ${OUT}`);
 })();

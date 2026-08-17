@@ -14,6 +14,7 @@ mighty_encode.py — 마이티 RL 관측/행동 인코딩 + 환경 래퍼 (DGX S
   보이드 행렬·무늬별 미출현 카운트 포함 → 으뜸무늬 추정/정리 학습의 기반.
 """
 from __future__ import annotations
+import os
 import numpy as np
 from mighty_engine import (MightyGame, SUITS, JOKER, NUM_PLAYERS, HAND_SIZE,
                            is_joker, is_point, same, card_id)
@@ -114,6 +115,15 @@ O_RULE    = L.add('rule_ctx14', 14)
 #            = 15×5 = 75, + 승자rel5 + 트릭번호1 = 81
 TOK_N, TOK_D = 11, 81
 O_TOK     = L.add('trick_tok891', TOK_N * TOK_D)
+# --- v16: 주공 의도 추론 파생량 (mighty-master.js와 반드시 동일) ---
+# 원재료(공약·획득점수·탑카드)는 이미 있었으나 뺄셈·집계·소재추정이 없어
+# 신경망이 매번 다시 만들어야 했다. 관측 끝에 붙여 앞 1630만 읽는 구모델은 그대로.
+O_SLACK   = L.add('slack4', 4)            # 부호있는 여유 + 여유<=0 + 남은점수 + 더필요한점수
+O_TBLPTS  = L.add('table_pts3', 3)        # 이번 트릭 점수 + 뺏기는중 + 아군이먹는중
+O_STCAND  = L.add('suit_top_cand16', 16)  # 무늬×rel좌석 — 그 무늬 바깥최고를 가질 수 있나
+# 대조군용: 1이면 v16 파생량 3종을 0으로 막는다. 구조·파라미터·업데이트 수를
+# 그대로 두고 **정보만** 빼는 대조군을 만든다 — v11 때 대조군이 결론을 냈다.
+MASK_V16 = os.environ.get('MIGHTY_MASK_V16') == '1'
 OBS_DIM = L.dim
 
 RULE_DIM = 14
@@ -413,6 +423,76 @@ def encode(game: MightyGame, me: int, pick_buffer=None) -> np.ndarray:
             o[O_KCAND + (r - 1)] = 1.0 if m_can else 0.0
             o[O_KCAND + 4 + (r - 1)] = 1.0 if j_can else 0.0
         o[O_KCAND + 8] = len(game.hands[me]) / 10.0
+
+    # ---- v16: 주공 의도 추론 파생량 (mighty-master.js와 반드시 동일) ----
+    if ph == 'play' and ct:
+        pl4 = game.play
+        played_pts = 0
+        for t in pl4['history']:
+            for e in t['plays']:
+                if not is_joker(e['card']) and e['card'][1] >= 10:
+                    played_pts += 1
+        for e in pl4['table']:
+            if not is_joker(e['card']) and e['card'][1] >= 10:
+                played_pts += 1
+        left_pts = 20 - played_pts
+        decl_p = game.declarer
+        ruling_pts = pl4['capturedPoints'][decl_p]
+        fd4 = game.friend_decl
+        if game.friend_revealed and game.friend is not None and game.friend != decl_p:
+            ruling_pts += pl4['capturedPoints'][game.friend]
+        elif (fd4 and fd4.get('mode') == 'card' and fd4.get('card') is not None
+              and me != decl_p and any(same(c, fd4["card"]) for c in game.hands[me])):
+            ruling_pts += pl4['capturedPoints'][me]
+        slack = ruling_pts + left_pts - ct['count']
+        o[O_SLACK + 0] = min(1.0, max(0.0, (slack + 10) / 20.0))
+        o[O_SLACK + 1] = 1.0 if slack <= 0 else 0.0
+        o[O_SLACK + 2] = left_pts / 20.0
+        o[O_SLACK + 3] = min(1.0, max(0.0, ct['count'] - ruling_pts) / 20.0)
+
+        tp = 0
+        for e in pl4['table']:
+            if not is_joker(e['card']) and e['card'][1] >= 10:
+                tp += 1
+        o[O_TBLPTS + 0] = tp / 5.0
+        if tp > 0:
+            best, bk = None, (-2, -1)
+            for e in pl4['table']:
+                k = game.card_strength(e, pl4)
+                if k[0] > bk[0] or (k[0] == bk[0] and k[1] > bk[1]):
+                    bk, best = k, e
+            if best is not None:
+                ally = (best['player'] == decl_p or
+                        (game.friend_revealed and game.friend == best['player']
+                         and best['player'] != me))
+                o[O_TBLPTS + (2 if ally else 1)] = 1.0
+
+        seen2 = set()
+        for t in pl4['history']:
+            for e in t['plays']:
+                seen2.add(card_id(e['card']))
+        for e in pl4['table']:
+            seen2.add(card_id(e['card']))
+        for c in game.hands[me]:
+            seen2.add(card_id(c))
+        if me == decl_p and game.discard:
+            for c in game.discard:
+                seen2.add(card_id(c))
+        for si in range(4):
+            su = SUITS[si]
+            top_out = 0
+            for r in range(14, 1, -1):
+                if card_id((su, r)) not in seen2:
+                    top_out = r
+                    break
+            for r in range(1, 5):
+                p_ = (me + r) % 5
+                o[O_STCAND + si * 4 + (r - 1)] = 1.0 if (top_out and not void[p_][si]) else 0.0
+
+    if MASK_V16:
+        o[O_SLACK:O_SLACK + 4] = 0.0
+        o[O_TBLPTS:O_TBLPTS + 3] = 0.0
+        o[O_STCAND:O_STCAND + 16] = 0.0
 
     rv = encode_rules(game.config)
     for i, v in enumerate(rv):

@@ -33,11 +33,15 @@ ok(nn('advanced').length <= nn('master').length, '고급 NN 좌석이 마스터�
 ok(nn('intermediate').length >= 1, '중급에 신경망 좌석이 없다 — v2.11 설계와 어긋난다');
 ok(nn('master').length === 4, '마스터는 네 좌석 모두 신경망이어야 한다');
 
-// 마스터는 최고 기력 두 세대를 각 2좌석 (docs/MODELS.md 기력 사다리)
+// 마스터 세대 구성은 의도적 선택이다 — 2026-08-17에 v13·v11ctl 각 2좌석에서
+// v16e 전좌석으로 바꿨다(프렌드 키카드 타이밍 개선을 진하게 체감하기 위함).
+// 세대 수는 강제하지 않되, 좌석마다 균등 배분인지와 풀 등록 여부는 검사한다.
 const mset = [...new Set(nn('master'))];
-ok(mset.length === 2, `마스터 풀이 2종이 아니다: ${mset.join(',')}`);
+ok(nn('master').length % mset.length === 0,
+   `마스터 좌석이 세대별로 균등하지 않다: ${nn('master').join(',')}`);
 for (const id of mset)
-  ok(nn('master').filter(x => x === id).length === 2, `마스터 ${id} 좌석이 2개가 아니다`);
+  ok(nn('master').filter(x => x === id).length === nn('master').length / mset.length,
+     `마스터 ${id} 좌석 수가 균등하지 않다`);
 
 // v9는 고공약 프렌드 결함으로 v2.10.6에서 하차 — 어느 티어에도 없어야 한다
 for (const tier of ['intermediate', 'advanced', 'master'])

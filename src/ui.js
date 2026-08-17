@@ -368,8 +368,8 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.11.3';
-const APP_BUILD = '2026-08-15 빌드 — 이른 마이티 리드 억제';
+const APP_VERSION = 'v2.13.0';
+const APP_BUILD = '2026-08-17 빌드 — 비딩 칩 (누가 어떤 순서로 공약했나)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -656,7 +656,10 @@ let agentsReady = false;
 /* ---- 마스터 티어(신경망) ---- */
 let masterState='idle';       // idle | loading | ready | failed
 let masterSess=null, ortLib=null;
-const MASTER_MODEL='./model/mighty_master_v13.onnx';
+// 코칭·AI 복기 판정에 쓰는 대표 모델 — 티어와 무관하게 항상 이것으로 판정한다.
+// 마스터 티어가 쓰는 세대와 같게 두면 이미 로드한 세션을 재사용해 추가 내려받기가
+// 없다. v2.12.0에서 v13 → v16e (JUDGE_ID로 단일화).
+const JUDGE_ID='v16e';
 /* 티어별 좌석 구성 — 난이도를 실측으로 벌린다.
  *
  * v2.11 이전에는 중급·고급이 규칙기반, 마스터만 신경망이었다. 그런데 사람 자리를
@@ -680,19 +683,22 @@ const MASTER_MODEL='./model/mighty_master_v13.onnx';
  * - v9는 v2.10.6에서 고공약 프렌드 결함으로 하차했다.
  *
  * 플레이 중 비노출(비딩 읽힘 방지 — 페르소나와 같은 원칙), 매치 종료 화면에서
- * 사후 공개. 코칭·AI 복기 판정은 티어와 무관하게 항상 대표(MASTER_MODEL=v13). */
+ * 사후 공개. 코칭·AI 복기 판정은 티어와 무관하게 항상 대표(JUDGE_ID). */
 const NN_POOL={
-  v13:   { file:'./model/mighty_master_v13.onnx',    nick:'선견가' },
-  v11ctl:{ file:'./model/mighty_master_v11ctl.onnx', nick:'조율가' },
+  v16e:  { file:'./model/mighty_master_v16e.onnx',   nick:'절제가' },
   v8:    { file:'./model/mighty_master_v8.onnx',     nick:'수문장' },
   v6b:   { file:'./model/mighty_master_v6b.onnx',    nick:'기억가' },
   v5:    { file:'./model/mighty_master_v5.onnx',     nick:'수련생' },
 };
+// 보존 세대(v13 선견가 · v11ctl 조율가) — 배포에서는 내렸지만 파일은 web/model에,
+// 이력과 특징은 docs/MODELS.md '보존 세대' 절에 그대로 남겼다. 되돌리는 방법도
+// 거기 적어 뒀다. **여기에 파일명을 적지 마라** — 릴리스가 index.html에서 모델
+// 파일명을 긁어 번들을 고르므로, 주석에 적어 두기만 해도 배포물이 13MB 커진다.
 const HEUR='H';                              // 규칙기반 좌석 표식
 const TIER_PLAN={
-  intermediate: ['v5',  HEUR,     HEUR,  HEUR    ],
-  advanced:     ['v8',  'v6b',    'v8',  'v6b'   ],
-  master:       ['v13', 'v11ctl', 'v13', 'v11ctl'],
+  intermediate: ['v5',   HEUR,   HEUR,   HEUR  ],
+  advanced:     ['v8',   'v6b',  'v8',   'v6b' ],
+  master:       ['v16e', 'v16e', 'v16e', 'v16e'],
 };
 let masterSessions={};                       // id → onnx session (지연 로드 캐시)
 let seatModels=[null,null,null,null,null];   // AI 좌석별 pool id 또는 HEUR — 매치 내 고정
@@ -786,7 +792,8 @@ async function ensureMaster(){
   if (masterSess) return true;
   try{
     await ensureOrt();
-    masterSess = masterSessions['v13'] || await MightyAI.loadMaster(ortLib, MASTER_MODEL);
+    masterSess = masterSessions[JUDGE_ID]
+      || await MightyAI.loadMaster(ortLib, NN_POOL[JUDGE_ID].file);
     masterSessions['v13']=masterSess;
     return true;
   }catch(e){ return false; }
@@ -887,6 +894,7 @@ function buildSeats(){
         <div><div class="name">${NAMES[p]}</div><div class="meta" id="meta-${p}"></div></div>
       </div>
       <div class="badges" id="badges-${p}"></div>
+      <div class="bidchip" id="bidchip-${p}"></div>
       ${p!==HUMAN?`<div class="backs" id="backs-${p}"></div>`:''}
       <div class="pile" id="pile-${p}"></div>`;
     wrap.append(s);
@@ -988,6 +996,101 @@ function friendDeclText(){
   if (!game.friendRevealed) return tf('fdHidden', cardLabel(fd.card));
   return game.friend===null ? tf('fdSelf', cardLabel(fd.card))
                            : tf('fdKnownCard', cardLabel(fd.card), NAMES[game.friend]);
+}
+
+/* ---------------- 비딩 칩 ----------------
+ * 누가 어떤 순서로 공약했는지 좌석 카드 자리에 남긴다. 상태를 따로 들지 않고
+ * roundRec.actions에서 파생시킨다 — 되돌리기가 actions를 잘라내므로 칩도 자동으로
+ * 맞는다(별도 스냅샷을 두면 어긋날 자리가 생긴다).
+ * 공개는 0.5초 간격 순차. 비딩이 끝나면 잠깐 두고 지운다. */
+const BID_CHIP_STEP = 500;    // 칩 하나씩 나타나는 간격
+const BID_CHIP_HOLD = 900;    // 비딩 종료 후 남겨 두는 시간
+let bidRevealN = 0;           // 지금까지 공개한 비딩 착수 수
+let bidChipTimer = null;
+let bidChipClear = null;
+// 비딩이 끝난 뒤 한 번만 처리했다는 표식. 이게 없으면 플레이 중 render()마다
+// 공개 큐가 다시 돌아 칩이 카드 낼 때마다 되살아난다(제보 2026-08-17).
+let bidChipsDone = false;
+
+function bidActions(){
+  if (!roundRec) return [];
+  return roundRec.actions.filter(x => x.ph === 'bidding');
+}
+/** 타이머·DOM·카운터만 정리한다. bidChipsDone은 건드리지 않는다 —
+ *  여기서 되돌리면 플레이 중에 다시 공개가 시작된다. */
+function clearBidChips(){
+  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
+  if (bidChipClear){ clearTimeout(bidChipClear); bidChipClear = null; }
+  bidRevealN = 0;
+  for (let p = 0; p < 5; p++){
+    const c = $('#bidchip-' + p);
+    if (c){ c.className = 'bidchip'; c.innerHTML = ''; }
+  }
+}
+/** 새 라운드·되돌리기용 — 표식까지 초기화해 다음 비딩에서 다시 보이게 한다. */
+function resetBidChips(){ clearBidChips(); bidChipsDone = false; }
+/** 공개된 착수까지만 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
+function paintBidChips(){
+  const acts = bidActions();
+  const shown = Math.min(bidRevealN, acts.length);
+  const latest = {};                       // 좌석 → {ord, a}
+  for (let i = 0; i < shown; i++) latest[acts[i].p] = { ord: i + 1, a: acts[i].a };
+  const wonBy = (game && game.phase !== 'bidding' && game.declarer != null) ? game.declarer : null;
+  for (let p = 0; p < 5; p++){
+    const c = $('#bidchip-' + p);
+    if (!c) continue;
+    const rec = latest[p];
+    if (!rec){ c.className = 'bidchip'; c.innerHTML = ''; continue; }
+    const a = rec.a;
+    let cls = 'bidchip show', label;
+    if (a.type === 'pass'){ cls += ' pass'; label = t('패스'); }
+    else {
+      const g = a.giruda;
+      cls += g === 'N' ? ' nt' : (g === 'D' || g === 'H') ? ' red' : ' blk';
+      label = (g === 'N' ? 'NT' : SUIT_GLYPH[g]) + a.count;
+    }
+    if (wonBy === p && a.type !== 'pass') cls += ' won';
+    c.className = cls;
+    c.innerHTML = `<span class="cl">${label}</span><span class="ord">${rec.ord}</span>`;
+  }
+}
+/** 0.5초 간격으로 하나씩 공개 (비딩 중에만 돈다). */
+function pumpBidChips(){
+  if (bidChipTimer) return;
+  const acts = bidActions();
+  if (bidRevealN >= acts.length) return;
+  const myGen = stateGen;
+  bidChipTimer = setTimeout(() => {
+    bidChipTimer = null;
+    if (myGen !== stateGen) return;
+    bidRevealN++;
+    paintBidChips();
+    pumpBidChips();
+  }, BID_CHIP_STEP);
+}
+function renderBidChips(){
+  if (replay || !game || !roundRec){ clearBidChips(); return; }
+  const acts = bidActions();
+  if (!acts.length){ resetBidChips(); return; }
+  if (game.phase === 'bidding'){
+    bidChipsDone = false;
+    if (bidRevealN > acts.length) bidRevealN = acts.length;   // 되돌리기로 줄어든 경우
+    paintBidChips();
+    pumpBidChips();
+    return;
+  }
+  // 비딩이 끝났다. 남은 것을 한 번에 보여주고 잠깐 뒤 지운 다음 **다시 그리지 않는다**.
+  // 여기서 빠져나가지 않으면 플레이 중 render()마다 칩이 되살아난다.
+  if (bidChipsDone) return;
+  bidChipsDone = true;
+  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
+  bidRevealN = acts.length;
+  paintBidChips();
+  const myGen = stateGen;
+  bidChipClear = setTimeout(() => {
+    bidChipClear = null;
+    if (myGen === stateGen) clearBidChips();
+  }, BID_CHIP_HOLD);
 }
 
 /* ---------------- 공약 퍽 ---------------- */
@@ -1730,7 +1833,7 @@ async function doUndo(){
   undoUsed[gp]++;
   selDiscard = []; bidSel = {giruda:null,count:null}; reviseSel = {on:false,giruda:null,count:null};
   friendCustom = false; ghost = null; busy = false;
-  claimMode = false; claimShown = false; bidFlash = null;
+  claimMode = false; claimShown = false; bidFlash = null; resetBidChips();
   logLine(tf('logUndo', gp === 'bidding' ? t('비딩') : t('플레이')));
   toast(tf('undoDone', gp === 'bidding' ? t('비딩') : t('플레이')), 1500);
   render(); pump();
@@ -2540,7 +2643,8 @@ function render(){
   if (replay){ renderReplay(); refreshTools(); return; }
   document.querySelectorAll('.rhand').forEach(e=>e.remove());
   for (let p=1;p<5;p++){ const bk=$('#backs-'+p); if (bk) bk.style.display=''; }
-  renderSeats(); renderHud(); renderPuck(); renderTrick(); renderHand(); renderSheet(); renderCheat();
+  renderSeats(); renderHud(); renderPuck(); renderBidChips();
+  renderTrick(); renderHand(); renderSheet(); renderCheat();
   refreshTools();
 }
 function pump(){
@@ -2792,7 +2896,7 @@ function startRound(inc){
   if (inc!==false) roundNo++;
   selDiscard=[]; bidSel={giruda:null,count:null}; reviseSel={on:false,giruda:null,count:null};
   friendCustom=false; ghost=null; busy=false;
-  claimMode=false; claimShown=false; claimBy=null; bidFlash=null;
+  claimMode=false; claimShown=false; claimBy=null; bidFlash=null; resetBidChips();
   if (botTable && botTable.reset) botTable.reset();
   trumpSeenThisRound=false;
   const cfg = buildEngineConfig();
