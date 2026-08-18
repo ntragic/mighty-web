@@ -562,10 +562,14 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
  *   - 정책이 확신하는 국면(로짓 1-2위 차가 gate 이상)은 이미 정확하다(0.5~0.9%).
  *     거기서 탐색은 이득이 없고 비용만 든다 — 그래서 헷갈릴 때만 켠다.
  *
- * 설정: createAgent({ classSearch: { K: 16, gate: 0.6, topM: 5, budgetMs: 2000 } })
+ * 설정: createAgent({ classSearch: { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 } })
  * budgetMs를 넘기면 이미 굴린 결정화까지만 쓰고 멈춘다(저사양 기기 보호).
  */
-const SEARCH_DEFAULTS = { K: 16, gate: 0.6, topM: 5, budgetMs: 2000 };
+// budgetMs 1,200은 브라우저 실측에서 나왔다(tools/bench/run-bench.mjs).
+// 데스크톱 크롬 wasm 1스레드에서 16벌이 한 수 521ms라 예산에 안 걸리고,
+// CPU 1/4로 감속하면 1,683ms까지 가던 것이 1,226ms에서 잘린다.
+// 예산에 걸리면 결정화 수가 줄 뿐이고, 4벌도 못 채우면 정책 수로 돌아간다.
+const SEARCH_DEFAULTS = { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 };
 
 /** 이 좌석이 지금 weaklead 국면인가 — 좌석에서 보이는 정보만 쓴다. */
 function weakleadState(game, seat) {
