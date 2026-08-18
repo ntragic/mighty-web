@@ -370,8 +370,8 @@ const tf = (k,...a) => TF[k](...a);
 
 // 국면 한정 탐색 설정 — 끄려면 null로 둔다(즉시 이전 동작). 근거는 10절.
 const CLASS_SEARCH = { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 };
-const APP_VERSION = 'v2.15.0';
-const APP_BUILD = '2026-08-18 빌드 — 프렌드 리드 탐색 + 마이티 무늬 리드 억제';
+const APP_VERSION = 'v2.15.1';
+const APP_BUILD = '2026-08-18 빌드 — 비딩 칩 동기화 (한 수 1초)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -424,6 +424,11 @@ let matchOver = false;
 // 진행과 무관하게 고정한다 — 그 화면이 판의 결말이라 줄일 대상이 아니다.
 // 수거 애니메이션 다음은 곧장 결과 화면이다(중간에 빈 판을 보여주지 않는다).
 const FINAL_TRICK_HOLD = 1400;
+// 비딩 한 수를 보여 주는 시간. 봇이 60ms 간격으로 몰아치면 칩·퍽이 눈에 안 들어온다
+// (제보 2026-08-18). 이 예산 안에서 '생각 중'을 잠깐 띄우고, 공약을 그린 뒤 나머지를
+// 붙잡는다 — 그래서 비딩 과정과 칩 표시가 같은 속도로 흐른다.
+const BID_TURN = () => (claimMode ? 0 :
+  ({fast:700, normal:1000, slow:1400})[settings.ui.speed] || 1000);
 const SPD = () => ({fast:{bot:250,pre:250,show:550,collect:250},
                     normal:{bot:550,pre:450,show:900,collect:340},
                     slow:{bot:900,pre:650,show:1400,collect:420}})[settings.ui.speed];
@@ -1009,11 +1014,11 @@ function friendDeclText(){
  * 누가 어떤 순서로 공약했는지 좌석 카드 자리에 남긴다. 상태를 따로 들지 않고
  * roundRec.actions에서 파생시킨다 — 되돌리기가 actions를 잘라내므로 칩도 자동으로
  * 맞는다(별도 스냅샷을 두면 어긋날 자리가 생긴다).
- * 공개는 0.5초 간격 순차. 비딩이 끝나면 잠깐 두고 지운다. */
-const BID_CHIP_STEP = 500;    // 칩 하나씩 나타나는 간격
-const BID_CHIP_HOLD = 900;    // 비딩 종료 후 남겨 두는 시간
-let bidRevealN = 0;           // 지금까지 공개한 비딩 착수 수
-let bidChipTimer = null;
+ * 칩은 **기록된 즉시** 그린다. v2.13.0에서는 0.5초 간격 공개 큐를 따로 돌렸는데,
+ * 봇의 실제 비딩 속도와 큐 속도가 달라 칩이 뒤늦게 떠 상태와 어긋났다(제보 2026-08-18).
+ * 대신 비딩 한 수마다 BID_TURN만큼 화면을 잡아 두어 눈으로 따라갈 수 있게 한다.
+ * 비딩이 끝나면 잠깐 두고 지운다. */
+const BID_CHIP_HOLD = 1200;   // 비딩 종료 후 남겨 두는 시간
 let bidChipClear = null;
 // 비딩이 끝난 뒤 한 번만 처리했다는 표식. 이게 없으면 플레이 중 render()마다
 // 공개 큐가 다시 돌아 칩이 카드 낼 때마다 되살아난다(제보 2026-08-17).
@@ -1026,9 +1031,7 @@ function bidActions(){
 /** 타이머·DOM·카운터만 정리한다. bidChipsDone은 건드리지 않는다 —
  *  여기서 되돌리면 플레이 중에 다시 공개가 시작된다. */
 function clearBidChips(){
-  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
   if (bidChipClear){ clearTimeout(bidChipClear); bidChipClear = null; }
-  bidRevealN = 0;
   for (let p = 0; p < 5; p++){
     const c = $('#bidchip-' + p);
     if (c){ c.className = 'bidchip'; c.innerHTML = ''; }
@@ -1036,12 +1039,11 @@ function clearBidChips(){
 }
 /** 새 라운드·되돌리기용 — 표식까지 초기화해 다음 비딩에서 다시 보이게 한다. */
 function resetBidChips(){ clearBidChips(); bidChipsDone = false; }
-/** 공개된 착수까지만 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
+/** 기록된 비딩을 그대로 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
 function paintBidChips(){
   const acts = bidActions();
-  const shown = Math.min(bidRevealN, acts.length);
   const latest = {};                       // 좌석 → {ord, a}
-  for (let i = 0; i < shown; i++) latest[acts[i].p] = { ord: i + 1, a: acts[i].a };
+  for (let i = 0; i < acts.length; i++) latest[acts[i].p] = { ord: i + 1, a: acts[i].a };
   const wonBy = (game && game.phase !== 'bidding' && game.declarer != null) ? game.declarer : null;
   for (let p = 0; p < 5; p++){
     const c = $('#bidchip-' + p);
@@ -1061,37 +1063,19 @@ function paintBidChips(){
     c.innerHTML = `<span class="cl">${label}</span><span class="ord">${rec.ord}</span>`;
   }
 }
-/** 0.5초 간격으로 하나씩 공개 (비딩 중에만 돈다). */
-function pumpBidChips(){
-  if (bidChipTimer) return;
-  const acts = bidActions();
-  if (bidRevealN >= acts.length) return;
-  const myGen = stateGen;
-  bidChipTimer = setTimeout(() => {
-    bidChipTimer = null;
-    if (myGen !== stateGen) return;
-    bidRevealN++;
-    paintBidChips();
-    pumpBidChips();
-  }, BID_CHIP_STEP);
-}
 function renderBidChips(){
   if (replay || !game || !roundRec){ clearBidChips(); return; }
   const acts = bidActions();
   if (!acts.length){ resetBidChips(); return; }
   if (game.phase === 'bidding'){
     bidChipsDone = false;
-    if (bidRevealN > acts.length) bidRevealN = acts.length;   // 되돌리기로 줄어든 경우
     paintBidChips();
-    pumpBidChips();
     return;
   }
   // 비딩이 끝났다. 남은 것을 한 번에 보여주고 잠깐 뒤 지운 다음 **다시 그리지 않는다**.
   // 여기서 빠져나가지 않으면 플레이 중 render()마다 칩이 되살아난다.
   if (bidChipsDone) return;
   bidChipsDone = true;
-  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
-  bidRevealN = acts.length;
   paintBidChips();
   const myGen = stateGen;
   bidChipClear = setTimeout(() => {
@@ -1759,13 +1743,13 @@ function thinkTime(){
   const base={fast:[160,340], normal:[520,1150], slow:[900,1800]}[settings.ui.speed]||[520,1150];
   return base[0] + Math.random()*(base[1]-base[0]);
 }
-async function botThink(p){
+async function botThink(p, ms){
   if (claimMode) return;
   const seat=$('#seat-'+p);
   const bub=$(`#seat-${p} .bubble`);
   if (seat) seat.classList.add('thinking');
   if (bub){ bub.innerHTML='<span class="think-dots"><i></i><i></i><i></i></span>'; bub.classList.add('show'); }
-  await sleep(thinkTime());
+  await sleep(ms === undefined ? thinkTime() : ms);
   if (seat) seat.classList.remove('thinking');
   if (bub) bub.classList.remove('show');
 }
@@ -2689,7 +2673,7 @@ function pump(){
   if (cur!==HUMAN && !busy){
     busy=true; renderSheet();
     const myGen = stateGen;
-    setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 60 : claimSpeed().bot);
+    setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 0 : claimSpeed().bot);
   }
 }
 async function botStep(){
@@ -2697,7 +2681,8 @@ async function botStep(){
   const p=game.currentPlayer;
   const phase=game.phase;
   if (!agentsReady || !agents[p]) await buildAgents();
-  if (phase==='bidding') await botThink(p);
+  const turn = BID_TURN();
+  if (phase==='bidding') await botThink(p, turn * 0.3);
   if (myGen!==stateGen){ busy=false; return; }
   let action;
   try{ action = await agents[p].act(game, p); }
@@ -2714,7 +2699,10 @@ async function botStep(){
     if (action.type==='pass'){ bubble(p,t('패스')); logLine(tf('logPass', NAMES[p]));
       const st=$('#seat-'+p); if(st){ st.classList.remove('announce'); void st.offsetWidth; st.classList.add('announce'); } }
     else { announceBid(p, action.count, action.giruda); logLine(tf('logBid', NAMES[p], action.count, action.giruda)); }
-    busy=false; render();
+    render();                                   // 칩·퍽을 먼저 그리고
+    await sleep(turn * 0.7);                    // 눈으로 따라갈 시간을 준다
+    if (myGen!==stateGen){ busy=false; return; }
+    busy=false;
     if (game.phase==='floor' ) logLine(tf('logDeclarer', NAMES[game.declarer], contractText(game.contract)));
     pump(); return;
   }
@@ -2944,7 +2932,7 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+globalThis.MUI = { get game(){return game}, get busy(){return busy}, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{

@@ -1,7 +1,9 @@
 /* 비딩 칩 회귀 테스트.
  *
  * 요청(2026-08-17): 비딩 중 누가 어떤 순서로 공약했는지 좌석 카드 자리에 포커 칩
- * 모양으로 남기고, 0.5초 간격 순차 공개, **비딩이 끝나면 지운다**.
+ * 모양으로 남기고, **비딩이 끝나면 지운다**.
+ * 정정(2026-08-18): 0.5초 간격 순차 공개는 봇의 실제 비딩 속도와 어긋나 칩이
+ * 뒤늦게 떴다. 이제 기록 즉시 그리고, 대신 한 수마다 화면을 잡아 둔다.
  *
  * 지우는 것을 잊으면 판이 끝날 때까지 칩이 남아 트릭 화면을 가린다. 그래서
  * 이 테스트가 잡는 것은 두 가지다 — 비딩 중에 뜨는가, 끝난 뒤 사라지는가.
@@ -39,7 +41,7 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
   await sleep(150);
 
   // 1) 비딩이 진행되면 칩이 뜬다 (0.5초 간격이라 넉넉히 기다린다)
-  let sawChip = 0, humanActs = 0, guard = 0;
+  let sawChip = 0, humanActs = 0, guard = 0, lag = 0;
   const t0 = Date.now();
   while (Date.now() - t0 < 30000 && guard++ < 1200) {
     await sleep(40);
@@ -48,6 +50,11 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
     sawChip = Math.max(sawChip, chips().length);
     if (g.phase !== 'bidding') break;
     if (MUI.busy || g.currentPlayer !== 0) continue;
+    // 칩이 비딩 상태와 일치하는가 — 내 차례이고 대기 중이 아니면 이미 공약한
+    // 좌석 수와 칩 수가 같아야 한다. 순차 공개 큐 시절엔 여기서 밀렸다.
+    const acted = new Set((MUI.roundRec ? MUI.roundRec.actions : [])
+      .filter(x => x.ph === 'bidding').map(x => x.p));
+    if (acted.size !== chips().length) lag = Math.max(lag, Math.abs(acted.size - chips().length));
     // 전원 패스면 재딜이 나서 비딩이 다시 시작된다 — 그러면 '종료 후 삭제'를
     // 검사할 수 없다. 그래서 사람이 공약해 낙찰을 만든다.
     const bids = g.legalActions().filter(a => a.type === 'bid');
@@ -56,6 +63,8 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
   }
   console.log(`비딩 중 최대 칩 ${sawChip}개 · 내 착수 ${humanActs}회 · phase ${MUI.game.phase}`);
   ok(sawChip > 0, '비딩 중에 칩이 하나도 뜨지 않았다');
+  console.log(`칩과 비딩 상태의 최대 어긋남 ${lag}개`);
+  ok(lag === 0, `칩이 비딩 상태와 어긋났다 (최대 ${lag}개)`);
 
   // 2) 칩 내용이 공약 또는 패스여야 한다
   const texts = [...w.document.querySelectorAll('.bidchip.show .cl')].map(e => e.textContent);
@@ -94,7 +103,8 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
     await sleep(60);
     const g = MUI.game;
     if (!g || g.phase === 'done' || MUI.matchOver) break;
-    if (chips().length) revived = Math.max(revived, chips().length);
+    // 재딜이 나면 비딩이 다시 시작돼 칩이 뜨는 것이 정상이다 — 플레이 중만 센다
+    if (g.phase === 'play' && chips().length) revived = Math.max(revived, chips().length);
     if (MUI.busy || g.currentPlayer !== 0) continue;
     if (g.phase === 'play') {
       const legal = g._legalPlays(0).filter(m => !m.jokerCall);
