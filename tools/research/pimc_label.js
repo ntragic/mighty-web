@@ -35,6 +35,8 @@ const K = parseInt(process.env.K || '32', 10);
 const DEPTH = parseInt(process.env.DEPTH || '3', 10);
 const SAMPLE = parseFloat(process.env.SAMPLE || '0.25');
 const MARGIN = parseFloat(process.env.MARGIN || '0');
+// SPLIT: 결정화 A/B 분리 검증(승자의 저주 제거). 라벨 품질 스위치다.
+const SPLIT = process.env.SPLIT === '1';
 const JC_SAMPLE = parseFloat(process.env.JC_SAMPLE || '1.0');
 const K_JC = parseInt(process.env.K_JC || '200', 10);
 // 특수카드 무력화 국면(조커콜·마이티 무늬 리드)은 이득이 여러 트릭 뒤에 실현된다.
@@ -260,7 +262,7 @@ async function valueOf(sess, g, seat) {
   for (let s = 0; s < E.NUM_PLAYERS; s++)
     ag.push(await AI.createAgent({ tier: 'master', session: sess, ort }));
 
-  let labeled = 0, changed = 0, jcLabeled = 0, clsLabeled = 0, forced = 0;
+  let labeled = 0, changed = 0, jcLabeled = 0, clsLabeled = 0, forced = 0, splitDrop = 0;
   for (let i = 0; i < N; i++) {
     const R = REC_DIR ? RECS[i] : null;
     const seed = R ? R.seed : SEED0 + i;
@@ -342,9 +344,9 @@ async function valueOf(sess, g, seat) {
           if (dets.length >= 8) {
             const scores = [];
             for (const ci of cands) {
-              let sum = 0, n = 0;
-              for (const d of dets) {
-                const sim = cloneGame(d);
+              let sum = 0, n = 0, sumA = 0, nA = 0, sumB = 0, nB = 0;
+              for (let di = 0; di < dets.length; di++) {
+                const sim = cloneGame(dets[di]);
                 const a0 = M.actionToEngine(ci, sim, []);
                 if (!a0) continue;
                 try { sim.act(a0); } catch (e) { continue; }
@@ -360,8 +362,10 @@ async function valueOf(sess, g, seat) {
                   ? sim.result.prizes[p] / M.PRIZE_SCALE          // 가치 헤드와 같은 스케일
                   : await valueOf(sess, sim, p);
                 sum += v; n++;
+                if (di % 2) { sumB += v; nB++; } else { sumA += v; nA++; }
               }
-              if (n) scores.push({ i: ci, v: sum / n });
+              if (n) scores.push({ i: ci, v: sum / n,
+                                   a: nA ? sumA / nA : null, b: nB ? sumB / nB : null });
             }
             if (scores.length > 1) {
               scores.sort((a, b) => b.v - a.v);
@@ -369,10 +373,29 @@ async function valueOf(sess, g, seat) {
               const polScore = scores.find(x => x.i === polTop);
               const gain = polScore ? best.v - polScore.v : 0;
               if (best.i !== polTop) changed++;
-              if (gain >= MARGIN) {
+              // SPLIT=1: 결정화를 A/B로 갈라 **A에서 고르고 B에서 검증**한다.
+              // 같은 표본에서 고르고 재면 표본 최대가 위로 편향돼(승자의 저주)
+              // 노이즈로 뽑힌 수가 정답으로 들어간다 — 그런 라벨을 학습하면
+              // in-sample만 오르고 새 국면은 그대로다(2026-08-17 홀드아웃 실측:
+              // 학습 81% · 홀드아웃 57.3%로 앵커 58.2%보다도 낮았다).
+              let gainB = null, splitOk = true;
+              if (SPLIT) {
+                const ok = scores.filter(s => s.a !== null && s.b !== null);
+                const bA = ok.length > 1 ? ok.reduce((x, y) => (y.a > x.a ? y : x)) : null;
+                const pB = bA ? ok.find(s => s.i === polTop) : null;
+                if (!bA || !pB || bA.i === polTop) splitOk = false;
+                else {
+                  gainB = bA.b - pB.b;               // 고른 뒤 다른 표본에서 잰 이득
+                  if (gainB < MARGIN) splitOk = false;
+                  else best.i = bA.i;                // 목표도 A에서 고른 수로 바꾼다
+                }
+                if (!splitOk) splitDrop++;
+              }
+              if (splitOk && gain >= MARGIN) {
                 ws.write(JSON.stringify({
                   seed, dealer: g.dealer, cfg: g.config, upto: actions.length, seat: p,
-                  target: best.i, policyTop: polTop, gain: +gain.toFixed(4), jc: isJC ? 1 : 0,
+                  target: best.i, policyTop: polTop, gain: +(gainB === null ? gain : gainB).toFixed(4),
+                  gainRaw: gainB === null ? undefined : +gain.toFixed(4), jc: isJC ? 1 : 0,
                   cls: cls || undefined, slack: slack === null ? undefined : slack,
                   src: R ? 'replay' : (FORCE_BID ? 'forcedbid' : 'selfplay'),
                   bid: g.contract ? g.contract.count : undefined,
@@ -393,6 +416,8 @@ async function valueOf(sess, g, seat) {
       process.stderr.write(`  ${i + 1}/${N}판 · 라벨 ${labeled} · 정책과 다른 목표 ${changed}\n`);
   }
   ws.end();
+  if (SPLIT) console.log(`검증 탈락 ${splitDrop}건 (A에서 고른 수가 B에서 못 이김) ` +
+    `· 생존율 ${(100 * labeled / Math.max(1, labeled + splitDrop)).toFixed(1)}%`);
   console.log(`라벨 ${labeled}건 (조커콜 ${jcLabeled} · 프렌드 개입 ${clsLabeled}` +
     (forced ? ` · 공약강제 ${forced}판` : '') + `) · 정책 1위와 다른 목표 ` +
     `${changed}건 (${(100 * changed / Math.max(1, labeled)).toFixed(1)}%) → ${OUT}`);

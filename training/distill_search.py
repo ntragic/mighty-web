@@ -120,6 +120,8 @@ def main():
     ap.add_argument('--cls-weight', type=float, default=1.0,
                     help='프렌드 개입 국면(weaklead·oppwin) 라벨의 CE 가중치. 조커콜과 같은 이유로 '
                          '드물어서 균등 가중이면 신호가 묻힌다')
+    ap.add_argument('--val-frac', type=float, default=0.0,
+                    help='홀드아웃 비율. in-sample만 오르고 홀드아웃이 안 오르면 암기다')
     ap.add_argument('--weight-by-gain', action='store_true',
                     help='탐색 이득 크기로 CE 가중 (작은 이득은 노이즈일 수 있다)')
     args = ap.parse_args()
@@ -158,6 +160,22 @@ def main():
           f'(실효 비중 {100 * (w * cls_t).sum().item() / w.sum().item():.1f}%)')
 
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr)
+    # 홀드아웃 — 학습에 안 쓴 라벨에서의 교사 일치. 이게 안 오르면 in-sample이
+    # 아무리 올라도 새 국면에서는 그대로다(2026-08-17 weaklead 사이클의 실패 모드).
+    # 앵커 시점 값도 같이 찍어 "얼마나 올랐나"를 볼 수 있게 한다.
+    n_all = len(obs)
+    n_val = int(n_all * args.val_frac)
+    v_obs = v_mask = v_tgt = None
+    if n_val:
+        vperm = torch.randperm(n_all, device=dev)
+        vi, ti = vperm[:n_val], vperm[n_val:]
+        v_obs, v_mask, v_tgt = obs[vi], mask[vi], tgt[vi]
+        with torch.no_grad():
+            base_acc = (anchor.forward_aux(v_obs, v_mask)[0].argmax(-1) == v_tgt).float().mean().item()
+        print(f'  홀드아웃 {n_val}건 · 앵커(v16e) 교사 일치 {base_acc:.3f}')
+    else:
+        ti = torch.arange(n_all, device=dev)
+    obs, mask, tgt, w = obs[ti], mask[ti], tgt[ti], w[ti]
     n = len(obs)
     print(f'증류 시작 · n={n} · kl={args.kl} ce={args.ce} epochs={args.epochs}')
     for ep in range(args.epochs):
@@ -180,7 +198,12 @@ def main():
             opt.step()
             tot_ce += ce.item(); tot_kl += kl.item()
             acc += (logits.argmax(-1) == tgt[idx]).float().mean().item(); nb += 1
-        print(f'  ep{ep + 1} ce {tot_ce / nb:.4f} kl {tot_kl / nb:.4f} 교사일치 {acc / nb:.3f}')
+        vtxt = ''
+        if v_obs is not None:
+            with torch.no_grad():
+                va = (net.forward_aux(v_obs, v_mask)[0].argmax(-1) == v_tgt).float().mean().item()
+            vtxt = f' 홀드아웃 {va:.3f}'
+        print(f'  ep{ep + 1} ce {tot_ce / nb:.4f} kl {tot_kl / nb:.4f} 교사일치 {acc / nb:.3f}{vtxt}')
 
     import os
     os.makedirs(args.ckpt, exist_ok=True)

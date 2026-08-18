@@ -15,8 +15,11 @@ cd "$(dirname "$0")/../.."
 # 물어 3갈래가 단일 실행보다 5배 느려진다(실측 5라벨/분 vs 32라벨/분).
 # 2번째 인자는 웨이브 번호다. 갈래 번호와 시드가 같이 밀려 이어 붙일 수 있다
 # (실측 수율 딜당 1.08건 — 2,000건을 채우려면 웨이브가 더 필요하다).
+# SPLIT=1(기본)이면 결정화를 A/B로 갈라 고르기·검증을 분리한다. 생존율 40% —
+# 옛 라벨의 60%는 노이즈로 뽑힌 정답이었다(2026-08-17 밤 실측).
 N=${1:-250}
 W=${2:-0}
+PREFIX=${PREFIX:-wlq_labels_}
 MODEL=web/model/mighty_master_v16e.onnx
 
 echo "[$(date +%H:%M)] weaklead 라벨 생성 — 갈래당 $N 판 (웨이브 $W)"
@@ -24,11 +27,11 @@ for j in 1 2 3 4 5; do
   i=$((j + W * 5))
   env ORT_THREADS=3 MODEL=$MODEL SEED_BASE=$((63000000 + i * 1000000)) \
       CLASS_ONLY=weaklead CLASS_SAMPLE=1.0 KEY_SAMPLE=0 JC_SAMPLE=0 \
-      K_CLASS=64 DEPTH_CLASS=0 TOPM=5 BID_MAX=18 \
-      node tools/research/pimc_label.js "training/wl_labels_$i.jsonl" "$N" \
+      K_CLASS=${K_CLASS:-128} DEPTH_CLASS=0 TOPM=5 BID_MAX=18 SPLIT=${SPLIT:-1} \
+      node tools/research/pimc_label.js "training/$PREFIX$i.jsonl" "$N" \
       > "docs/wl-label-$i.log" 2>&1 &
 done
 wait
 echo "[$(date +%H:%M)] 완료"
 for j in 1 2 3 4 5; do tail -1 "docs/wl-label-$((j + W * 5)).log"; done
-wc -l training/wl_labels_*.jsonl
+wc -l training/$PREFIX*.jsonl

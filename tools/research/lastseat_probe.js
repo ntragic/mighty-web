@@ -37,6 +37,9 @@ const K = parseInt(process.env.K || '64', 10);
 // 확정승 아니고 뒤에 2명+ | oppwin = 최강이 야당. 8/16 제보(컷 미실행)를 비율이
 // 아니라 후회로 재측정하기 위해 넣었다 — 비율 일치는 국면 선택 오류를 못 잡는다.
 const CLASS = process.env.CLASS || 'lastseat';
+// BLUNDER: 대형 실수 판정선(상금). 라벨 이득 중앙값이 88·평균 141이라 200이면
+// '한눈에 보이는 실수'에 해당한다.
+const BLUNDER = parseFloat(process.env.BLUNDER || '200');
 const A_PLAY0 = 149, A_JS0 = 201, A_JOKER = 205;
 const SUITS4 = ['S', 'D', 'H', 'C'];
 
@@ -166,8 +169,8 @@ async function topAction(sess, g, seat) {
   for (let p = 0; p < 5; p++) ag.push(await AI.createAgent({ tier: 'master', session: sess[GEN], ort }));
   let sc = 24680; const rnd = () => { sc = (sc * 1103515245 + 12345) & 0x7fffffff; return sc / 0x7fffffff; };
 
-  const hit = {}, regret = {}, paired = {}, honest = {};
-  for (const id of MODELS) { hit[id] = 0; regret[id] = []; paired[id] = []; honest[id] = []; }
+  const hit = {}, regret = {}, paired = {}, honest = {}, blunder = {};
+  for (const id of MODELS) { hit[id] = 0; regret[id] = []; paired[id] = []; honest[id] = []; blunder[id] = []; }
   let states = 0, deals = 0, pimcDone = 0, pimcWin = 0, pimcGain = [];
 
   for (let i = 0; i < N; i++) {
@@ -235,7 +238,13 @@ async function topAction(sess, g, seat) {
                 const byB = new Map(ok.map(s => [idxOf(s.mv), s.b]));
                 for (const id of MODELS) {
                   const vb = byB.get(polTop[id]);
-                  if (vb !== undefined) honest[id].push(bestA.b - vb);
+                  if (vb !== undefined) {
+                    honest[id].push(bestA.b - vb);
+                    // 대형 실수 = 교사 최선수보다 BLUNDER 이상 손해. 사람이 체감하는
+                    // 것은 평균 후회가 아니라 "저건 아니지" 소리 나오는 이 장면이고,
+                    // 비율이라 평균보다 신뢰구간이 훨씬 좁다(같은 국면 페어드).
+                    blunder[id].push(bestA.b - vb >= BLUNDER ? 1 : 0);
+                  }
                 }
               }
               const bestWin = scores.find(s => winIdx.has(idxOf(s.mv)));
@@ -258,12 +267,13 @@ async function topAction(sess, g, seat) {
     return { m, ci: a.length ? 1.96 * Math.sqrt(v / a.length) : 0 };
   };
   const BASE = MODELS[MODELS.length - 1];
-  console.log(`\n모델      확정승 채택률   후회(같은표본)   후회(A선택·B평가)   ${BASE} 대비 페어드`);
+  console.log(`\n모델      확정승 채택률   후회(같은표본)   후회(A선택·B평가)   대형실수율   ${BASE} 대비 페어드`);
   for (const id of MODELS) {
     const r = stat(regret[id]), h = stat(honest[id]), d = stat(paired[id]);
     console.log(`  ${id.padEnd(7)} ${(100 * hit[id] / Math.max(1, states)).toFixed(1).padStart(6)}%` +
       `      −${r.m.toFixed(0).padStart(4)} ± ${r.ci.toFixed(0)}` +
       `      ${h.m >= 0 ? '−' : '+'}${Math.abs(h.m).toFixed(0).padStart(4)} ± ${h.ci.toFixed(0)}` +
+      `   ${(100 * blunder[id].reduce((x, y) => x + y, 0) / Math.max(1, blunder[id].length)).toFixed(1).padStart(5)}%` +
       `   ${id === BASE ? '기준' : `${d.m >= 0 ? '+' : ''}${d.m.toFixed(1)} ± ${d.ci.toFixed(1)}` +
         `${Math.abs(d.m) > d.ci ? (d.m > 0 ? ' 유의 개선' : ' 유의 악화') : ''}`}`);
   }
