@@ -370,8 +370,8 @@ const tf = (k,...a) => TF[k](...a);
 
 // 국면 한정 탐색 설정 — 끄려면 null로 둔다(즉시 이전 동작). 근거는 10절.
 const CLASS_SEARCH = { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 };
-const APP_VERSION = 'v2.14.0';
-const APP_BUILD = '2026-08-18 빌드 — 프렌드 개입 국면 탐색 (마스터)';
+const APP_VERSION = 'v2.15.0';
+const APP_BUILD = '2026-08-18 빌드 — 프렌드 리드 탐색 + 마이티 무늬 리드 억제';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){

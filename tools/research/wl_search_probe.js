@@ -32,6 +32,14 @@ const PIMC_N = parseInt(process.env.PIMC_N || '300', 10);
 const BLUNDER = parseFloat(process.env.BLUNDER || '200');
 const SEED0 = parseInt(process.env.SEED_BASE || '91000000', 10);
 const TOPM = parseInt(process.env.TOPM || '5', 10);
+// CLASS: weaklead(기본) = 아군이 이기는 트릭에 개입할지 | friendlead = 프렌드가
+// 선을 잡았을 때 무엇을 리드할지. 사용자 체감(기루다 정리·마이티 유도)은 리드
+// 쪽이고, weaklead 술어는 리드를 아예 제외한다.
+const CLASS = process.env.CLASS || 'weaklead';
+// BAN=1: 배포 규칙(마이티 무늬 리드 억제)을 정책·탐색 양쪽에 건다. 사람 정석이며
+// 교사는 반대로 권하므로(미출현 국면 32.8%) 교사 대비 지표는 나빠질 수 있다 —
+// 그 비용을 숫자로 남기려고 넣었다.
+const BAN = process.env.BAN === '1';
 // ROLL: 탐색 롤아웃을 둘 티어. master는 매 수마다 신경망을 호출해 비싸다
 // (한 수 826ms). 규칙 기반 advanced로 굴리면 호출이 사라진다 — PIMC는 롤아웃
 // 정책보다 결정화 수에 더 민감하므로 바꿔볼 값이 있다.
@@ -113,6 +121,17 @@ function determinize(g, seat, rnd) {
   return null;
 }
 
+/** 프렌드가 선을 잡은 국면 — 리드 선택 전부가 표적이다. */
+function friendLeadOf(g, p) {
+  if (g.phase !== 'play' || p === g.declarer) return null;
+  if (!g.play || g.play.table.length !== 0) return null;          // 리드만
+  const fd = g.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        g.hands[p].some(c => E.sameCard(c, fd.card)))) return null;
+  const legal = g._legalPlays(p);
+  return legal.length >= 2 ? { legal } : null;
+}
+
 /** weaklead 국면 — lastseat_probe.js CLASS=weaklead와 같은 술어 */
 function weakleadOf(g, p) {
   if (g.phase !== 'play' || p === g.declarer || g.play.table.length === 0) return null;
@@ -138,6 +157,26 @@ function weakleadOf(g, p) {
   return canWin ? { legal } : null;
 }
 
+/** 리드 카드의 성격 — 기루다인가, 마이티 무늬인가(마이티 자체는 뺀다).
+ *  '기루다 정리'와 '마이티 유도'가 실제로 나오는지 세려고 쓴다. */
+function leadKind(g, mv) {
+  if (!mv || E.isJoker(mv.card)) return { trump: false, mightySuit: false };
+  const gir = g.contract ? g.contract.giruda : null;    // 엔진 필드는 giruda다
+  const trump = !!gir && gir !== 'N' && mv.card.suit === gir;
+  const ms = g.mightyCard ? g.mightyCard.suit : null;
+  const mightySuit = !!ms && mv.card.suit === ms && !E.sameCard(mv.card, g.mightyCard);
+  return { trump, mightySuit };
+}
+
+/** 마이티가 아직 안 나왔고 내 손에도 없다 = 끌어낼 대상이 남아 있다 */
+function mightyOutstanding(g, seat) {
+  if (!g.mightyCard) return false;
+  const id = E.cardId(g.mightyCard);
+  for (const t of g.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return false;
+  for (const e of g.play.table) if (E.cardId(e.card) === id) return false;
+  return !g.hands[seat].some(c => E.cardId(c) === id);
+}
+
 async function policyLogits(sess, g, seat) {
   let obs = M.encodeObs(g, seat, []);
   const mask = M.legalMask(g, []);
@@ -149,11 +188,32 @@ async function policyLogits(sess, g, seat) {
   });
   return { lg: out.logits.data, mask, value: out.value ? out.value.data[0] : 0 };
 }
-async function topAction(sess, g, seat) {
+/** 여당 좌석의 마이티 무늬 리드 금지 인덱스 — src/mighty-ai.js와 같은 규칙 */
+function bannedLeads(g, seat) {
+  if (!BAN || !g.play || g.play.table.length !== 0) return null;
+  const fd = g.friendDecl;
+  const attacker = seat === g.declarer ||
+    (fd && fd.mode === 'card' && fd.card && g.hands[seat].some(c => E.sameCard(c, fd.card))) ||
+    (g.friendRevealed && g.friend === seat);
+  if (!attacker || !g.mightyCard) return null;
+  const id = E.cardId(g.mightyCard);
+  for (const t of g.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return null;
+  if (g.hands[seat].some(c => E.cardId(c) === id)) return null;
+  const legal = g._legalPlays(seat);
+  const bad = legal.filter(mv => !E.isJoker(mv.card) && mv.card.suit === g.mightyCard.suit);
+  if (!bad.length || bad.length === legal.length) return null;
+  return new Set(bad.map(idxOf));
+}
+
+async function topAction(sess, g, seat, banned) {
   const { lg, mask } = await policyLogits(sess, g, seat);
   const v = [];
   for (let i = 0; i < M.ACTION_DIM; i++) if (mask[i]) v.push([lg[i], i]);
   v.sort((a, b) => b[0] - a[0]);
+  if (banned && banned.size) {
+    const keep = v.filter(x => !banned.has(x[1]));
+    if (keep.length) { v.length = 0; v.push(...keep); }
+  }
   // margin = 1위와 2위 로짓 차이. 작을수록 정책이 헷갈린다는 뜻이고, 탐색을
   // 그런 국면에만 켜면 비용을 발화율로 줄일 수 있다.
   return { act: v[0][1], margin: v.length > 1 ? v[0][0] - v[1][0] : 99 };
@@ -165,11 +225,15 @@ async function valueOf(sess, g, seat) {
 }
 
 /** 배포 후보 탐색 — 상위 TOPM 후보를 K_S벌 × DEPTH_S트릭만 굴리고 가치 헤드로 평가 */
-async function searchMove(sess, ag, g, seat, rnd) {
+async function searchMove(sess, ag, g, seat, rnd, banned) {
   const { lg, mask } = await policyLogits(sess, g, seat);
-  const idx = [];
+  let idx = [];
   for (let a = 0; a < M.ACTION_DIM; a++) if (mask[a]) idx.push(a);
   idx.sort((a, b) => lg[b] - lg[a]);
+  if (banned && banned.size) {
+    const keep = idx.filter(i => !banned.has(i));
+    if (keep.length) idx = keep;
+  }
   const cands = idx.slice(0, TOPM);
   if (cands.length < 2) return cands[0];
   const dets = [];
@@ -211,6 +275,10 @@ async function searchMove(sess, ag, g, seat, rnd) {
 
   const R = { policy: [], search: [] }, B = { policy: [], search: [] };
   const MG = [];   // [margin, 정책이 대형 실수했나, 탐색이 고쳤나]
+  // 리드 성격 집계 — 정책·탐색·교사(A에서 고른 수)를 같은 국면에서 나란히 센다
+  const LEAD = { policy: { trump: 0, mighty: 0 }, search: { trump: 0, mighty: 0 },
+                 teacher: { trump: 0, mighty: 0 }, n: 0, nOut: 0,
+                 outstanding: { policy: 0, search: 0, teacher: 0 } };
   let states = 0, deals = 0, pimcDone = 0, diff = 0, msSum = 0, msN = 0, msMax = 0, fired = 0;
 
   for (let i = 0; i < N && pimcDone < PIMC_N; i++) {
@@ -219,13 +287,15 @@ async function searchMove(sess, ag, g, seat, rnd) {
     let guard = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
       const p = g.currentPlayer;
-      const cls = pimcDone < PIMC_N ? weakleadOf(g, p) : null;
+      const clsOf = CLASS === 'friendlead' ? friendLeadOf : weakleadOf;
+      const cls = pimcDone < PIMC_N ? clsOf(g, p) : null;
       if (cls) {
         states++;
-        const { act: aPol, margin } = await topAction(sess, g, p);
+        const banned = bannedLeads(g, p);
+        const { act: aPol, margin } = await topAction(sess, g, p, banned);
         const t0 = Date.now();
         const gated = margin >= GATE;                    // 확신하면 탐색 생략
-        const aSea = gated ? aPol : await searchMove(sess, rag, g, p, rnd);
+        const aSea = gated ? aPol : await searchMove(sess, rag, g, p, rnd, banned);
         const ms = Date.now() - t0;
         if (!gated) fired++;
         msSum += ms; msN++; if (ms > msMax) msMax = ms;
@@ -235,8 +305,18 @@ async function searchMove(sess, ag, g, seat, rnd) {
         const dets = [];
         for (let k = 0; k < K; k++) { const d = determinize(g, p, rnd); if (d) dets.push(d); }
         if (dets.length >= 8) {
+          // 교사 후보는 **정책 수와 탐색 수를 반드시 포함**해야 한다. 리드 국면은
+          // 합법수가 10장을 넘어서, 엔진 순서 앞 6장만 재면 비교 대상이 빠진다.
+          const byIdxMv = new Map();
+          for (const mv of cls.legal) if (!byIdxMv.has(idxOf(mv))) byIdxMv.set(idxOf(mv), mv);
+          const wanted = [];
+          for (const i of [aPol, aSea]) if (byIdxMv.has(i)) wanted.push(byIdxMv.get(i));
+          for (const mv of cls.legal) {
+            if (wanted.length >= 6) break;
+            if (!wanted.some(x => idxOf(x) === idxOf(mv))) wanted.push(mv);
+          }
           const scores = [];
-          for (const mv of cls.legal.slice(0, 6)) {
+          for (const mv of wanted) {
             let sA = 0, nA = 0, sB = 0, nB = 0;
             for (let di = 0; di < dets.length; di++) {
               const sim = cloneGame(dets[di]);
@@ -249,7 +329,7 @@ async function searchMove(sess, ag, g, seat, rnd) {
               const pr = sim.result.prizes[p];
               if (di % 2) { sB += pr; nB++; } else { sA += pr; nA++; }
             }
-            if (nA && nB) scores.push({ i: idxOf(mv), a: sA / nA, b: sB / nB });
+            if (nA && nB) scores.push({ i: idxOf(mv), mv, a: sA / nA, b: sB / nB });
           }
           if (scores.length > 1) {
             pimcDone++;
@@ -262,6 +342,16 @@ async function searchMove(sess, ag, g, seat, rnd) {
             const vp = byB.get(aPol), vs = byB.get(aSea);
             if (vp !== undefined && vs !== undefined)
               MG.push([margin, bestA.b - vp >= BLUNDER ? 1 : 0, bestA.b - vs >= BLUNDER ? 1 : 0]);
+            if (CLASS === 'friendlead') {
+              const out = mightyOutstanding(g, p);
+              LEAD.n++; if (out) LEAD.nOut++;
+              const pick = { policy: byIdxMv.get(aPol), search: byIdxMv.get(aSea), teacher: bestA.mv };
+              for (const key of ['policy', 'search', 'teacher']) {
+                const k = leadKind(g, pick[key]);
+                if (k.trump) LEAD[key].trump++;
+                if (k.mightySuit) { LEAD[key].mighty++; if (out) LEAD.outstanding[key]++; }
+              }
+            }
           }
         }
       }
@@ -280,7 +370,7 @@ async function searchMove(sess, ag, g, seat, rnd) {
   // 페어드 — 같은 국면에서 정책과 탐색의 손실 차이
   const d = R.policy.map((x, i) => x - R.search[i]).filter(x => Number.isFinite(x));
   const ds = stat(d);
-  console.log(`\n모델 ${MODEL} · 탐색 K_S=${K_S} DEPTH_S=${DEPTH_S} ROLL=${ROLL} TOPM=${TOPM} · 딜 ${deals} · 클래스 국면 ${states} · 교사 평가 ${pimcDone}`);
+  console.log(`\n클래스 ${CLASS} · 모델 ${MODEL} · 탐색 K_S=${K_S} DEPTH_S=${DEPTH_S} ROLL=${ROLL} TOPM=${TOPM} · 딜 ${deals} · 클래스 국면 ${states} · 교사 평가 ${pimcDone}`);
   console.log(`한 수 비용 평균 ${(msSum / Math.max(1, msN)).toFixed(0)}ms · 최대 ${msMax}ms · 정책과 다른 수 ${(100 * diff / Math.max(1, states)).toFixed(1)}%`);
   console.log(`탐색 발화 ${fired}/${states}국면 (${(100 * fired / Math.max(1, states)).toFixed(0)}%)` +
     ` · 딜당 ${(fired / Math.max(1, deals)).toFixed(2)}회 · GATE=${GATE}`);
@@ -301,6 +391,13 @@ async function searchMove(sess, ag, g, seat, rnd) {
       console.log(`    Q${i + 1} 로짓차 ${part[0][0].toFixed(2)}~${part[part.length - 1][0].toFixed(2)}` +
         ` (n=${part.length}) · 정책 대형실수 ${pb.toFixed(1)}% → 탐색 ${sb.toFixed(1)}%`);
     }
+  }
+  if (LEAD.n) {
+    const pct = (x, d) => `${(100 * x / Math.max(1, d)).toFixed(1)}%`;
+    console.log(`  리드 성격 (n=${LEAD.n} · 마이티 미출현 ${LEAD.nOut})`);
+    console.log(`    기루다 리드    정책 ${pct(LEAD.policy.trump, LEAD.n)} · 탐색 ${pct(LEAD.search.trump, LEAD.n)} · 교사 ${pct(LEAD.teacher.trump, LEAD.n)}`);
+    console.log(`    마이티무늬 리드 정책 ${pct(LEAD.policy.mighty, LEAD.n)} · 탐색 ${pct(LEAD.search.mighty, LEAD.n)} · 교사 ${pct(LEAD.teacher.mighty, LEAD.n)}`);
+    console.log(`    └ 마이티 미출현 한정  정책 ${pct(LEAD.outstanding.policy, LEAD.nOut)} · 탐색 ${pct(LEAD.outstanding.search, LEAD.nOut)} · 교사 ${pct(LEAD.outstanding.teacher, LEAD.nOut)}`);
   }
   console.log(`  페어드(정책 − 탐색) ${ds.m >= 0 ? '+' : ''}${ds.m.toFixed(1)} ± ${ds.ci.toFixed(1)}` +
     `${Math.abs(ds.m) > ds.ci ? (ds.m > 0 ? ' → 탐색이 유의 우세' : ' → 탐색이 유의 열세') : ' → 유의차 없음'}`);

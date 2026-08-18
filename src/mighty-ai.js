@@ -571,6 +571,56 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
 // 예산에 걸리면 결정화 수가 줄 뿐이고, 4벌도 못 채우면 정책 수로 돌아간다.
 const SEARCH_DEFAULTS = { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 };
 
+/** 여당 좌석인가 — 주공이거나 프렌드 카드를 쥐었거나 공개된 프렌드. */
+function attackerSeat(game, seat) {
+  if (seat === game.declarer) return true;
+  const fd = game.friendDecl;
+  if (fd && fd.mode === 'card' && fd.card &&
+      game.hands[seat].some(c => E.sameCard(c, fd.card))) return true;
+  return !!game.friendRevealed && game.friend === seat;
+}
+
+/** 마이티가 아직 안 나왔고 내 손에도 없다 = 아군이 쥐고 있을 수 있다. */
+function mightyOutstanding(game, seat) {
+  if (!game.mightyCard || !game.play) return false;
+  const id = E.cardId(game.mightyCard);
+  for (const t of game.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return false;
+  for (const e of game.play.table) if (E.cardId(e.card) === id) return false;
+  return !game.hands[seat].some(c => E.cardId(c) === id);
+}
+
+/**
+ * 마이티 무늬 리드 억제 (사람 정석, 2026-08-18 사용자 지시).
+ *
+ * 여당(주공·프렌드)은 마이티 무늬를 돌리지 않는다 — 아군이 쥔 마이티를 값싼
+ * 트릭에 끌어내 낭비시키기 때문이다. 마이티가 이미 나왔거나 내가 들고 있으면
+ * 그 이유가 사라지므로 적용하지 않는다.
+ *
+ * **탐색은 반대로 권한다**(마이티 미출현 국면에서 32.8%, 정책 17.2%). 상금으로는
+ * 탐색이 옳을 수 있으나 사람 눈에는 정석 위반으로 보인다. 규칙을 위에 두기로 한
+ * 판단이며, 되돌리려면 createAgent({mightyLeadGuard:false}).
+ */
+function mightySuitLeadBanned(game, seat, mv) {
+  if (!game.play || game.play.table.length !== 0) return false;   // 리드에만 건다
+  if (!mv || E.isJoker(mv.card)) return false;
+  if (!attackerSeat(game, seat) || !mightyOutstanding(game, seat)) return false;
+  const ms = game.mightyCard ? game.mightyCard.suit : null;
+  return !!ms && mv.card.suit === ms;
+}
+
+/** 프렌드가 선을 잡은 국면 — 리드 선택 전부가 탐색 대상이다.
+ *  개입(weaklead)과 달리 확신도 게이트를 쓰지 않는다: 900국면 실측에서 로짓차
+ *  네 분위 **전부** 탐색이 이겼다(정책 8.6~14.3% → 탐색 4.9~7.2%). */
+function friendLeadState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length !== 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  const legal = game._legalPlays(seat);
+  return legal.length >= 2 ? legal : null;
+}
+
 /** 이 좌석이 지금 weaklead 국면인가 — 좌석에서 보이는 정보만 쓴다. */
 function weakleadState(game, seat) {
   if (game.phase !== 'play' || seat === game.declarer) return null;
@@ -686,9 +736,13 @@ async function topCandidates(session, ort, game, seat, topM) {
  * 후보마다 결정화 판을 끝까지 굴려 평균 상금이 가장 큰 수를 고른다.
  * 못 고르면(결정화 실패·예산 초과) null을 돌려 정책 수를 그대로 쓰게 한다.
  */
-async function searchWeaklead(session, ort, game, seat, rollAct, cfg, rng) {
+async function searchWeaklead(session, ort, game, seat, rollAct, cfg, rng, banned) {
   const t0 = Date.now();
-  const { cands } = await topCandidates(session, ort, game, seat, cfg.topM);
+  let { cands } = await topCandidates(session, ort, game, seat, cfg.topM);
+  if (banned && banned.size) {
+    const keep = cands.filter(i => !banned.has(i));
+    if (keep.length) cands = keep;                  // 전부 금지면 어쩔 수 없이 둔다
+  }
   if (cands.length < 2) return null;
   const dets = [];
   for (let k = 0; k < cfg.K; k++) {
@@ -754,11 +808,29 @@ async function createAgent(opts = {}) {
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
-        if (scfg && weakleadState(game, seat)) {
-          const { margin } = await topCandidates(session, ort, game, seat, scfg.topM);
-          // 정책이 확신하는 국면은 이미 정확하다 — 헷갈릴 때만 계산을 쓴다.
-          if (margin < scfg.gate) {
-            const found = await searchWeaklead(session, ort, game, seat, rollAct, scfg, rng);
+        // 마이티 무늬 리드 금지 목록 — 탐색 후보에서 빼고, 정책 수도 여기 걸리면
+        // 다음 후보로 바꾼다(리드 국면에서만 만들어지므로 비용은 무시할 만하다).
+        let banned = null;
+        if (opts.mightyLeadGuard !== false && game.phase === 'play' &&
+            game.play && game.play.table.length === 0 && attackerSeat(game, seat)) {
+          const legal = game._legalPlays(seat);
+          if (legal.length >= 2) {
+            const bad = legal.filter(mv => mightySuitLeadBanned(game, seat, mv));
+            if (bad.length && bad.length < legal.length)
+              banned = new Set(bad.map(mv => M.actionIndex(mv)));
+          }
+        }
+        const cls = scfg && (weakleadState(game, seat) ? 'weaklead'
+                    : friendLeadState(game, seat) ? 'friendlead' : null);
+        if (cls) {
+          // 개입은 정책이 헷갈릴 때만, 리드는 항상 — 실측 근거는 위 주석에 있다.
+          let go = true;
+          if (cls === 'weaklead') {
+            const { margin } = await topCandidates(session, ort, game, seat, scfg.topM);
+            go = margin < scfg.gate;
+          }
+          if (go) {
+            const found = await searchWeaklead(session, ort, game, seat, rollAct, scfg, rng, banned);
             if (found) {
               if (scfg.count) scfg.count.fired = (scfg.count.fired || 0) + 1;
               return applyGuards(session, ort, game, seat, found, opts);
@@ -768,8 +840,19 @@ async function createAgent(opts = {}) {
         for (let guard = 0; guard < 8; guard++) {
           const a = await M.chooseAction(session, ort, game, seat, pick);
           const act = M.actionToEngine(a, game, pick);
-          // null이면 교환 카드 누적 중 → 다시 고른다
-          if (act) return applyGuards(session, ort, game, seat, act, opts);
+          if (!act) continue;                       // 교환 카드 누적 중 → 다시 고른다
+          if (banned && banned.size) {
+            const idx = M.actionIndex({ card: act.card, jokerSuit: act.jokerSuit });
+            if (banned.has(idx)) {
+              const alt = await topCandidates(session, ort, game, seat, M.ACTION_DIM);
+              const pickIdx = alt.cands.find(i => !banned.has(i));
+              if (pickIdx !== undefined) {
+                const swapped = M.actionToEngine(pickIdx, game, pick);
+                if (swapped) return applyGuards(session, ort, game, seat, swapped, opts);
+              }
+            }
+          }
+          return applyGuards(session, ort, game, seat, act, opts);
         }
         throw new Error('master: 액션 확정 실패');
       },
