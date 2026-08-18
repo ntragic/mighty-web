@@ -368,8 +368,10 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.13.0';
-const APP_BUILD = '2026-08-17 빌드 — 비딩 칩 (누가 어떤 순서로 공약했나)';
+// 국면 한정 탐색 설정 — 끄려면 null로 둔다(즉시 이전 동작). 근거는 10절.
+const CLASS_SEARCH = { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 };
+const APP_VERSION = 'v2.14.0';
+const APP_BUILD = '2026-08-18 빌드 — 프렌드 개입 국면 탐색 (마스터)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -826,6 +828,11 @@ async function buildAgents(reassign){
       botTable = await MightyAI.createTable({
         tiers, rng: Math.random, session: masterSess, ort: ortLib,
         sessions: useNN ? sessions : null,
+        // 마스터 티어에서만 국면 한정 탐색을 켠다(v2.14.0). 프렌드가 아군이 이기는
+        // 트릭에 개입할지 정하는 자리에서만 발화하고, 정책이 확신하면 건너뛴다 —
+        // 딜당 0.69회·데스크톱 0.5초·저사양 1.2초(예산에서 절단). 실측은
+        // docs/SESSION-HANDOFF.md 10절.
+        classSearch: tier==='master' ? CLASS_SEARCH : null,
       });
     }catch(e){
       // 어떤 이유로든 좌석을 못 만들면 순수 규칙기반으로 되돌린다.

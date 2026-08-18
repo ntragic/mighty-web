@@ -801,7 +801,8 @@ const PERSONA_KEYS = ['gambler', 'balanced', 'careful'];
  */
 async function createTable(opts = {}) {
   const { tiers = 'advanced', rng = Math.random, session = null, ort = null,
-          personas = null, revealPersona = false, sessions = null } = opts;
+          personas = null, revealPersona = false, sessions = null,
+          classSearch = null } = opts;
   const seats = opts.seats || E.NUM_PLAYERS;
   const tierAt = s => (Array.isArray(tiers) ? tiers[s] : tiers);
   const assigned = [], agents = [];
@@ -812,9 +813,12 @@ async function createTable(opts = {}) {
       : (personas ? personas[s] : PERSONA_KEYS[Math.floor(rng() * PERSONA_KEYS.length)]);
     assigned.push(persona);
     // v2.8: 혼합 운영 — 좌석별 모델 세션(성향차)을 허용한다
+    // 국면 한정 탐색은 마스터 좌석에만 넘긴다 — 고급 좌석까지 강해지면 티어 서열이
+    // 흐려지고, 실측도 마스터 세대(v16e)에서만 냈다.
     agents.push(await createAgent({ tier, persona: persona || 'balanced',
                                     rng, session: (sessions && sessions[s]) || session,
-                                    ort, revealPersona }));
+                                    ort, revealPersona,
+                                    classSearch: tier === 'master' ? classSearch : null }));
   }
   return {
     seats, agents,
