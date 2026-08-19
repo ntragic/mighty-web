@@ -32,7 +32,9 @@ const PIMC_N = parseInt(process.env.PIMC_N || '300', 10);
 const BLUNDER = parseFloat(process.env.BLUNDER || '200');
 const SEED0 = parseInt(process.env.SEED_BASE || '91000000', 10);
 const TOPM = parseInt(process.env.TOPM || '5', 10);
-// CLASS: weaklead(기본) = 아군이 이기는 트릭에 개입할지 | friendlead = 프렌드가
+// CLASS: weaklead(기본) | friendlead | oppwin(야당이 이기는 트릭에 개입할지)
+// | declarer(주공 좌석 전체) — 아래는 weaklead·friendlead 설명이다.
+// weaklead = 아군이 이기는 트릭에 개입할지 | friendlead = 프렌드가
 // 선을 잡았을 때 무엇을 리드할지. 사용자 체감(기루다 정리·마이티 유도)은 리드
 // 쪽이고, weaklead 술어는 리드를 아예 제외한다.
 const CLASS = process.env.CLASS || 'weaklead';
@@ -119,6 +121,40 @@ function determinize(g, seat, rnd) {
     return clone;
   }
   return null;
+}
+
+/** 야당이 이기고 있는 트릭에서 프렌드가 따라가는 국면 — 개입의 나머지 절반이다.
+ *  weaklead(아군이 이기는 중)와 짝을 이룬다. 한 번도 측정한 적이 없다. */
+function oppwinOf(g, p) {
+  if (g.phase !== 'play' || p === g.declarer || !g.play || g.play.table.length === 0) return null;
+  const fd = g.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        g.hands[p].some(c => E.sameCard(c, fd.card)))) return null;
+  let best = null, bk = [-2, -1];
+  for (const e of g.play.table) {
+    const k = g._cardStrength(e, g.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return null;
+  const ally = best.player === g.declarer ||
+    (g.friendRevealed && g.friend === best.player && best.player !== p);
+  if (ally) return null;                                   // 야당이 이기는 중만
+  const legal = g._legalPlays(p);
+  if (legal.length < 2) return null;
+  const canWin = legal.some(mv => {
+    const k = g._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: p,
+                               jokerCall: mv.jokerCall }, g.play);
+    return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
+  });
+  return canWin ? { legal } : null;
+}
+
+/** 주공 좌석의 플레이 결정 전부 — 리드·따라가기를 가리지 않는다.
+ *  가장 많이 나오는 자리인데(딜당 10회쯤) 탐색 이득을 잰 적이 없다. */
+function declarerOf(g, p) {
+  if (g.phase !== 'play' || p !== g.declarer) return null;
+  const legal = g._legalPlays(p);
+  return legal.length >= 2 ? { legal } : null;
 }
 
 /** 프렌드가 선을 잡은 국면 — 리드 선택 전부가 표적이다. */
@@ -287,7 +323,9 @@ async function searchMove(sess, ag, g, seat, rnd, banned) {
     let guard = 0;
     while (g.phase !== 'done' && g.phase !== 'redeal' && guard++ < 900) {
       const p = g.currentPlayer;
-      const clsOf = CLASS === 'friendlead' ? friendLeadOf : weakleadOf;
+      const clsOf = CLASS === 'friendlead' ? friendLeadOf
+        : CLASS === 'oppwin' ? oppwinOf
+        : CLASS === 'declarer' ? declarerOf : weakleadOf;
       const cls = pimcDone < PIMC_N ? clsOf(g, p) : null;
       if (cls) {
         states++;

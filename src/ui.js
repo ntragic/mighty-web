@@ -377,9 +377,12 @@ const tf = (k,...a) => TF[k](...a);
 // budgetMs 2000: 32벌은 1,200ms에서 잘렸다(데스크톱 중앙 1,201ms = 예산 상한).
 //   사용자가 사고 시간은 문제없다고 확인해 예산을 올렸다. 느린 기기는 여전히
 //   여기서 잘리고 결정화 수만 줄어든다.
-const CLASS_SEARCH = { K: 32, gate: 1.3, topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.15.2';
-const APP_BUILD = '2026-08-19 빌드 — 탐색 범위 확대 (게이트 1.3 · 32벌)';
+// 클래스별 문턱(로짓 1·2위 차가 이보다 작으면 켠다). 근거는 10~13절.
+//   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
+const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
+                       topM: 5, budgetMs: 2000 };
+const APP_VERSION = 'v2.16.0';
+const APP_BUILD = '2026-08-19 빌드 — 주공·야당개입 국면 탐색 추가';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){

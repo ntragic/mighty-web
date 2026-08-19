@@ -569,7 +569,10 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
 // 데스크톱 크롬 wasm 1스레드에서 16벌이 한 수 521ms라 예산에 안 걸리고,
 // CPU 1/4로 감속하면 1,683ms까지 가던 것이 1,226ms에서 잘린다.
 // 예산에 걸리면 결정화 수가 줄 뿐이고, 4벌도 못 채우면 정책 수로 돌아간다.
-const SEARCH_DEFAULTS = { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 };
+// 클래스별 문턱 — 전부 같은 방식(로짓 1·2위 차 분위별 대형 실수율)으로 쟀다.
+//   weaklead 1.3 · oppwin 1.8 · declarer 0.46(딜당 8회라 절반만) · friendlead 없음
+const SEARCH_DEFAULTS = { K: 16, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
+                          topM: 5, budgetMs: 1200 };
 
 /** 여당 좌석인가 — 주공이거나 프렌드 카드를 쥐었거나 공개된 프렌드. */
 function attackerSeat(game, seat) {
@@ -606,6 +609,43 @@ function mightySuitLeadBanned(game, seat, mv) {
   if (!attackerSeat(game, seat) || !mightyOutstanding(game, seat)) return false;
   const ms = game.mightyCard ? game.mightyCard.suit : null;
   return !!ms && mv.card.suit === ms;
+}
+
+/** 야당이 이기고 있는 트릭에서 프렌드가 따라가는 국면 — weaklead의 반대쪽이다.
+ *  700국면 실측: 정책 대형 실수 6.3% → 탐색 2.6%(페어드 +22.3 ± 8.9). 다만 정책이
+ *  확신하는 구간(로짓차 1.8 이상)에서는 2.3% → 4.0%로 탐색이 나빠 문턱을 둔다. */
+function oppwinState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length === 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  let best = null, bk = [-2, -1];
+  for (const e of game.play.table) {
+    const k = game._cardStrength(e, game.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return null;
+  const ally = best.player === game.declarer ||
+    (game.friendRevealed && game.friend === best.player && best.player !== seat);
+  if (ally) return null;
+  const legal = game._legalPlays(seat);
+  if (legal.length < 2) return null;
+  return legal.some(mv => {
+    const k = game._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: seat,
+                                  jokerCall: mv.jokerCall }, game.play);
+    return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
+  }) ? legal : null;
+}
+
+/** 주공 좌석의 플레이 결정 — 지금까지 잰 클래스 중 결함이 가장 크다.
+ *  700국면 실측: 정책 대형 실수 24.1% → 탐색 10.3%(페어드 +122.6 ± 42.3).
+ *  네 분위 전부 이득이지만 딜당 8회라 전부 켜면 판당 7초다. 사용자 판단으로
+ *  가장 헷갈리는 절반(로짓차 0.46 미만)만 켠다. */
+function declarerState(game, seat) {
+  if (game.phase !== 'play' || seat !== game.declarer) return null;
+  const legal = game._legalPlays(seat);
+  return legal.length >= 2 ? legal : null;
 }
 
 /** 프렌드가 선을 잡은 국면 — 리드 선택 전부가 탐색 대상이다.
@@ -821,13 +861,19 @@ async function createAgent(opts = {}) {
           }
         }
         const cls = scfg && (weakleadState(game, seat) ? 'weaklead'
-                    : friendLeadState(game, seat) ? 'friendlead' : null);
+                    : oppwinState(game, seat) ? 'oppwin'
+                    : friendLeadState(game, seat) ? 'friendlead'
+                    : declarerState(game, seat) ? 'declarer' : null);
         if (cls) {
-          // 개입은 정책이 헷갈릴 때만, 리드는 항상 — 실측 근거는 위 주석에 있다.
+          // 클래스마다 문턱이 다르다 — 전부 같은 방식으로 잰 분위별 실측에서 왔다.
+          // friendlead는 네 분위 전부 이득이라 문턱이 없다(null).
+          const gateOf = { weaklead: scfg.gate, oppwin: scfg.gateOppwin,
+                           declarer: scfg.gateDeclarer, friendlead: null };
+          const gate = gateOf[cls];
           let go = true;
-          if (cls === 'weaklead') {
+          if (gate != null) {
             const { margin } = await topCandidates(session, ort, game, seat, scfg.topM);
-            go = margin < scfg.gate;
+            go = margin < gate;
           }
           if (go) {
             const found = await searchWeaklead(session, ort, game, seat, rollAct, scfg, rng, banned);
