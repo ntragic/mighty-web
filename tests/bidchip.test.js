@@ -41,7 +41,7 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
   await sleep(150);
 
   // 1) 비딩이 진행되면 칩이 뜬다 (0.5초 간격이라 넉넉히 기다린다)
-  let sawChip = 0, humanActs = 0, guard = 0, lag = 0;
+  let sawChip = 0, humanActs = 0, guard = 0, lag = 0, sheetHidden = 0;
   const t0 = Date.now();
   while (Date.now() - t0 < 30000 && guard++ < 1200) {
     await sleep(40);
@@ -50,6 +50,10 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
     sawChip = Math.max(sawChip, chips().length);
     if (g.phase !== 'bidding') break;
     if (MUI.busy || g.currentPlayer !== 0) continue;
+    // 내 차례인데 비딩 시트가 숨어 있으면 공약을 할 수 없다. v2.15.1에서 봇 턴의
+    // render()를 busy 해제 **앞에서** 부르는 바람에 시트가 숨은 채 남았다
+    // (모바일 크롬 제보 2026-08-19). renderSheet는 busy면 숨기므로 순서가 중요하다.
+    if (!w.document.querySelector('#sheet').classList.contains('show')) sheetHidden++;
     // 칩이 비딩 상태와 일치하는가 — 내 차례이고 대기 중이 아니면 이미 공약한
     // 좌석 수와 칩 수가 같아야 한다. 순차 공개 큐 시절엔 여기서 밀렸다.
     const acted = new Set((MUI.roundRec ? MUI.roundRec.actions : [])
@@ -63,7 +67,8 @@ const chips = () => [...w.document.querySelectorAll('.bidchip.show')];
   }
   console.log(`비딩 중 최대 칩 ${sawChip}개 · 내 착수 ${humanActs}회 · phase ${MUI.game.phase}`);
   ok(sawChip > 0, '비딩 중에 칩이 하나도 뜨지 않았다');
-  console.log(`칩과 비딩 상태의 최대 어긋남 ${lag}개`);
+  console.log(`칩과 비딩 상태의 최대 어긋남 ${lag}개 · 내 차례에 시트가 숨은 관측 ${sheetHidden}회`);
+  ok(sheetHidden === 0, `내 차례인데 비딩 시트가 숨어 있었다 (${sheetHidden}회)`);
   ok(lag === 0, `칩이 비딩 상태와 어긋났다 (최대 ${lag}개)`);
 
   // 2) 칩 내용이 공약 또는 패스여야 한다

@@ -381,8 +381,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.16.0';
-const APP_BUILD = '2026-08-19 빌드 — 주공·야당개입 국면 탐색 추가';
+const APP_VERSION = 'v2.16.1';
+const APP_BUILD = '2026-08-19 빌드 — 비딩 시트가 안 뜨던 문제 수정';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -2714,6 +2714,10 @@ async function botStep(){
     await sleep(turn * 0.7);                    // 눈으로 따라갈 시간을 준다
     if (myGen!==stateGen){ busy=false; return; }
     busy=false;
+    // busy를 내린 **뒤** 한 번 더 그린다. renderSheet는 busy면 시트를 숨기므로,
+    // 여기서 다시 그리지 않으면 마지막 AI 공약 뒤 내 차례가 와도 비딩 시트가
+    // 숨은 채로 남는다(v2.15.1 회귀, 모바일에서 제보).
+    render();
     if (game.phase==='floor' ) logLine(tf('logDeclarer', NAMES[game.declarer], contractText(game.contract)));
     pump(); return;
   }
