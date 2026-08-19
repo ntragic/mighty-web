@@ -109,6 +109,30 @@ function keySpendClass(g, p) {
   return canSpend ? 'keyspend' : null;
 }
 
+/** 프렌드가 선을 잡고 기루다를 든 국면인가 — 기루다 정리 판단 자리다.
+ *  실측(2026-08-18): 정책은 가장 낮은 기루다를 39% 던지고 교사는 22%다. 교사는
+ *  그 자리에서 다른 무늬를 돌린다(41% 대 정책 28%). 이 습관을 라벨로 옮긴다. */
+function trumpLeadClass(g, p) {
+  if (g.phase !== 'play' || p === g.declarer) return null;
+  if (!g.play || g.play.table.length !== 0) return null;
+  const gir = g.contract && g.contract.giruda !== 'N' ? g.contract.giruda : null;
+  if (!gir) return null;
+  const fd = g.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        g.hands[p].some(c => E.sameCard(c, fd.card)))) return null;
+  if (!g.hands[p].some(c => !E.isJoker(c) && c.suit === gir)) return null;
+  return g._legalPlays(p).length >= 2 ? 'trumplead' : null;
+}
+
+/** 마이티가 아직 안 나왔고 내 손에도 없다 — 배포는 이때 마이티 무늬 리드를 막는다 */
+function mightyOut(g, p) {
+  if (!g.mightyCard) return false;
+  const id = E.cardId(g.mightyCard);
+  for (const t of g.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return false;
+  for (const e of g.play.table) if (E.cardId(e.card) === id) return false;
+  return !g.hands[p].some(c => E.cardId(c) === id);
+}
+
 /** 프렌드 개입 국면인가 — 좌석 가시 정보만 쓴다. 'weaklead' | 'oppwin' | null */
 function interveneClass(g, p) {
   if (g.phase !== 'play' || g.play.table.length === 0) return null;
@@ -308,7 +332,8 @@ async function valueOf(sess, g, seat) {
       // 프렌드 개입 국면 — 조커콜과 같은 이유로 드물고 결정적이라 따로 표집한다
       // KEY_SAMPLE>0이면 키카드 소비 국면을 우선 잡는다(개입 일반보다 좁고 중요하다)
       let cls = (KEY_SAMPLE > 0 && rnd() < KEY_SAMPLE) ? keySpendClass(g, p) : null;
-      if (!cls) cls = CLASS_SAMPLE > 0 ? interveneClass(g, p) : null;
+      if (!cls) cls = CLASS_SAMPLE > 0
+        ? (CLASS_ONLY === 'trumplead' ? trumpLeadClass(g, p) : interveneClass(g, p)) : null;
       if (cls && CLASS_ONLY && cls !== CLASS_ONLY) cls = null;
       const slack = cls ? attackSlack(g) : null;
       if (cls && SLACK_MAX !== null && slack > SLACK_MAX) cls = null;   // 여유가 넉넉하면 제외
@@ -378,6 +403,14 @@ async function valueOf(sess, g, seat) {
               // 노이즈로 뽑힌 수가 정답으로 들어간다 — 그런 라벨을 학습하면
               // in-sample만 오르고 새 국면은 그대로다(2026-08-17 홀드아웃 실측:
               // 학습 81% · 홀드아웃 57.3%로 앵커 58.2%보다도 낮았다).
+              // 배포가 막은 수를 정답으로 넣지 않는다 — 마이티 무늬 리드는 사람
+              // 정석으로 억제 중이라(v2.15.0), 교사가 권해도 학습시키면 규칙과
+              // 싸우는 모델이 된다.
+              const bannedTarget = (idx) => {
+                if (!g.mightyCard || g.play.table.length !== 0 || !mightyOut(g, p)) return false;
+                const a = M.actionToEngine(idx, g, []);
+                return !!(a && a.card && !E.isJoker(a.card) && a.card.suit === g.mightyCard.suit);
+              };
               let gainB = null, splitOk = true;
               if (SPLIT) {
                 const ok = scores.filter(s => s.a !== null && s.b !== null);
@@ -387,6 +420,7 @@ async function valueOf(sess, g, seat) {
                 else {
                   gainB = bA.b - pB.b;               // 고른 뒤 다른 표본에서 잰 이득
                   if (gainB < MARGIN) splitOk = false;
+                  else if (bannedTarget(bA.i)) splitOk = false;   // 억제 중인 수는 안 배운다
                   else best.i = bA.i;                // 목표도 A에서 고른 수로 바꾼다
                 }
                 if (!splitOk) splitDrop++;

@@ -37,6 +37,9 @@ const PIMC_N = parseInt(process.env.PIMC_N || '600', 10);
 const BLUNDER = parseFloat(process.env.BLUNDER || '200');
 const SEED0 = parseInt(process.env.SEED_BASE || '55000000', 10);
 const TOPM = parseInt(process.env.TOPM || '5', 10);
+// BAN=1: 배포 규칙(마이티 무늬 리드 억제)을 정책·탐색 양쪽에 건다. v2.15.0부터
+// 실제 게임이 이 상태이므로, '지금 무엇을 고르는가'를 보려면 켜야 한다.
+const BAN = process.env.BAN === '1';
 
 const A_PLAY0 = 149, A_JS0 = 201, A_JOKER = 205;
 const SUITS4 = ['S', 'D', 'H', 'C'];
@@ -163,7 +166,24 @@ function kindOf(g, seat, mv) {
   return '기타무늬';
 }
 
-async function policyTop(sess, g, seat) {
+/** 마이티 무늬 리드 금지 인덱스 — src/mighty-ai.js와 같은 규칙 */
+function bannedLeads(g, seat) {
+  if (!BAN || !g.play || g.play.table.length !== 0 || !g.mightyCard) return null;
+  const fd = g.friendDecl;
+  const attacker = seat === g.declarer ||
+    (fd && fd.mode === 'card' && fd.card && g.hands[seat].some(c => E.sameCard(c, fd.card))) ||
+    (g.friendRevealed && g.friend === seat);
+  if (!attacker) return null;
+  const id = E.cardId(g.mightyCard);
+  for (const t of g.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return null;
+  if (g.hands[seat].some(c => E.cardId(c) === id)) return null;
+  const legal = g._legalPlays(seat);
+  const bad = legal.filter(mv => !E.isJoker(mv.card) && mv.card.suit === g.mightyCard.suit);
+  if (!bad.length || bad.length === legal.length) return null;
+  return new Set(bad.map(idxOf));
+}
+
+async function policyTop(sess, g, seat, banned) {
   let obs = M.encodeObs(g, seat, []);
   const mask = M.legalMask(g, []);
   const want = M.modelObsDim(sess);
@@ -173,9 +193,13 @@ async function policyTop(sess, g, seat) {
     mask: new ort.Tensor('bool', mask, [1, M.ACTION_DIM]),
   });
   const lg = out.logits.data;
-  const v = [];
+  let v = [];
   for (let i = 0; i < M.ACTION_DIM; i++) if (mask[i]) v.push([lg[i], i]);
   v.sort((a, b) => b[0] - a[0]);
+  if (banned && banned.size) {
+    const keep = v.filter(x => !banned.has(x[1]));
+    if (keep.length) v = keep;
+  }
   return { cands: v.slice(0, TOPM).map(x => x[1]), act: v[0][1],
            margin: v.length > 1 ? v[0][0] - v[1][0] : Infinity };
 }
@@ -234,7 +258,8 @@ async function searchMove(sess, ag, g, seat, rnd, cands) {
       const cls = pimcDone < PIMC_N ? classOf(g, p) : null;
       if (cls) {
         states++;
-        const { cands, act: aPol } = await policyTop(sess, g, p);
+        const banned = bannedLeads(g, p);
+        const { cands, act: aPol } = await policyTop(sess, g, p, banned);
         const aSea = K_S > 0 ? await searchMove(sess, ag, g, p, rnd, cands) : aPol;
         if (aPol !== aSea) diff++;
 

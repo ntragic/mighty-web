@@ -22,11 +22,11 @@ W=${2:-0}
 PREFIX=${PREFIX:-wlq_labels_}
 MODEL=web/model/mighty_master_v16e.onnx
 
-echo "[$(date +%H:%M)] weaklead 라벨 생성 — 갈래당 $N 판 (웨이브 $W)"
+echo "[$(date +%H:%M)] ${CLASS_ONLY:-weaklead} 라벨 생성 — 갈래당 $N 판 (웨이브 $W)"
 for j in 1 2 3 4 5; do
   i=$((j + W * 5))
   env ORT_THREADS=3 MODEL=$MODEL SEED_BASE=$((63000000 + i * 1000000)) \
-      CLASS_ONLY=weaklead CLASS_SAMPLE=1.0 KEY_SAMPLE=0 JC_SAMPLE=0 \
+      CLASS_ONLY=${CLASS_ONLY:-weaklead} CLASS_SAMPLE=1.0 KEY_SAMPLE=0 JC_SAMPLE=0 \
       K_CLASS=${K_CLASS:-128} DEPTH_CLASS=0 TOPM=5 BID_MAX=18 SPLIT=${SPLIT:-1} \
       node tools/research/pimc_label.js "training/$PREFIX$i.jsonl" "$N" \
       > "docs/wl-label-$i.log" 2>&1 &
