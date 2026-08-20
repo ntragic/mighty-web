@@ -381,8 +381,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.16.1';
-const APP_BUILD = '2026-08-19 빌드 — 비딩 시트가 안 뜨던 문제 수정';
+const APP_VERSION = 'v2.16.2';
+const APP_BUILD = '2026-08-20 빌드 — 탐색 무늬 추론 수정 (마이티 면제)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){

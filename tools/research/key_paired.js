@@ -63,7 +63,9 @@ function knownTo(g, seat) {
 function voidsOf(g) {
   const v = []; for (let p = 0; p < E.NUM_PLAYERS; p++) v.push(new Set());
   const scan = (plays, led) => { if (!led) return;
-    for (const e of plays) { if (E.isJoker(e.card)) continue;
+    for (const e of plays) {
+      // 마이티·조커는 팔로우 면제 — 오프수트로 나와도 '무늬 없음'의 근거가 아니다
+      if (E.isJoker(e.card) || (g.mightyCard && E.sameCard(e.card, g.mightyCard))) continue;
       if (e.card.suit !== led) v[e.player].add(led); } };
   for (const t of g.play.history)
     scan(t.plays, t.ledSuit || (t.plays[0] && !E.isJoker(t.plays[0].card) ? t.plays[0].card.suit : null));

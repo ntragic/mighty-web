@@ -718,7 +718,10 @@ function determinizeFrom(g, seat, rnd) {
   const scan = (plays, led) => {
     if (!led) return;
     for (const e of plays) {
-      if (E.isJoker(e.card)) continue;
+      // 마이티·조커는 팔로우 면제다 — 오프수트로 나와도 그 무늬가 없다는 근거가
+      // 못 된다. 세지 않으면 '주공이 기루다를 든 세계'를 아예 상상하지 못한다
+      // (2026-08-20 제보에서 발견: 마이티를 낸 주공을 항상 기루다 0장으로 봤다).
+      if (E.isJoker(e.card) || (g.mightyCard && E.sameCard(e.card, g.mightyCard))) continue;
       if (e.card.suit !== led) voids[e.player].add(led);
     }
   };
