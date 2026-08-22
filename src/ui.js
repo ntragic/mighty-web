@@ -1547,6 +1547,9 @@ async function playWithAnimation(p, action){
       toast(game.friend===null?t('초구를 주공이 승리 — 사실상 노프렌드'):tf('friendToast', NAMES[game.friend]));
     }
   }
+  // 수거 연출까지 끝난 뒤에도 세대를 다시 본다 — 그 사이 되돌리기가 들어오면
+  // 여기서 pump를 부르는 순간 봇 루프가 겹친다.
+  if (myGen!==stateGen){ busy=false; return; }
   busy=false;
   render(); pump();
 }
@@ -1725,9 +1728,13 @@ function checkClaim(){
   let remainPts=0;
   for(let q=0;q<5;q++) for(const c of game.hands[q]) if(E.isPointCard(c)) remainPts++;
   busy=true; renderSheet();
+  const myGen=stateGen;
   confirmModal(t('세팅 — 전승 확정'),
     tf('claimBody', NAMES[p], sideOf(p), left, remainPts),
     t('자동 진행'), t('직접 플레이')).then(auto=>{
+      // 되돌리기·새 라운드가 모달을 취소하면 이 콜백이 **나중에** 돈다. 가드가 없으면
+      // busy를 내리고 pump를 한 번 더 불러 봇 루프가 둘이 된다(제보 2026-08-22).
+      if (myGen!==stateGen) return;
       claimMode=!!auto;
       busy=false;
       if (claimMode) toast(tf('claimToast', NAMES[p]), 1400);
@@ -2613,6 +2620,12 @@ function showExportModal(name, md, count, downloaded){
 }
 /** 진행이 멈춘 채 busy만 남는 상황을 감지해 복구한다 (내보내기·복기 등 외부 조작 후 대비) */
 let watchdogTimer = null;
+// 감시 타이머 한도. 탐색을 켜면 봇 한 턴이 길어진다 — 생각 550 + 탐색 최대 1,894
+// + 비행 300 + 트릭 연출 1,690이면 4.4초다(브라우저 실측). 3,500ms 고정이던 시절엔
+// 정상 진행 중에 워치독이 발동해 stateGen을 올리고 봇 루프를 다시 깔았다.
+// 그러면 진행 중이던 턴이 무효화되고 새 루프가 겹쳐 카드가 저절로 나가거나
+// 되돌리기가 안 먹는 것처럼 보인다(제보 2026-08-22).
+const WATCHDOG_MS = () => 3500 + (CLASS_SEARCH ? 2 * (CLASS_SEARCH.budgetMs || 0) : 0);
 function armWatchdog(){
   if (watchdogTimer) clearTimeout(watchdogTimer);
   if (!game || replay) return;
@@ -2632,7 +2645,7 @@ function armWatchdog(){
         render(); pump();
       }
     }
-  }, 3500);
+  }, WATCHDOG_MS());
 }
 function refreshTools(){
   armWatchdog();
