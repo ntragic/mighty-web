@@ -382,8 +382,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.16.6';
-const APP_BUILD = '2026-08-23 빌드 — 카드 탭 스루 차단';
+const APP_VERSION = 'v2.16.7';
+const APP_BUILD = '2026-08-24 빌드 — 복기 바가 정산에 가려지던 문제';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -2276,6 +2276,11 @@ function startReplay(rec){
   // 플레이 시작 시점까지 적용한 뒤 카드 단위로 진행
   const playStart = rec.actions.findIndex(x => x.ph === 'play');
   if (playStart < 0){ toast(t('복기할 트릭이 없습니다')); return; }
+  // 열려 있는 모달을 여기서 닫는다. 라운드 선택 모달 경로에만 닫는 코드가 있었는데,
+  // 복기할 판이 하나면 openReplayPicker가 선택을 건너뛰고 바로 여기로 온다 —
+  // 그러면 정산 모달(z=40)이 복기 바(z=28) 위에 남는다. 진입 경로가 여럿이므로
+  // 닫는 책임을 진입 지점 한 곳으로 모은다.
+  $('#modal').classList.remove('show');
   replay = {
     rec, playStart, step: 0,
     steps: rec.actions.slice(playStart).filter(x => x.ph === 'play'),
@@ -2805,6 +2810,12 @@ async function botStepInner(){
 /* ---------------- 정산 ---------------- */
 let matchHistory=[];   // 라운드별 누적 상금 스냅샷 (최종 차트용)
 function showSettlement(){
+  // 복기 중에는 정산 모달을 띄우지 않는다. **이게 제보의 주 원인이다** — 판이 끝난
+  // 직후 복기로 들어가면, 이미 예약돼 있던 pump가 1초쯤 뒤에 이걸 불러 복기 화면을
+  // 덮었다(z=40 대 28). 그래서 "복기에는 들어가는데 아래 재생 버튼이 안 보인다"가
+  // 된다(제보 2026-08-24, tests/replaybar.test.js가 수정 전 FAIL로 실증).
+  // 복기를 나가면 resumeGame()이 phase==='done'을 보고 다시 띄우므로 정산은 안 사라진다.
+  if (replay) return;
   const r=game.result;
   const v=r.win?t('여당 승리'):t('야당 승리');
   const humanIsAttacker = (HUMAN===r.declarer||HUMAN===r.friend);
