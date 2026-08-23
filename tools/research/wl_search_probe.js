@@ -51,6 +51,7 @@ const ROLL = process.env.ROLL || 'master';
 // 오히려 1.9%로 나빴다. 차 0.57 이하 절반에서 6.9~9.7% → 1.8~3.2%로 줄어든다.
 // 켜는 국면을 반으로 줄이면 비용도 반이다.
 const GATE = parseFloat(process.env.GATE || '99');
+const GROUP = process.env.GROUP === '1';
 
 const A_PLAY0 = 149, A_JS0 = 201, A_JOKER = 205;
 const SUITS4 = ['S', 'D', 'H', 'C'];
@@ -195,6 +196,54 @@ function weakleadOf(g, p) {
   return canWin ? { legal } : null;
 }
 
+/**
+ * 동등 후보를 한 자리로 합치고 빈 자리를 더 아래 후보로 채운다(GROUP=1).
+ *
+ * 같은 무늬로 트릭을 못 이기는 카드들은 그 트릭에 대해 사실상 같은 수다. 283딜
+ * 실측에서 상위 5후보의 46.6%가 이런 쌍둥이였다 — 결정화 예산을 같은 세계에
+ * 두 번씩 쓰고 있었다는 뜻이다.
+ *
+ * **기각됐다(2026-08-23).** 같은 벽시계 시간에서 이득이 없다:
+ *   GROUP=0 K_S=32 → 대형실수 2.0% ± 1.4 · 페어드 +16.0 ± 11.0 · 1,671ms
+ *   GROUP=1 K_S=40 → 대형실수 2.0% ± 1.4 · 페어드 +16.9 ± 12.3 · 1,587ms
+ * 쌍둥이 중 정책이 높게 본 쪽만 남기면 더 나은 쌍둥이를 버리는 경우가 생기고,
+ * 대신 끌어온 아래 후보는 정책이 낮게 본 만큼 실제로도 나빴다. 배포에는 넣지
+ * 않는다. 재현용으로만 남긴다.
+ *
+ * 대표를 '낮은 끗/비점수패'로 강제하는 변형은 더 나쁘다 — discard_probe.js 참조.
+ */
+function distinctCandidates(g, seat, sortedIdx, m) {
+  const out = [];
+  if (g.phase !== 'play' || !g.play || g.play.table.length === 0) {
+    for (const i of sortedIdx) { out.push(i); if (out.length >= m) break; }
+    return out;                                    // 리드는 합칠 근거가 없다
+  }
+  let bk = [-2, -1];
+  for (const e of g.play.table) {
+    const k = g._cardStrength(e, g.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) bk = k;
+  }
+  const fd = g.friendDecl, jc = g.jokerCallCard;
+  const seen = new Set();
+  for (const i of sortedIdx) {
+    const mv = M.actionToEngine(i, g, []);
+    let key = 'i' + i;                             // 기본은 자기 자신 = 합치지 않음
+    if (mv && mv.card && !E.isJoker(mv.card) && !mv.jokerCall
+        && !(g.mightyCard && E.sameCard(mv.card, g.mightyCard))
+        && !(jc && E.sameCard(mv.card, jc))
+        && !(fd && fd.mode === 'card' && fd.card && !g.friendRevealed
+             && E.sameCard(mv.card, fd.card))) {
+      const k = g._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit,
+                                 player: seat, jokerCall: mv.jokerCall }, g.play);
+      if (!(k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]))) key = 's' + mv.card.suit;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key); out.push(i);
+    if (out.length >= m) break;
+  }
+  return out;
+}
+
 /** 리드 카드의 성격 — 기루다인가, 마이티 무늬인가(마이티 자체는 뺀다).
  *  '기루다 정리'와 '마이티 유도'가 실제로 나오는지 세려고 쓴다. */
 function leadKind(g, mv) {
@@ -272,7 +321,9 @@ async function searchMove(sess, ag, g, seat, rnd, banned) {
     const keep = idx.filter(i => !banned.has(i));
     if (keep.length) idx = keep;
   }
-  const cands = idx.slice(0, TOPM);
+  // GROUP=1: 동등 후보(같은 무늬로 못 이기는 카드)를 한 자리로 합치고 빈 자리는
+  // 더 아래 후보로 채운다. 상위 5후보의 46.6%가 쌍둥이라 예산이 그만큼 샜다.
+  const cands = GROUP ? distinctCandidates(g, seat, idx, TOPM) : idx.slice(0, TOPM);
   if (cands.length < 2) return cands[0];
   const dets = [];
   for (let k = 0; k < K_S; k++) { const d = determinize(g, seat, rnd); if (d) dets.push(d); }
@@ -410,7 +461,7 @@ async function searchMove(sess, ag, g, seat, rnd, banned) {
   // 페어드 — 같은 국면에서 정책과 탐색의 손실 차이
   const d = R.policy.map((x, i) => x - R.search[i]).filter(x => Number.isFinite(x));
   const ds = stat(d);
-  console.log(`\n클래스 ${CLASS} · 모델 ${MODEL} · 탐색 K_S=${K_S} DEPTH_S=${DEPTH_S} ROLL=${ROLL} TOPM=${TOPM} · 딜 ${deals} · 클래스 국면 ${states} · 교사 평가 ${pimcDone}`);
+  console.log(`\n클래스 ${CLASS} · 모델 ${MODEL} · 탐색 K_S=${K_S} DEPTH_S=${DEPTH_S} ROLL=${ROLL} TOPM=${TOPM} GROUP=${GROUP ? 1 : 0} · 딜 ${deals} · 클래스 국면 ${states} · 교사 평가 ${pimcDone}`);
   console.log(`한 수 비용 평균 ${(msSum / Math.max(1, msN)).toFixed(0)}ms · 최대 ${msMax}ms · 정책과 다른 수 ${(100 * diff / Math.max(1, states)).toFixed(1)}%`);
   console.log(`탐색 발화 ${fired}/${states}국면 (${(100 * fired / Math.max(1, states)).toFixed(0)}%)` +
     ` · 딜당 ${(fired / Math.max(1, deals)).toFixed(2)}회 · GATE=${GATE}`);
