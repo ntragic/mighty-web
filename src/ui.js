@@ -2810,12 +2810,6 @@ async function botStepInner(){
 /* ---------------- 정산 ---------------- */
 let matchHistory=[];   // 라운드별 누적 상금 스냅샷 (최종 차트용)
 function showSettlement(){
-  // 복기 중에는 정산 모달을 띄우지 않는다. **이게 제보의 주 원인이다** — 판이 끝난
-  // 직후 복기로 들어가면, 이미 예약돼 있던 pump가 1초쯤 뒤에 이걸 불러 복기 화면을
-  // 덮었다(z=40 대 28). 그래서 "복기에는 들어가는데 아래 재생 버튼이 안 보인다"가
-  // 된다(제보 2026-08-24, tests/replaybar.test.js가 수정 전 FAIL로 실증).
-  // 복기를 나가면 resumeGame()이 phase==='done'을 보고 다시 띄우므로 정산은 안 사라진다.
-  if (replay) return;
   const r=game.result;
   const v=r.win?t('여당 승리'):t('야당 승리');
   const humanIsAttacker = (HUMAN===r.declarer||HUMAN===r.friend);
@@ -2835,6 +2829,13 @@ function showSettlement(){
     lifeStats.prize+=r.prizes[HUMAN];
     saveStats();
   }
+  // 집계는 위에서 끝냈고, **화면만** 복기 중이면 띄우지 않는다. 판이 끝난 직후
+  // 복기로 들어가면 이미 예약돼 있던 pump가 1초쯤 뒤 이걸 불러 복기 화면을 덮었다
+  // (z=40 대 28) — "복기에 들어갔는데 아래 재생 버튼이 안 보인다"의 정체다
+  // (제보 2026-08-24, tests/replaybar.test.js가 수정 전 FAIL로 실증).
+  // 가드를 함수 맨 앞에 두면 안 된다 — 그러면 총점·matchLog·통계까지 통째로
+  // 건너뛴다(복기 중 총점합 0으로 실측). 복기를 나가면 resumeGame()이 다시 부른다.
+  if (replay) return;
   const box=$('#modal-box');
   box.innerHTML=`
     <h2>${tf('roundResultTitle', roundNo)}</h2>
