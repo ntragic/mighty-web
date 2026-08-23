@@ -4190,8 +4190,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.16.4';
-const APP_BUILD = '2026-08-23 빌드 — 자동 착수 방지 (모달 탭 유예)';
+const APP_VERSION = 'v2.16.5';
+const APP_BUILD = '2026-08-23 빌드 — 세팅 버튼 배치 원복';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -5549,15 +5549,16 @@ function checkClaim(){
   for(let q=0;q<5;q++) for(const c of game.hands[q]) if(E.isPointCard(c)) remainPts++;
   busy=true; renderSheet();
   const myGen=stateGen;
-  // 주 버튼은 '직접 플레이'다. 잘못 눌렸을 때 손해가 큰 쪽(자동 진행)을 보조로 둔다 —
-  // 실수로 자동이 켜지면 그 판 내내 AI가 사람 카드를 낸다(제보 2026-08-23).
+  // 버튼 배치는 원래 설계를 지킨다 — '자동 진행'이 오른쪽 주 버튼이고, 그게 자연스러운
+  // 선택이 되도록 의도한 것이다(2026-08-23 사용자 확인). 오작동은 배치가 아니라
+  // 탭 스루가 원인이었고 그건 모달 탭 유예로 막는다.
   confirmModal(t('세팅 — 전승 확정'),
     tf('claimBody', NAMES[p], sideOf(p), left, remainPts),
-    t('직접 플레이'), t('자동 진행')).then(manual=>{
+    t('자동 진행'), t('직접 플레이')).then(auto=>{
       // 되돌리기·새 라운드가 모달을 취소하면 이 콜백이 **나중에** 돈다. 가드가 없으면
       // busy를 내리고 pump를 한 번 더 불러 봇 루프가 둘이 된다(제보 2026-08-22).
       if (myGen!==stateGen) return;
-      claimMode = (manual === false);      // '자동 진행'을 고른 경우만 켠다
+      claimMode=!!auto;
 
       busy=false;
       if (claimMode) toast(tf('claimToast', NAMES[p]), 1400);
