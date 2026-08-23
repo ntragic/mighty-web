@@ -381,8 +381,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.16.2';
-const APP_BUILD = '2026-08-20 빌드 — 탐색 무늬 추론 수정 (마이티 면제)';
+const APP_VERSION = 'v2.16.3';
+const APP_BUILD = '2026-08-23 빌드 — 턴 경합 수정 (감시 타이머·모달 가드)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -1536,6 +1536,9 @@ async function playWithAnimation(p, action){
     // 룰 구현인 엔진을 건드리지 않고, 마지막 트릭은 빈 테이블로 그린 뒤 곧장
     // 결과 화면으로 넘긴다.
     if (isFinalTrick){
+      // 수거 연출(await) 뒤다 — 그 사이 되돌리기가 들어왔으면 여기서 pump를 부르는
+      // 순간 봇 루프가 겹친다(제보 2026-08-22와 같은 계열).
+      if (myGen!==stateGen){ busy=false; return; }
       ghost={plays:[], winner:null};      // 테이블을 비운 상태로 고정
       render();
       busy=false;
@@ -2677,8 +2680,9 @@ function pump(){
     busy=true; renderSheet();
     const myGen=stateGen;
     setTimeout(async()=>{
-      busy=false;
+      // 가드가 먼저다. 무효화된 콜백이 busy를 내리면 살아 있는 루프와 겹친다.
       if (myGen!==stateGen) return;
+      busy=false;
       if (!claimMode || !game || game.phase!=='play' || game.play.turn!==HUMAN){ pump(); return; }
       await playWithAnimation(HUMAN, autoPickForHuman());
     }, CLAIM_SPD.bot);
@@ -2700,7 +2704,15 @@ function pump(){
     setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 0 : claimSpeed().bot);
   }
 }
+// 동시에 도는 봇 루프 수. 1을 넘으면 경합으로 루프가 겹친 것이고, 그 상태에서
+// 카드가 저절로 나가거나 되돌리기가 안 먹는 것처럼 보인다(제보 2026-08-22).
+// 진단이 아니라 불변식이다 — tests/turnrace.test.js가 이 값을 감시한다.
+let botChains = 0, botChainsMax = 0;
 async function botStep(){
+  botChains++; if (botChains > botChainsMax) botChainsMax = botChains;
+  try { return await botStepInner(); } finally { botChains--; }
+}
+async function botStepInner(){
   const myGen=stateGen;
   const p=game.currentPlayer;
   const phase=game.phase;
@@ -2960,7 +2972,8 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+globalThis.MUI = { get game(){return game}, get busy(){return busy},
+  get botChainsMax(){return botChainsMax}, resetBotChains(){ botChainsMax = botChains; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{

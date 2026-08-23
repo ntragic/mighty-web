@@ -23,7 +23,10 @@ const dom = new JSDOM(html, {
   runScripts: 'dangerously',
   pretendToBeVisual: true,
   beforeParse(window) {
-    window.matchMedia = q => ({ matches: true, media: q, addListener(){}, removeListener(){},
+    // 실제 브라우저와 맞춘다 — 여기서 reduced-motion을 참으로 주면 연출이 생략돼
+    // 봇 턴이 짧아지고, 정작 검사하려는 감시 타이머 경합이 열리지 않는다.
+    window.matchMedia = q => ({ matches: !/prefers-reduced-motion/.test(q), media: q,
+                               addListener(){}, removeListener(){},
                                addEventListener(){}, removeEventListener(){} });
     Object.defineProperty(window.navigator, 'language', { value: 'ko-KR' });
   },
@@ -37,10 +40,12 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); 
   await sleep(200);
   const MUI = w.MUI;
   if (!MUI) { console.error('MUI handle missing'); process.exit(1); }
-  MUI.settings.ui.difficulty = 'intermediate';   // 모델 없이 규칙기반으로 빠르게
+  // TIER=master로 돌리면 실제 탐색이 걸려 봇 턴이 길어진다 — 감시 타이머 경합이
+  // 재현되는 조건이다. 기본은 규칙기반(빠름).
+  MUI.settings.ui.difficulty = process.env.TIER || 'intermediate';
   MUI.settings.match.mode = 'rounds';
-  MUI.settings.match.rounds = 2;
-  MUI.settings.ui.speed = 'fast';
+  MUI.settings.match.rounds = 8;   // 되돌리기는 라운드·그룹당 1회라 판수를 늘려야 창이 열린다
+  MUI.settings.ui.speed = 'slow';   // 봇 턴을 길게 만들어 경합 창을 넓힌다
   MUI.newMatch();
   await sleep(150);
 
@@ -53,7 +58,7 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); 
   //    봇 루프가 겹치면 여기서 잡힌다.
   // 트릭 승자가 다음 트릭을 리드하므로 '연속 착수'는 정상이다. 봇 루프가 겹치면
   // **한 트릭 안에 같은 좌석이 두 번** 나오거나 트릭이 5장을 넘는다 — 그걸 본다.
-  let dup = 0, over = 0, tricks = 0, guard = 0;
+  let dup = 0, over = 0, tricks = 0, guard = 0, undos = 0, busyUndos = 0;
   const watch = setInterval(() => {
     const g = MUI.game;
     if (!g || !g.play) return;
@@ -67,15 +72,27 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); 
   }, 20);
 
   const t0 = Date.now();
-  while (Date.now() - t0 < 30000 && guard++ < 1500) {
+  while (Date.now() - t0 < 90000 && guard++ < 4000) {
     await sleep(50);
     const g = MUI.game;
     if (!g || MUI.matchOver) break;
-    // 되돌리기는 **플레이 중에만** 누른다 — 비딩에서 누르면 판이 계속 되감겨
+    // 판이 끝나면 다음 판으로 넘겨 판수를 확보한다(되돌리기가 라운드·그룹당 1회라
+    // 한 판에서는 경합 창이 한두 번뿐이다). jsdom은 레이아웃이 없어 offsetParent로
+    // 가시성을 못 보므로 단계로 판정한다.
+    if (g.phase === 'done' || g.phase === 'redeal') {
+      const nb = w.document.querySelector('#next-btn');
+      if (nb) { nb.click(); await sleep(200); }
+      continue;
+    }
+    // 되돌리기는 **플레이 중에만**, 그리고 **봇 턴 한가운데(busy=true)** 를 노려
+    // 누른다 — 경합은 그 창에서만 열린다. 비딩에서 누르면 판이 계속 되감겨
     // 정작 검사하려는 착수 구간에 못 간다.
     if (g.phase === 'play') {
       const ub = w.document.querySelector('#undo-btn');
-      if (ub && !ub.disabled && Math.random() < 0.35) { ub.click(); continue; }
+      if (ub && !ub.disabled && (MUI.busy || Math.random() < 0.2)) {
+        if (MUI.busy) busyUndos++;            // 봇 턴 한가운데 = 진짜 경합 창
+        ub.click(); undos++; continue;
+      }
     }
     if (MUI.busy || g.currentPlayer !== 0) continue;
     if (g.phase === 'bidding') {
@@ -91,7 +108,13 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); 
     }
   }
   clearInterval(watch);
-  console.log(`완료 트릭 ${tricks} · 트릭 내 중복 착수 ${dup}회 · 5장 초과 트릭 ${over}회`);
+  const chains = MUI.botChainsMax;
+  console.log(`완료 트릭 ${tricks} · 되돌리기 ${undos}회(봇 턴 중 ${busyUndos}회) · ` +
+              `트릭 내 중복 착수 ${dup}회 · 5장 초과 트릭 ${over}회 · 봇 루프 최대 ${chains}개`);
+  // 핵심 불변식 — 봇 루프는 동시에 하나만 돌아야 한다. 2 이상이면 가드가 뚫린 것이다.
+  ok(chains <= 1, `봇 루프가 동시에 ${chains}개 돌았다 — 가드가 뚫렸다`);
+  // 되돌리기는 라운드·그룹당 1회라 한 번만 열려도 충분히 의미가 있다.
+  ok(busyUndos >= 1, `봇 턴 중 되돌리기 ${busyUndos}회 — 경합 창을 못 열었다`);
   ok(dup === 0 && over === 0,
      `봇 루프가 겹쳤다 — 트릭 내 중복 ${dup}회 · 5장 초과 ${over}회`);
 
