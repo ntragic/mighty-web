@@ -3829,6 +3829,7 @@ const I18N_EN = {
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
   // 기본 화면
   '마이티':'Mighty', '패스':'Pass', '취소':'Cancel', '없음':'None', '판':'Round',
+  '직접 플레이로 전환합니다':'Switched to manual play',
   '다음 판':'Next round', '최종 결과 보기':'Final results', '시트':'Sheet', '시트 닫기':'Close sheet',
   '누적':'Total', '플레이어':'Player',
   // 공약
@@ -4189,8 +4190,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.16.3';
-const APP_BUILD = '2026-08-23 빌드 — 턴 경합 수정 (감시 타이머·모달 가드)';
+const APP_VERSION = 'v2.16.4';
+const APP_BUILD = '2026-08-23 빌드 — 자동 착수 방지 (모달 탭 유예)';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -5217,6 +5218,12 @@ function jokerCallUseful(){
 
 /* ---------------- 모달 유틸 ---------------- */
 let modalResolve = null;         // 열려 있는 모달을 외부에서 취소하기 위한 핸들
+// 모달이 뜬 직후의 탭은 무시한다. 카드를 내려고 누르는 순간 세팅 모달이 튀어나오면
+// 그 탭이 그대로 주 버튼('자동 진행')에 꽂혀, 그 판 내내 AI가 사람 카드를 낸다
+// ("내기도 전에 AI 추천 패가 나간다" 제보 2026-08-23). 모바일에서 특히 잘 난다.
+const MODAL_TAP_GUARD = 450;     // ms
+let modalShownAt = 0;
+const modalTapTooSoon = () => Date.now() - modalShownAt < MODAL_TAP_GUARD;
 function cancelOpenModal(){
   if (modalResolve){ const r=modalResolve; modalResolve=null; $('#modal').classList.remove('show'); r(null); }
 }
@@ -5229,12 +5236,13 @@ function pickSuit(title){
     for(const g of ['S','D','H','C']){
       const b=el('button','chip '+suCls(g), SUIT_GLYPH[g]+' '+t({S:'스페이드',D:'다이아',H:'하트',C:'클로버'}[g]));
       b.style.fontSize='1rem';
-      b.onclick=()=>{ close(); res(g); };
+      b.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(g); };
       chips.append(b);
     }
     const cancel=el('button','btn ghost',t('취소')); cancel.style.marginTop='14px';
-    cancel.onclick=()=>{ close(); res(null); };
+    cancel.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(null); };
     box.append(chips,cancel);
+    modalShownAt = Date.now();
     $('#modal').classList.add('show');
     function close(){ modalResolve=null; $('#modal').classList.remove('show'); }
   });
@@ -5245,9 +5253,10 @@ function confirmModal(title, html, yes, no){
     const box=$('#modal-box');
     box.innerHTML=`<h2>${title}</h2><div class="sub">${html}</div>`;
     const row=el('div','btnrow');
-    const n=el('button','btn ghost',no); n.onclick=()=>{ close(); res(false); };
-    const y=el('button','btn primary',yes); y.onclick=()=>{ close(); res(true); };
+    const n=el('button','btn ghost',no); n.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(false); };
+    const y=el('button','btn primary',yes); y.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(true); };
     row.append(n,y); box.append(row);
+    modalShownAt = Date.now();
     $('#modal').classList.add('show');
     function close(){ modalResolve=null; $('#modal').classList.remove('show'); }
   });
@@ -5540,13 +5549,16 @@ function checkClaim(){
   for(let q=0;q<5;q++) for(const c of game.hands[q]) if(E.isPointCard(c)) remainPts++;
   busy=true; renderSheet();
   const myGen=stateGen;
+  // 주 버튼은 '직접 플레이'다. 잘못 눌렸을 때 손해가 큰 쪽(자동 진행)을 보조로 둔다 —
+  // 실수로 자동이 켜지면 그 판 내내 AI가 사람 카드를 낸다(제보 2026-08-23).
   confirmModal(t('세팅 — 전승 확정'),
     tf('claimBody', NAMES[p], sideOf(p), left, remainPts),
-    t('자동 진행'), t('직접 플레이')).then(auto=>{
+    t('직접 플레이'), t('자동 진행')).then(manual=>{
       // 되돌리기·새 라운드가 모달을 취소하면 이 콜백이 **나중에** 돈다. 가드가 없으면
       // busy를 내리고 pump를 한 번 더 불러 봇 루프가 둘이 된다(제보 2026-08-22).
       if (myGen!==stateGen) return;
-      claimMode=!!auto;
+      claimMode = (manual === false);      // '자동 진행'을 고른 경우만 켠다
+
       busy=false;
       if (claimMode) toast(tf('claimToast', NAMES[p]), 1400);
       render(); pump();
@@ -6512,10 +6524,11 @@ function pump(){
     setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 0 : claimSpeed().bot);
   }
 }
-// 동시에 도는 봇 루프 수. 1을 넘으면 경합으로 루프가 겹친 것이고, 그 상태에서
-// 카드가 저절로 나가거나 되돌리기가 안 먹는 것처럼 보인다(제보 2026-08-22).
-// 진단이 아니라 불변식이다 — tests/turnrace.test.js가 이 값을 감시한다.
-let botChains = 0, botChainsMax = 0;
+// 봇 루프 계측. 되돌리기·감시 타이머가 새 루프를 깔면 무효화된 옛 루프가 아직
+// await에 걸려 있을 수 있다 — 그 겹침 자체는 정상이고 옛 루프는 다음 가드에서 끝난다.
+// **진짜 불변식은 "무효화된 루프가 착수까지 가지 않는다"** 이므로 그걸 따로 센다.
+// staleActs가 0이 아니면 가드가 뚫린 것이고, 그때 카드가 저절로 나간다.
+let botChains = 0, botChainsMax = 0, staleActs = 0;
 async function botStep(){
   botChains++; if (botChains > botChainsMax) botChainsMax = botChains;
   try { return await botStepInner(); } finally { botChains--; }
@@ -6573,6 +6586,7 @@ async function botStepInner(){
     busy=false; render(); pump(); return;
   }
   if (phase==='play'){
+    if (myGen!==stateGen){ staleActs++; busy=false; return; }   // 여기까지 오면 가드가 뚫린 것
     busy=false;
     await playWithAnimation(p, {type:'play', ...action});
     return;
@@ -6781,7 +6795,8 @@ function renderLanding(){
 
 /* ---------------- 초기화 ---------------- */
 globalThis.MUI = { get game(){return game}, get busy(){return busy},
-  get botChainsMax(){return botChainsMax}, resetBotChains(){ botChainsMax = botChains; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+  get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -6812,6 +6827,9 @@ addEventListener('keydown', ev=>{
   else if (k==='escape'){
     if ($('#expmodal').classList.contains('show')){ $('#expmodal').classList.remove('show'); render(); pump(); }
     else if (replay) closeReplay();
+    // 자동 진행이 켜져 있으면 빠져나올 길을 준다 — 실수로 켜졌을 때 되돌리기 말고는
+    // 방법이 없었다(제보 2026-08-23).
+    else if (claimMode){ claimMode=false; toast(t('직접 플레이로 전환합니다')); render(); pump(); }
   }
   else if (replay && k===' '){ ev.preventDefault(); toggleReplayPlay(); }
 });

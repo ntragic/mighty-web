@@ -108,11 +108,13 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); 
     }
   }
   clearInterval(watch);
-  const chains = MUI.botChainsMax;
+  const chains = MUI.botChainsMax, stale = MUI.staleActs;
   console.log(`완료 트릭 ${tricks} · 되돌리기 ${undos}회(봇 턴 중 ${busyUndos}회) · ` +
-              `트릭 내 중복 착수 ${dup}회 · 5장 초과 트릭 ${over}회 · 봇 루프 최대 ${chains}개`);
-  // 핵심 불변식 — 봇 루프는 동시에 하나만 돌아야 한다. 2 이상이면 가드가 뚫린 것이다.
-  ok(chains <= 1, `봇 루프가 동시에 ${chains}개 돌았다 — 가드가 뚫렸다`);
+              `트릭 내 중복 착수 ${dup}회 · 5장 초과 트릭 ${over}회 · ` +
+              `봇 루프 최대 ${chains}개 · 무효 루프 착수 ${stale}회`);
+  // 겹침 자체는 정상이다 — 되돌리기가 새 루프를 깔면 옛 루프가 다음 가드까지 살아 있다.
+  // 불변식은 **무효화된 루프가 착수까지 가지 않는 것**이다.
+  ok(stale === 0, `무효화된 봇 루프가 ${stale}회 착수했다 — 가드가 뚫렸다`);
   // 되돌리기는 라운드·그룹당 1회라 한 번만 열려도 충분히 의미가 있다.
   ok(busyUndos >= 1, `봇 턴 중 되돌리기 ${busyUndos}회 — 경합 창을 못 열었다`);
   ok(dup === 0 && over === 0,
