@@ -541,8 +541,16 @@ async function chooseAction(sess, ort, game, seat, pickBuffer) {
   return best;
 }
 
+/** 플레이 수(mv) → 행동 인덱스. legalMask와 같은 규칙을 쓴다 —
+ *  가드·탐색이 특정 수를 지목하거나 제외할 때 필요하다. */
+function actionIndex(mv) {
+  if (isJoker(mv.card)) return mv.jokerSuit ? A_PLAY_JOKER_SUIT0 + SUIT_IDX[mv.jokerSuit] : A_PLAY_JOKER;
+  if (mv.jokerCall) return A_PLAY_JOKERCALL;
+  return A_PLAY0 + cidx(mv.card);
+}
+
 const api = { OBS_DIM, ACTION_DIM, PRIZE_SCALE, encodeObs, legalMask, actionToEngine, chooseAction, modelObsDim,
-              cidx, idxCard, setAblateFrev, setFriendCallFix };
+              cidx, idxCard, actionIndex, setAblateFrev, setFriendCallFix };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyMaster = api;
 

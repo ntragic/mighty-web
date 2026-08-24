@@ -21,6 +21,7 @@ const I18N_EN = {
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
   // 기본 화면
   '마이티':'Mighty', '패스':'Pass', '취소':'Cancel', '없음':'None', '판':'Round',
+  '직접 플레이로 전환합니다':'Switched to manual play',
   '다음 판':'Next round', '최종 결과 보기':'Final results', '시트':'Sheet', '시트 닫기':'Close sheet',
   '누적':'Total', '플레이어':'Player',
   // 공약
@@ -368,8 +369,21 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.13.0';
-const APP_BUILD = '2026-08-17 빌드 — 비딩 칩 (누가 어떤 순서로 공약했나)';
+// 국면 한정 탐색 설정 — 끄려면 null로 둔다(즉시 이전 동작). 근거는 10~12절.
+// gate 1.3: 로짓 1·2위 차가 이보다 작으면 켠다. 0.6에서 넓혔다 — 0.58~1.29 구간도
+//   정책 실수율 4.1%에 탐색 2.8~3.6%로 이득이 있었다. 1.3 이상은 정책이 0.5%로
+//   이미 정확하고 탐색이 오히려 나빠서(1.9%) 그대로 둔다.
+// K 32: 결정화 16벌(대형실수 3.5%)보다 32벌(3.2%)이 낫다. 예산 안에서 잘리므로
+//   느린 기기는 자동으로 16벌 수준으로 내려간다.
+// budgetMs 2000: 32벌은 1,200ms에서 잘렸다(데스크톱 중앙 1,201ms = 예산 상한).
+//   사용자가 사고 시간은 문제없다고 확인해 예산을 올렸다. 느린 기기는 여전히
+//   여기서 잘리고 결정화 수만 줄어든다.
+// 클래스별 문턱(로짓 1·2위 차가 이보다 작으면 켠다). 근거는 10~13절.
+//   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
+const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
+                       topM: 5, budgetMs: 2000 };
+const APP_VERSION = 'v2.16.9';
+const APP_BUILD = '2026-08-24 빌드 — 탐색이 실제 판을 움직이던 문제';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -422,6 +436,11 @@ let matchOver = false;
 // 진행과 무관하게 고정한다 — 그 화면이 판의 결말이라 줄일 대상이 아니다.
 // 수거 애니메이션 다음은 곧장 결과 화면이다(중간에 빈 판을 보여주지 않는다).
 const FINAL_TRICK_HOLD = 1400;
+// 비딩 한 수를 보여 주는 시간. 봇이 60ms 간격으로 몰아치면 칩·퍽이 눈에 안 들어온다
+// (제보 2026-08-18). 이 예산 안에서 '생각 중'을 잠깐 띄우고, 공약을 그린 뒤 나머지를
+// 붙잡는다 — 그래서 비딩 과정과 칩 표시가 같은 속도로 흐른다.
+const BID_TURN = () => (claimMode ? 0 :
+  ({fast:700, normal:1000, slow:1400})[settings.ui.speed] || 1000);
 const SPD = () => ({fast:{bot:250,pre:250,show:550,collect:250},
                     normal:{bot:550,pre:450,show:900,collect:340},
                     slow:{bot:900,pre:650,show:1400,collect:420}})[settings.ui.speed];
@@ -826,6 +845,11 @@ async function buildAgents(reassign){
       botTable = await MightyAI.createTable({
         tiers, rng: Math.random, session: masterSess, ort: ortLib,
         sessions: useNN ? sessions : null,
+        // 마스터 티어에서만 국면 한정 탐색을 켠다(v2.14.0). 프렌드가 아군이 이기는
+        // 트릭에 개입할지 정하는 자리에서만 발화하고, 정책이 확신하면 건너뛴다 —
+        // 딜당 0.69회·데스크톱 0.5초·저사양 1.2초(예산에서 절단). 실측은
+        // docs/SESSION-HANDOFF.md 10절.
+        classSearch: tier==='master' ? CLASS_SEARCH : null,
       });
     }catch(e){
       // 어떤 이유로든 좌석을 못 만들면 순수 규칙기반으로 되돌린다.
@@ -1002,11 +1026,11 @@ function friendDeclText(){
  * 누가 어떤 순서로 공약했는지 좌석 카드 자리에 남긴다. 상태를 따로 들지 않고
  * roundRec.actions에서 파생시킨다 — 되돌리기가 actions를 잘라내므로 칩도 자동으로
  * 맞는다(별도 스냅샷을 두면 어긋날 자리가 생긴다).
- * 공개는 0.5초 간격 순차. 비딩이 끝나면 잠깐 두고 지운다. */
-const BID_CHIP_STEP = 500;    // 칩 하나씩 나타나는 간격
-const BID_CHIP_HOLD = 900;    // 비딩 종료 후 남겨 두는 시간
-let bidRevealN = 0;           // 지금까지 공개한 비딩 착수 수
-let bidChipTimer = null;
+ * 칩은 **기록된 즉시** 그린다. v2.13.0에서는 0.5초 간격 공개 큐를 따로 돌렸는데,
+ * 봇의 실제 비딩 속도와 큐 속도가 달라 칩이 뒤늦게 떠 상태와 어긋났다(제보 2026-08-18).
+ * 대신 비딩 한 수마다 BID_TURN만큼 화면을 잡아 두어 눈으로 따라갈 수 있게 한다.
+ * 비딩이 끝나면 잠깐 두고 지운다. */
+const BID_CHIP_HOLD = 1200;   // 비딩 종료 후 남겨 두는 시간
 let bidChipClear = null;
 // 비딩이 끝난 뒤 한 번만 처리했다는 표식. 이게 없으면 플레이 중 render()마다
 // 공개 큐가 다시 돌아 칩이 카드 낼 때마다 되살아난다(제보 2026-08-17).
@@ -1019,9 +1043,7 @@ function bidActions(){
 /** 타이머·DOM·카운터만 정리한다. bidChipsDone은 건드리지 않는다 —
  *  여기서 되돌리면 플레이 중에 다시 공개가 시작된다. */
 function clearBidChips(){
-  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
   if (bidChipClear){ clearTimeout(bidChipClear); bidChipClear = null; }
-  bidRevealN = 0;
   for (let p = 0; p < 5; p++){
     const c = $('#bidchip-' + p);
     if (c){ c.className = 'bidchip'; c.innerHTML = ''; }
@@ -1029,12 +1051,11 @@ function clearBidChips(){
 }
 /** 새 라운드·되돌리기용 — 표식까지 초기화해 다음 비딩에서 다시 보이게 한다. */
 function resetBidChips(){ clearBidChips(); bidChipsDone = false; }
-/** 공개된 착수까지만 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
+/** 기록된 비딩을 그대로 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
 function paintBidChips(){
   const acts = bidActions();
-  const shown = Math.min(bidRevealN, acts.length);
   const latest = {};                       // 좌석 → {ord, a}
-  for (let i = 0; i < shown; i++) latest[acts[i].p] = { ord: i + 1, a: acts[i].a };
+  for (let i = 0; i < acts.length; i++) latest[acts[i].p] = { ord: i + 1, a: acts[i].a };
   const wonBy = (game && game.phase !== 'bidding' && game.declarer != null) ? game.declarer : null;
   for (let p = 0; p < 5; p++){
     const c = $('#bidchip-' + p);
@@ -1054,37 +1075,19 @@ function paintBidChips(){
     c.innerHTML = `<span class="cl">${label}</span><span class="ord">${rec.ord}</span>`;
   }
 }
-/** 0.5초 간격으로 하나씩 공개 (비딩 중에만 돈다). */
-function pumpBidChips(){
-  if (bidChipTimer) return;
-  const acts = bidActions();
-  if (bidRevealN >= acts.length) return;
-  const myGen = stateGen;
-  bidChipTimer = setTimeout(() => {
-    bidChipTimer = null;
-    if (myGen !== stateGen) return;
-    bidRevealN++;
-    paintBidChips();
-    pumpBidChips();
-  }, BID_CHIP_STEP);
-}
 function renderBidChips(){
   if (replay || !game || !roundRec){ clearBidChips(); return; }
   const acts = bidActions();
   if (!acts.length){ resetBidChips(); return; }
   if (game.phase === 'bidding'){
     bidChipsDone = false;
-    if (bidRevealN > acts.length) bidRevealN = acts.length;   // 되돌리기로 줄어든 경우
     paintBidChips();
-    pumpBidChips();
     return;
   }
   // 비딩이 끝났다. 남은 것을 한 번에 보여주고 잠깐 뒤 지운 다음 **다시 그리지 않는다**.
   // 여기서 빠져나가지 않으면 플레이 중 render()마다 칩이 되살아난다.
   if (bidChipsDone) return;
   bidChipsDone = true;
-  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
-  bidRevealN = acts.length;
   paintBidChips();
   const myGen = stateGen;
   bidChipClear = setTimeout(() => {
@@ -1154,6 +1157,14 @@ function renderTrick(){
 
 /* ---------------- 손패 렌더 ---------------- */
 let selDiscard=[];  // 바닥패 교환 선택
+// 카드 착수의 탭 스루 차단 (제보 2026-08-23: 로딩 후 첫 트릭에 패가 저절로 나감).
+// click만 보면, 시트(바닥패·프렌드)나 모달이 닫히면서 그 자리에 들어온 카드가
+// 직전 탭의 '유령 클릭'을 그대로 받는다 — 주공은 프렌드 지정 직후가 곧 첫 리드라
+// 그 한 탭이 첫 트릭 착수가 된다. 수정 전 코드에서 pointerdown 없는 순수 click
+// 하나로 카드가 나가는 것을 tests/tapthrough.test.js로 실증했다.
+// 그래서 **그 카드 위에서 시작한 포인터**만 착수로 친다. 모달 버튼의 시간 유예
+// (MODAL_TAP_GUARD)와 달리 진짜 탭에는 지연이 전혀 없다.
+let tapCard=null;
 function renderHand(){
   const wrap=$('#hand'); wrap.innerHTML='';
   if (!game || !game.hands[HUMAN]) return;
@@ -1174,7 +1185,15 @@ function renderHand(){
       if (selDiscard.some(s=>E.sameCard(s,c))) h.classList.add('sel');
       h.onclick=()=>{ toggleDiscard(c); };
     } else if (legalSet){
-      if (legalSet.has(id)){ h.classList.add('legal'); h.onclick=()=>humanPlay(c); }
+      if (legalSet.has(id)){
+        h.classList.add('legal');
+        h.addEventListener('pointerdown', ()=>{ tapCard=id; });
+        h.addEventListener('pointercancel', ()=>{ tapCard=null; });
+        h.onclick=()=>{
+          if (tapCard!==id) return;      // 이 카드에서 시작하지 않은 탭 = 유령 클릭
+          tapCard=null; humanPlay(c);
+        };
+      }
       else h.classList.add('dim');
     }
     wrap.append(h);
@@ -1407,6 +1426,12 @@ function jokerCallUseful(){
 
 /* ---------------- 모달 유틸 ---------------- */
 let modalResolve = null;         // 열려 있는 모달을 외부에서 취소하기 위한 핸들
+// 모달이 뜬 직후의 탭은 무시한다. 카드를 내려고 누르는 순간 세팅 모달이 튀어나오면
+// 그 탭이 그대로 주 버튼('자동 진행')에 꽂혀, 그 판 내내 AI가 사람 카드를 낸다
+// ("내기도 전에 AI 추천 패가 나간다" 제보 2026-08-23). 모바일에서 특히 잘 난다.
+const MODAL_TAP_GUARD = 450;     // ms
+let modalShownAt = 0;
+const modalTapTooSoon = () => Date.now() - modalShownAt < MODAL_TAP_GUARD;
 function cancelOpenModal(){
   if (modalResolve){ const r=modalResolve; modalResolve=null; $('#modal').classList.remove('show'); r(null); }
 }
@@ -1419,12 +1444,13 @@ function pickSuit(title){
     for(const g of ['S','D','H','C']){
       const b=el('button','chip '+suCls(g), SUIT_GLYPH[g]+' '+t({S:'스페이드',D:'다이아',H:'하트',C:'클로버'}[g]));
       b.style.fontSize='1rem';
-      b.onclick=()=>{ close(); res(g); };
+      b.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(g); };
       chips.append(b);
     }
     const cancel=el('button','btn ghost',t('취소')); cancel.style.marginTop='14px';
-    cancel.onclick=()=>{ close(); res(null); };
+    cancel.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(null); };
     box.append(chips,cancel);
+    modalShownAt = Date.now();
     $('#modal').classList.add('show');
     function close(){ modalResolve=null; $('#modal').classList.remove('show'); }
   });
@@ -1435,9 +1461,10 @@ function confirmModal(title, html, yes, no){
     const box=$('#modal-box');
     box.innerHTML=`<h2>${title}</h2><div class="sub">${html}</div>`;
     const row=el('div','btnrow');
-    const n=el('button','btn ghost',no); n.onclick=()=>{ close(); res(false); };
-    const y=el('button','btn primary',yes); y.onclick=()=>{ close(); res(true); };
+    const n=el('button','btn ghost',no); n.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(false); };
+    const y=el('button','btn primary',yes); y.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(true); };
     row.append(n,y); box.append(row);
+    modalShownAt = Date.now();
     $('#modal').classList.add('show');
     function close(){ modalResolve=null; $('#modal').classList.remove('show'); }
   });
@@ -1534,6 +1561,9 @@ async function playWithAnimation(p, action){
     // 룰 구현인 엔진을 건드리지 않고, 마지막 트릭은 빈 테이블로 그린 뒤 곧장
     // 결과 화면으로 넘긴다.
     if (isFinalTrick){
+      // 수거 연출(await) 뒤다 — 그 사이 되돌리기가 들어왔으면 여기서 pump를 부르는
+      // 순간 봇 루프가 겹친다(제보 2026-08-22와 같은 계열).
+      if (myGen!==stateGen){ busy=false; return; }
       ghost={plays:[], winner:null};      // 테이블을 비운 상태로 고정
       render();
       busy=false;
@@ -1545,6 +1575,9 @@ async function playWithAnimation(p, action){
       toast(game.friend===null?t('초구를 주공이 승리 — 사실상 노프렌드'):tf('friendToast', NAMES[game.friend]));
     }
   }
+  // 수거 연출까지 끝난 뒤에도 세대를 다시 본다 — 그 사이 되돌리기가 들어오면
+  // 여기서 pump를 부르는 순간 봇 루프가 겹친다.
+  if (myGen!==stateGen){ busy=false; return; }
   busy=false;
   render(); pump();
 }
@@ -1723,10 +1756,18 @@ function checkClaim(){
   let remainPts=0;
   for(let q=0;q<5;q++) for(const c of game.hands[q]) if(E.isPointCard(c)) remainPts++;
   busy=true; renderSheet();
+  const myGen=stateGen;
+  // 버튼 배치는 원래 설계를 지킨다 — '자동 진행'이 오른쪽 주 버튼이고, 그게 자연스러운
+  // 선택이 되도록 의도한 것이다(2026-08-23 사용자 확인). 오작동은 배치가 아니라
+  // 탭 스루가 원인이었고 그건 모달 탭 유예로 막는다.
   confirmModal(t('세팅 — 전승 확정'),
     tf('claimBody', NAMES[p], sideOf(p), left, remainPts),
     t('자동 진행'), t('직접 플레이')).then(auto=>{
+      // 되돌리기·새 라운드가 모달을 취소하면 이 콜백이 **나중에** 돈다. 가드가 없으면
+      // busy를 내리고 pump를 한 번 더 불러 봇 루프가 둘이 된다(제보 2026-08-22).
+      if (myGen!==stateGen) return;
       claimMode=!!auto;
+
       busy=false;
       if (claimMode) toast(tf('claimToast', NAMES[p]), 1400);
       render(); pump();
@@ -1752,13 +1793,13 @@ function thinkTime(){
   const base={fast:[160,340], normal:[520,1150], slow:[900,1800]}[settings.ui.speed]||[520,1150];
   return base[0] + Math.random()*(base[1]-base[0]);
 }
-async function botThink(p){
+async function botThink(p, ms){
   if (claimMode) return;
   const seat=$('#seat-'+p);
   const bub=$(`#seat-${p} .bubble`);
   if (seat) seat.classList.add('thinking');
   if (bub){ bub.innerHTML='<span class="think-dots"><i></i><i></i><i></i></span>'; bub.classList.add('show'); }
-  await sleep(thinkTime());
+  await sleep(ms === undefined ? thinkTime() : ms);
   if (seat) seat.classList.remove('thinking');
   if (bub) bub.classList.remove('show');
 }
@@ -1781,14 +1822,34 @@ function recStart(seed, cfg, dealer, g){
   };
 }
 /** game.act를 감싸 모든 행동을 기록한다 */
+/**
+ * 착수를 기록에 남기도록 game.act를 감싼다.
+ *
+ * **복제본에 딸려가면 안 된다.** 예전 구현은 `const orig = g.act.bind(g)`로 원본에
+ * 묶은 화살표 함수를 열거 가능한 자기 속성으로 얹었다. 탐색(PIMC)과 AI 복기는
+ * `Object.keys(g)`를 훑어 시뮬레이션 판을 만드는데, 함수는 그대로 복사되므로
+ * **시뮬레이션의 sim.act()가 원본 판을 움직이고 기록에 가짜 액션을 쌓았다**.
+ * 2026-08-24 실측: 시뮬 착수 한 번에 기록 7→8, 원본 turn 0→1, 테이블 0→1.
+ * 마스터 티어 첫 판부터 기록이 깨져 복기가 illegal play로 죽었다 —
+ * "패가 저절로 나간다"와 "복기가 안 된다"가 이 한 뿌리에서 나왔다.
+ *
+ * 두 겹으로 막는다.
+ *   1) enumerable:false — Object.keys에 안 걸려 복제본이 아예 가져가지 않는다
+ *   2) prototype의 원본을 `this`로 부르고, 기록은 이 인스턴스일 때만 남긴다
+ *      — 혹시 복사되더라도 복제본 자신에게 작용하고 기록은 건드리지 않는다
+ */
 function instrument(g){
   if (g.__inst) return;
-  g.__inst = true;
-  const orig = g.act.bind(g);
-  g.act = (action) => {
-    if (roundRec) roundRec.actions.push({ p: g.currentPlayer, ph: g.phase, a: JSON.parse(JSON.stringify(action)) });
-    return orig(action);
-  };
+  const base = Object.getPrototypeOf(g).act;      // 엔진 원본 act
+  Object.defineProperty(g, '__inst', { value: true, enumerable: false, configurable: true });
+  Object.defineProperty(g, 'act', {
+    enumerable: false, configurable: true, writable: true,
+    value: function(action){
+      if (roundRec && this === g)
+        roundRec.actions.push({ p: this.currentPlayer, ph: this.phase, a: JSON.parse(JSON.stringify(action)) });
+      return base.call(this, action);
+    },
+  });
 }
 /** 기록에서 게임을 재구성 (upto개 행동까지 적용) */
 function rebuildGame(rec, upto){
@@ -2611,6 +2672,12 @@ function showExportModal(name, md, count, downloaded){
 }
 /** 진행이 멈춘 채 busy만 남는 상황을 감지해 복구한다 (내보내기·복기 등 외부 조작 후 대비) */
 let watchdogTimer = null;
+// 감시 타이머 한도. 탐색을 켜면 봇 한 턴이 길어진다 — 생각 550 + 탐색 최대 1,894
+// + 비행 300 + 트릭 연출 1,690이면 4.4초다(브라우저 실측). 3,500ms 고정이던 시절엔
+// 정상 진행 중에 워치독이 발동해 stateGen을 올리고 봇 루프를 다시 깔았다.
+// 그러면 진행 중이던 턴이 무효화되고 새 루프가 겹쳐 카드가 저절로 나가거나
+// 되돌리기가 안 먹는 것처럼 보인다(제보 2026-08-22).
+const WATCHDOG_MS = () => 3500 + (CLASS_SEARCH ? 2 * (CLASS_SEARCH.budgetMs || 0) : 0);
 function armWatchdog(){
   if (watchdogTimer) clearTimeout(watchdogTimer);
   if (!game || replay) return;
@@ -2630,7 +2697,7 @@ function armWatchdog(){
         render(); pump();
       }
     }
-  }, 3500);
+  }, WATCHDOG_MS());
 }
 function refreshTools(){
   armWatchdog();
@@ -2662,8 +2729,9 @@ function pump(){
     busy=true; renderSheet();
     const myGen=stateGen;
     setTimeout(async()=>{
-      busy=false;
+      // 가드가 먼저다. 무효화된 콜백이 busy를 내리면 살아 있는 루프와 겹친다.
       if (myGen!==stateGen) return;
+      busy=false;
       if (!claimMode || !game || game.phase!=='play' || game.play.turn!==HUMAN){ pump(); return; }
       await playWithAnimation(HUMAN, autoPickForHuman());
     }, CLAIM_SPD.bot);
@@ -2682,15 +2750,25 @@ function pump(){
   if (cur!==HUMAN && !busy){
     busy=true; renderSheet();
     const myGen = stateGen;
-    setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 60 : claimSpeed().bot);
+    setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 0 : claimSpeed().bot);
   }
 }
+// 봇 루프 계측. 되돌리기·감시 타이머가 새 루프를 깔면 무효화된 옛 루프가 아직
+// await에 걸려 있을 수 있다 — 그 겹침 자체는 정상이고 옛 루프는 다음 가드에서 끝난다.
+// **진짜 불변식은 "무효화된 루프가 착수까지 가지 않는다"** 이므로 그걸 따로 센다.
+// staleActs가 0이 아니면 가드가 뚫린 것이고, 그때 카드가 저절로 나간다.
+let botChains = 0, botChainsMax = 0, staleActs = 0;
 async function botStep(){
+  botChains++; if (botChains > botChainsMax) botChainsMax = botChains;
+  try { return await botStepInner(); } finally { botChains--; }
+}
+async function botStepInner(){
   const myGen=stateGen;
   const p=game.currentPlayer;
   const phase=game.phase;
   if (!agentsReady || !agents[p]) await buildAgents();
-  if (phase==='bidding') await botThink(p);
+  const turn = BID_TURN();
+  if (phase==='bidding') await botThink(p, turn * 0.3);
   if (myGen!==stateGen){ busy=false; return; }
   let action;
   try{ action = await agents[p].act(game, p); }
@@ -2707,7 +2785,14 @@ async function botStep(){
     if (action.type==='pass'){ bubble(p,t('패스')); logLine(tf('logPass', NAMES[p]));
       const st=$('#seat-'+p); if(st){ st.classList.remove('announce'); void st.offsetWidth; st.classList.add('announce'); } }
     else { announceBid(p, action.count, action.giruda); logLine(tf('logBid', NAMES[p], action.count, action.giruda)); }
-    busy=false; render();
+    render();                                   // 칩·퍽을 먼저 그리고
+    await sleep(turn * 0.7);                    // 눈으로 따라갈 시간을 준다
+    if (myGen!==stateGen){ busy=false; return; }
+    busy=false;
+    // busy를 내린 **뒤** 한 번 더 그린다. renderSheet는 busy면 시트를 숨기므로,
+    // 여기서 다시 그리지 않으면 마지막 AI 공약 뒤 내 차례가 와도 비딩 시트가
+    // 숨은 채로 남는다(v2.15.1 회귀, 모바일에서 제보).
+    render();
     if (game.phase==='floor' ) logLine(tf('logDeclarer', NAMES[game.declarer], contractText(game.contract)));
     pump(); return;
   }
@@ -2730,6 +2815,7 @@ async function botStep(){
     busy=false; render(); pump(); return;
   }
   if (phase==='play'){
+    if (myGen!==stateGen){ staleActs++; busy=false; return; }   // 여기까지 오면 가드가 뚫린 것
     busy=false;
     await playWithAnimation(p, {type:'play', ...action});
     return;
@@ -2937,7 +3023,9 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+globalThis.MUI = { get game(){return game}, get busy(){return busy},
+  get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -2968,6 +3056,9 @@ addEventListener('keydown', ev=>{
   else if (k==='escape'){
     if ($('#expmodal').classList.contains('show')){ $('#expmodal').classList.remove('show'); render(); pump(); }
     else if (replay) closeReplay();
+    // 자동 진행이 켜져 있으면 빠져나올 길을 준다 — 실수로 켜졌을 때 되돌리기 말고는
+    // 방법이 없었다(제보 2026-08-23).
+    else if (claimMode){ claimMode=false; toast(t('직접 플레이로 전환합니다')); render(); pump(); }
   }
   else if (replay && k===' '){ ev.preventDefault(); toggleReplayPlay(); }
 });

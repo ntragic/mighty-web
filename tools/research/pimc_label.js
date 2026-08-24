@@ -35,6 +35,8 @@ const K = parseInt(process.env.K || '32', 10);
 const DEPTH = parseInt(process.env.DEPTH || '3', 10);
 const SAMPLE = parseFloat(process.env.SAMPLE || '0.25');
 const MARGIN = parseFloat(process.env.MARGIN || '0');
+// SPLIT: 결정화 A/B 분리 검증(승자의 저주 제거). 라벨 품질 스위치다.
+const SPLIT = process.env.SPLIT === '1';
 const JC_SAMPLE = parseFloat(process.env.JC_SAMPLE || '1.0');
 const K_JC = parseInt(process.env.K_JC || '200', 10);
 // 특수카드 무력화 국면(조커콜·마이티 무늬 리드)은 이득이 여러 트릭 뒤에 실현된다.
@@ -61,6 +63,10 @@ const KEYKILL_ONLY = process.env.KEYKILL_ONLY === '1';
 const REC_DIR = process.env.REC_DIR || '';
 const FORCE_BID = parseInt(process.env.FORCE_BID || '0', 10);
 const CLASS_SAMPLE = parseFloat(process.env.CLASS_SAMPLE || '0');
+// CLASS_ONLY: 개입 클래스를 하나로 한정한다(예: weaklead). 표적이 한 클래스일 때
+//   다른 클래스 라벨이 섞이면 이동 예산(KL)을 나눠 쓰게 된다.
+const CLASS_ONLY = process.env.CLASS_ONLY || '';
+const ORT_THREADS = parseInt(process.env.ORT_THREADS || '0', 10);
 const K_CLASS = parseInt(process.env.K_CLASS || String(K_JC), 10);
 const DEPTH_CLASS = parseInt(process.env.DEPTH_CLASS || '0', 10);
 const SLACK_MAX = process.env.SLACK_MAX === undefined ? null : parseInt(process.env.SLACK_MAX, 10);
@@ -101,6 +107,30 @@ function keySpendClass(g, p) {
   if (legal.length < 2) return null;
   const canSpend = legal.some(mv => E.isJoker(mv.card) || E.sameCard(mv.card, g.mightyCard));
   return canSpend ? 'keyspend' : null;
+}
+
+/** 프렌드가 선을 잡고 기루다를 든 국면인가 — 기루다 정리 판단 자리다.
+ *  실측(2026-08-18): 정책은 가장 낮은 기루다를 39% 던지고 교사는 22%다. 교사는
+ *  그 자리에서 다른 무늬를 돌린다(41% 대 정책 28%). 이 습관을 라벨로 옮긴다. */
+function trumpLeadClass(g, p) {
+  if (g.phase !== 'play' || p === g.declarer) return null;
+  if (!g.play || g.play.table.length !== 0) return null;
+  const gir = g.contract && g.contract.giruda !== 'N' ? g.contract.giruda : null;
+  if (!gir) return null;
+  const fd = g.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        g.hands[p].some(c => E.sameCard(c, fd.card)))) return null;
+  if (!g.hands[p].some(c => !E.isJoker(c) && c.suit === gir)) return null;
+  return g._legalPlays(p).length >= 2 ? 'trumplead' : null;
+}
+
+/** 마이티가 아직 안 나왔고 내 손에도 없다 — 배포는 이때 마이티 무늬 리드를 막는다 */
+function mightyOut(g, p) {
+  if (!g.mightyCard) return false;
+  const id = E.cardId(g.mightyCard);
+  for (const t of g.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return false;
+  for (const e of g.play.table) if (E.cardId(e.card) === id) return false;
+  return !g.hands[p].some(c => E.cardId(c) === id);
 }
 
 /** 프렌드 개입 국면인가 — 좌석 가시 정보만 쓴다. 'weaklead' | 'oppwin' | null */
@@ -154,7 +184,8 @@ function voidsOf(g) {
   const scan = (plays, led) => {
     if (!led) return;
     for (const e of plays) {
-      if (E.isJoker(e.card)) continue;
+      // 마이티·조커는 팔로우 면제 — 오프수트로 나와도 '무늬 없음'의 근거가 아니다
+      if (E.isJoker(e.card) || (g.mightyCard && E.sameCard(e.card, g.mightyCard))) continue;
       if (e.card.suit !== led) v[e.player].add(led);
     }
   };
@@ -241,7 +272,11 @@ async function valueOf(sess, g, seat) {
     console.error(`복기 기록 ${RECS.length}건 로드 (${REC_DIR})`);
   }
   const N = REC_DIR ? RECS.length : parseInt(process.argv[3] || '300', 10);
-  const sess = await ort.InferenceSession.create(MODEL);
+  // ORT_THREADS: 배치 1 추론이라 스레드를 늘려도 이득이 없고, 갈래를 병렬로 돌리면
+  // 서로 코어를 뺏어 3갈래가 단일 실행보다 5배 느려진다(2026-08-17 실측).
+  // 병렬 라벨링에서는 갈래당 2~4로 묶어라.
+  const sess = await ort.InferenceSession.create(MODEL, ORT_THREADS
+    ? { intraOpNumThreads: ORT_THREADS, interOpNumThreads: 1 } : undefined);
   const ws = fs.createWriteStream(OUT);
   let seedCounter = 12345;
   const rnd = () => { seedCounter = (seedCounter * 1103515245 + 12345) & 0x7fffffff;
@@ -252,7 +287,7 @@ async function valueOf(sess, g, seat) {
   for (let s = 0; s < E.NUM_PLAYERS; s++)
     ag.push(await AI.createAgent({ tier: 'master', session: sess, ort }));
 
-  let labeled = 0, changed = 0, jcLabeled = 0, clsLabeled = 0, forced = 0;
+  let labeled = 0, changed = 0, jcLabeled = 0, clsLabeled = 0, forced = 0, splitDrop = 0;
   for (let i = 0; i < N; i++) {
     const R = REC_DIR ? RECS[i] : null;
     const seed = R ? R.seed : SEED0 + i;
@@ -298,7 +333,9 @@ async function valueOf(sess, g, seat) {
       // 프렌드 개입 국면 — 조커콜과 같은 이유로 드물고 결정적이라 따로 표집한다
       // KEY_SAMPLE>0이면 키카드 소비 국면을 우선 잡는다(개입 일반보다 좁고 중요하다)
       let cls = (KEY_SAMPLE > 0 && rnd() < KEY_SAMPLE) ? keySpendClass(g, p) : null;
-      if (!cls) cls = CLASS_SAMPLE > 0 ? interveneClass(g, p) : null;
+      if (!cls) cls = CLASS_SAMPLE > 0
+        ? (CLASS_ONLY === 'trumplead' ? trumpLeadClass(g, p) : interveneClass(g, p)) : null;
+      if (cls && CLASS_ONLY && cls !== CLASS_ONLY) cls = null;
       const slack = cls ? attackSlack(g) : null;
       if (cls && SLACK_MAX !== null && slack > SLACK_MAX) cls = null;   // 여유가 넉넉하면 제외
       if (cls && SLACK_MIN !== null && slack < SLACK_MIN) cls = null;   // 이미 깨진 계약도 제외
@@ -333,9 +370,9 @@ async function valueOf(sess, g, seat) {
           if (dets.length >= 8) {
             const scores = [];
             for (const ci of cands) {
-              let sum = 0, n = 0;
-              for (const d of dets) {
-                const sim = cloneGame(d);
+              let sum = 0, n = 0, sumA = 0, nA = 0, sumB = 0, nB = 0;
+              for (let di = 0; di < dets.length; di++) {
+                const sim = cloneGame(dets[di]);
                 const a0 = M.actionToEngine(ci, sim, []);
                 if (!a0) continue;
                 try { sim.act(a0); } catch (e) { continue; }
@@ -351,8 +388,10 @@ async function valueOf(sess, g, seat) {
                   ? sim.result.prizes[p] / M.PRIZE_SCALE          // 가치 헤드와 같은 스케일
                   : await valueOf(sess, sim, p);
                 sum += v; n++;
+                if (di % 2) { sumB += v; nB++; } else { sumA += v; nA++; }
               }
-              if (n) scores.push({ i: ci, v: sum / n });
+              if (n) scores.push({ i: ci, v: sum / n,
+                                   a: nA ? sumA / nA : null, b: nB ? sumB / nB : null });
             }
             if (scores.length > 1) {
               scores.sort((a, b) => b.v - a.v);
@@ -360,10 +399,38 @@ async function valueOf(sess, g, seat) {
               const polScore = scores.find(x => x.i === polTop);
               const gain = polScore ? best.v - polScore.v : 0;
               if (best.i !== polTop) changed++;
-              if (gain >= MARGIN) {
+              // SPLIT=1: 결정화를 A/B로 갈라 **A에서 고르고 B에서 검증**한다.
+              // 같은 표본에서 고르고 재면 표본 최대가 위로 편향돼(승자의 저주)
+              // 노이즈로 뽑힌 수가 정답으로 들어간다 — 그런 라벨을 학습하면
+              // in-sample만 오르고 새 국면은 그대로다(2026-08-17 홀드아웃 실측:
+              // 학습 81% · 홀드아웃 57.3%로 앵커 58.2%보다도 낮았다).
+              // 배포가 막은 수를 정답으로 넣지 않는다 — 마이티 무늬 리드는 사람
+              // 정석으로 억제 중이라(v2.15.0), 교사가 권해도 학습시키면 규칙과
+              // 싸우는 모델이 된다.
+              const bannedTarget = (idx) => {
+                if (!g.mightyCard || g.play.table.length !== 0 || !mightyOut(g, p)) return false;
+                const a = M.actionToEngine(idx, g, []);
+                return !!(a && a.card && !E.isJoker(a.card) && a.card.suit === g.mightyCard.suit);
+              };
+              let gainB = null, splitOk = true;
+              if (SPLIT) {
+                const ok = scores.filter(s => s.a !== null && s.b !== null);
+                const bA = ok.length > 1 ? ok.reduce((x, y) => (y.a > x.a ? y : x)) : null;
+                const pB = bA ? ok.find(s => s.i === polTop) : null;
+                if (!bA || !pB || bA.i === polTop) splitOk = false;
+                else {
+                  gainB = bA.b - pB.b;               // 고른 뒤 다른 표본에서 잰 이득
+                  if (gainB < MARGIN) splitOk = false;
+                  else if (bannedTarget(bA.i)) splitOk = false;   // 억제 중인 수는 안 배운다
+                  else best.i = bA.i;                // 목표도 A에서 고른 수로 바꾼다
+                }
+                if (!splitOk) splitDrop++;
+              }
+              if (splitOk && gain >= MARGIN) {
                 ws.write(JSON.stringify({
                   seed, dealer: g.dealer, cfg: g.config, upto: actions.length, seat: p,
-                  target: best.i, policyTop: polTop, gain: +gain.toFixed(4), jc: isJC ? 1 : 0,
+                  target: best.i, policyTop: polTop, gain: +(gainB === null ? gain : gainB).toFixed(4),
+                  gainRaw: gainB === null ? undefined : +gain.toFixed(4), jc: isJC ? 1 : 0,
                   cls: cls || undefined, slack: slack === null ? undefined : slack,
                   src: R ? 'replay' : (FORCE_BID ? 'forcedbid' : 'selfplay'),
                   bid: g.contract ? g.contract.count : undefined,
@@ -384,6 +451,8 @@ async function valueOf(sess, g, seat) {
       process.stderr.write(`  ${i + 1}/${N}판 · 라벨 ${labeled} · 정책과 다른 목표 ${changed}\n`);
   }
   ws.end();
+  if (SPLIT) console.log(`검증 탈락 ${splitDrop}건 (A에서 고른 수가 B에서 못 이김) ` +
+    `· 생존율 ${(100 * labeled / Math.max(1, labeled + splitDrop)).toFixed(1)}%`);
   console.log(`라벨 ${labeled}건 (조커콜 ${jcLabeled} · 프렌드 개입 ${clsLabeled}` +
     (forced ? ` · 공약강제 ${forced}판` : '') + `) · 정책 1위와 다른 목표 ` +
     `${changed}건 (${(100 * changed / Math.max(1, labeled)).toFixed(1)}%) → ${OUT}`);

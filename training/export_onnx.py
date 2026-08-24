@@ -56,6 +56,17 @@ if __name__ == '__main__':
                                     'logits': {0: 'B'}, 'value': {0: 'B'}},
                       opset_version=17)
 
+    # 배포는 단일 파일 전제다(web/model에 .onnx 하나만 올린다). 토치가 가중치를
+    # .onnx.data로 쪼개 놓으면 그대로 배포되지 않으므로 되읽어 합쳐 저장한다.
+    import os
+    ext = args.out + '.data'
+    if os.path.exists(ext):
+        import onnx
+        m = onnx.load(args.out)                      # 외부 데이터까지 메모리로 올린다
+        onnx.save(m, args.out, save_as_external_data=False)
+        os.remove(ext)
+        print(f'외부 데이터 병합 → {args.out}')
+
     # 수치 검증: torch vs onnxruntime, 실게임 상태 200개
     import onnxruntime as ort
     sess = ort.InferenceSession(args.out, providers=['CPUExecutionProvider'])

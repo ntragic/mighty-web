@@ -2536,8 +2536,16 @@ async function chooseAction(sess, ort, game, seat, pickBuffer) {
   return best;
 }
 
+/** 플레이 수(mv) → 행동 인덱스. legalMask와 같은 규칙을 쓴다 —
+ *  가드·탐색이 특정 수를 지목하거나 제외할 때 필요하다. */
+function actionIndex(mv) {
+  if (isJoker(mv.card)) return mv.jokerSuit ? A_PLAY_JOKER_SUIT0 + SUIT_IDX[mv.jokerSuit] : A_PLAY_JOKER;
+  if (mv.jokerCall) return A_PLAY_JOKERCALL;
+  return A_PLAY0 + cidx(mv.card);
+}
+
 const api = { OBS_DIM, ACTION_DIM, PRIZE_SCALE, encodeObs, legalMask, actionToEngine, chooseAction, modelObsDim,
-              cidx, idxCard, setAblateFrev, setFriendCallFix };
+              cidx, idxCard, actionIndex, setAblateFrev, setFriendCallFix };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyMaster = api;
 
@@ -3371,6 +3379,273 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
   return x;
 }
 
+/**
+ * 국면 한정 탐색 — weaklead 국면에서만 게임 중 PIMC를 돌린다 (기본 꺼짐).
+ *
+ * 왜 이 클래스만인가: 프렌드가 "아군이 이기는 중이고 뒤에 두 명 이상 남았을 때
+ * 개입할 것인가"를 정하는 자리다. 딜당 1.2회밖에 안 나오는데 틀리면 눈에 띈다.
+ * 증류로는 못 고쳤다(대형 실수율 6.9% → 6.5%). 탐색은 900국면 실측에서
+ * 5.3% → 2.4%로 줄이고 페어드 +20.5 ± 10.5로 유의했다.
+ *
+ * 왜 이렇게만 굴리는가 (전부 실측으로 좁혀진 설계다):
+ *   - 트릭 1~2에서 자르고 가치 헤드로 평가하면 **정책보다 나쁘다**(6.8~10.5%).
+ *     끝까지 굴려야 한다.
+ *   - 롤아웃을 규칙 기반으로 바꾸면 싸지만 역시 나쁘다(7.6~9.9%).
+ *   - 정책이 확신하는 국면(로짓 1-2위 차가 gate 이상)은 이미 정확하다(0.5~0.9%).
+ *     거기서 탐색은 이득이 없고 비용만 든다 — 그래서 헷갈릴 때만 켠다.
+ *
+ * 설정: createAgent({ classSearch: { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 } })
+ * budgetMs를 넘기면 이미 굴린 결정화까지만 쓰고 멈춘다(저사양 기기 보호).
+ */
+// budgetMs 1,200은 브라우저 실측에서 나왔다(tools/bench/run-bench.mjs).
+// 데스크톱 크롬 wasm 1스레드에서 16벌이 한 수 521ms라 예산에 안 걸리고,
+// CPU 1/4로 감속하면 1,683ms까지 가던 것이 1,226ms에서 잘린다.
+// 예산에 걸리면 결정화 수가 줄 뿐이고, 4벌도 못 채우면 정책 수로 돌아간다.
+// 클래스별 문턱 — 전부 같은 방식(로짓 1·2위 차 분위별 대형 실수율)으로 쟀다.
+//   weaklead 1.3 · oppwin 1.8 · declarer 0.46(딜당 8회라 절반만) · friendlead 없음
+const SEARCH_DEFAULTS = { K: 16, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
+                          topM: 5, budgetMs: 1200 };
+
+/** 여당 좌석인가 — 주공이거나 프렌드 카드를 쥐었거나 공개된 프렌드. */
+function attackerSeat(game, seat) {
+  if (seat === game.declarer) return true;
+  const fd = game.friendDecl;
+  if (fd && fd.mode === 'card' && fd.card &&
+      game.hands[seat].some(c => E.sameCard(c, fd.card))) return true;
+  return !!game.friendRevealed && game.friend === seat;
+}
+
+/** 마이티가 아직 안 나왔고 내 손에도 없다 = 아군이 쥐고 있을 수 있다. */
+function mightyOutstanding(game, seat) {
+  if (!game.mightyCard || !game.play) return false;
+  const id = E.cardId(game.mightyCard);
+  for (const t of game.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return false;
+  for (const e of game.play.table) if (E.cardId(e.card) === id) return false;
+  return !game.hands[seat].some(c => E.cardId(c) === id);
+}
+
+/**
+ * 마이티 무늬 리드 억제 (사람 정석, 2026-08-18 사용자 지시).
+ *
+ * 여당(주공·프렌드)은 마이티 무늬를 돌리지 않는다 — 아군이 쥔 마이티를 값싼
+ * 트릭에 끌어내 낭비시키기 때문이다. 마이티가 이미 나왔거나 내가 들고 있으면
+ * 그 이유가 사라지므로 적용하지 않는다.
+ *
+ * **탐색은 반대로 권한다**(마이티 미출현 국면에서 32.8%, 정책 17.2%). 상금으로는
+ * 탐색이 옳을 수 있으나 사람 눈에는 정석 위반으로 보인다. 규칙을 위에 두기로 한
+ * 판단이며, 되돌리려면 createAgent({mightyLeadGuard:false}).
+ */
+function mightySuitLeadBanned(game, seat, mv) {
+  if (!game.play || game.play.table.length !== 0) return false;   // 리드에만 건다
+  if (!mv || E.isJoker(mv.card)) return false;
+  if (!attackerSeat(game, seat) || !mightyOutstanding(game, seat)) return false;
+  const ms = game.mightyCard ? game.mightyCard.suit : null;
+  return !!ms && mv.card.suit === ms;
+}
+
+/** 야당이 이기고 있는 트릭에서 프렌드가 따라가는 국면 — weaklead의 반대쪽이다.
+ *  700국면 실측: 정책 대형 실수 6.3% → 탐색 2.6%(페어드 +22.3 ± 8.9). 다만 정책이
+ *  확신하는 구간(로짓차 1.8 이상)에서는 2.3% → 4.0%로 탐색이 나빠 문턱을 둔다. */
+function oppwinState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length === 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  let best = null, bk = [-2, -1];
+  for (const e of game.play.table) {
+    const k = game._cardStrength(e, game.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return null;
+  const ally = best.player === game.declarer ||
+    (game.friendRevealed && game.friend === best.player && best.player !== seat);
+  if (ally) return null;
+  const legal = game._legalPlays(seat);
+  if (legal.length < 2) return null;
+  return legal.some(mv => {
+    const k = game._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: seat,
+                                  jokerCall: mv.jokerCall }, game.play);
+    return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
+  }) ? legal : null;
+}
+
+/** 주공 좌석의 플레이 결정 — 지금까지 잰 클래스 중 결함이 가장 크다.
+ *  700국면 실측: 정책 대형 실수 24.1% → 탐색 10.3%(페어드 +122.6 ± 42.3).
+ *  네 분위 전부 이득이지만 딜당 8회라 전부 켜면 판당 7초다. 사용자 판단으로
+ *  가장 헷갈리는 절반(로짓차 0.46 미만)만 켠다. */
+function declarerState(game, seat) {
+  if (game.phase !== 'play' || seat !== game.declarer) return null;
+  const legal = game._legalPlays(seat);
+  return legal.length >= 2 ? legal : null;
+}
+
+/** 프렌드가 선을 잡은 국면 — 리드 선택 전부가 탐색 대상이다.
+ *  개입(weaklead)과 달리 확신도 게이트를 쓰지 않는다: 900국면 실측에서 로짓차
+ *  네 분위 **전부** 탐색이 이겼다(정책 8.6~14.3% → 탐색 4.9~7.2%). */
+function friendLeadState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length !== 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  const legal = game._legalPlays(seat);
+  return legal.length >= 2 ? legal : null;
+}
+
+/** 이 좌석이 지금 weaklead 국면인가 — 좌석에서 보이는 정보만 쓴다. */
+function weakleadState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length === 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  let best = null, bk = [-2, -1];
+  for (const e of game.play.table) {
+    const k = game._cardStrength(e, game.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return null;
+  const ally = best.player === game.declarer ||
+    (game.friendRevealed && game.friend === best.player && best.player !== seat);
+  if (!ally || E.NUM_PLAYERS - 1 - game.play.table.length < 2) return null;
+  const legal = game._legalPlays(seat);
+  if (legal.length < 2) return null;
+  const canWin = legal.some(mv => {
+    const k = game._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: seat,
+                                   jokerCall: mv.jokerCall }, game.play);
+    return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
+  });
+  return canWin ? legal : null;
+}
+
+function cloneGameState(g) {
+  const c = Object.create(Object.getPrototypeOf(g));
+  for (const k of Object.keys(g)) {
+    const v = g[k];
+    c[k] = (typeof v === 'object' && v !== null) ? structuredClone(v) : v;
+  }
+  return c;
+}
+
+/** 좌석이 못 본 카드를 무작위로 나눠 완전정보 판을 하나 만든다(무늬 없음 존중). */
+function determinizeFrom(g, seat, rnd) {
+  const seen = new Set();
+  for (const t of g.play.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+  for (const e of g.play.table) seen.add(E.cardId(e.card));
+  for (const c of g.hands[seat]) seen.add(E.cardId(c));
+  if (seat === g.declarer && g.discard) for (const c of g.discard) seen.add(E.cardId(c));
+  const pool = [];
+  const push = c => { if (!seen.has(E.cardId(c))) pool.push(c); };
+  push(E.JOKER);
+  for (const s of ['S', 'D', 'H', 'C']) for (let r = 2; r <= 14; r++) push({ suit: s, rank: r });
+  const need = [];
+  for (let p = 0; p < E.NUM_PLAYERS; p++) if (p !== seat) need.push({ seat: p, n: g.hands[p].length });
+  const kittyN = (seat === g.declarer || !g.discard) ? 0 : g.discard.length;
+  if (need.reduce((a, b) => a + b.n, 0) + kittyN !== pool.length) return null;
+  // 지나간 트릭에서 못 낸 무늬 = 그 좌석에 그 무늬가 없다. 지키지 않으면 탐색이
+  // 불가능한 판을 평균낸다.
+  const voids = [];
+  for (let p = 0; p < E.NUM_PLAYERS; p++) voids.push(new Set());
+  const scan = (plays, led) => {
+    if (!led) return;
+    for (const e of plays) {
+      // 마이티·조커는 팔로우 면제다 — 오프수트로 나와도 그 무늬가 없다는 근거가
+      // 못 된다. 세지 않으면 '주공이 기루다를 든 세계'를 아예 상상하지 못한다
+      // (2026-08-20 제보에서 발견: 마이티를 낸 주공을 항상 기루다 0장으로 봤다).
+      if (E.isJoker(e.card) || (g.mightyCard && E.sameCard(e.card, g.mightyCard))) continue;
+      if (e.card.suit !== led) voids[e.player].add(led);
+    }
+  };
+  for (const t of g.play.history)
+    scan(t.plays, t.ledSuit || (t.plays[0] && !E.isJoker(t.plays[0].card) ? t.plays[0].card.suit : null));
+  scan(g.play.table, g.play.ledSuit);
+  const order = need.slice().sort((a, b) => voids[b.seat].size - voids[a.seat].size);
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const bag = pool.slice();
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    const assign = new Map();
+    let ok = true;
+    for (const { seat: p, n } of order) {
+      const take = [];
+      for (let i = 0; i < bag.length && take.length < n; i++) {
+        const c = bag[i];
+        if (!E.isJoker(c) && voids[p].has(c.suit)) continue;
+        take.push(c); bag[i] = null;
+      }
+      if (take.length < n) { ok = false; break; }
+      for (let i = bag.length - 1; i >= 0; i--) if (bag[i] === null) bag.splice(i, 1);
+      assign.set(p, take);
+    }
+    if (!ok || bag.length !== kittyN) continue;
+    const clone = cloneGameState(g);
+    for (const [p, cards] of assign) clone.hands[p] = cards;
+    if (kittyN) clone.discard = bag;
+    return clone;
+  }
+  return null;
+}
+
+/** 정책 로짓 상위 후보와 1-2위 차를 함께 돌려준다. */
+async function topCandidates(session, ort, game, seat, topM) {
+  let obs = M.encodeObs(game, seat, []);
+  const mask = M.legalMask(game, []);
+  const want = M.modelObsDim(session);
+  if (want !== obs.length) obs = obs.subarray(0, want);
+  const out = await session.run({
+    obs: new ort.Tensor('float32', obs, [1, want]),
+    mask: new ort.Tensor('bool', mask, [1, M.ACTION_DIM]),
+  });
+  const lg = out.logits.data;
+  const v = [];
+  for (let i = 0; i < M.ACTION_DIM; i++) if (mask[i]) v.push([lg[i], i]);
+  v.sort((a, b) => b[0] - a[0]);
+  return { cands: v.slice(0, topM).map(x => x[1]),
+           margin: v.length > 1 ? v[0][0] - v[1][0] : Infinity };
+}
+
+/**
+ * 후보마다 결정화 판을 끝까지 굴려 평균 상금이 가장 큰 수를 고른다.
+ * 못 고르면(결정화 실패·예산 초과) null을 돌려 정책 수를 그대로 쓰게 한다.
+ */
+async function searchWeaklead(session, ort, game, seat, rollAct, cfg, rng, banned) {
+  const t0 = Date.now();
+  let { cands } = await topCandidates(session, ort, game, seat, cfg.topM);
+  if (banned && banned.size) {
+    const keep = cands.filter(i => !banned.has(i));
+    if (keep.length) cands = keep;                  // 전부 금지면 어쩔 수 없이 둔다
+  }
+  if (cands.length < 2) return null;
+  const dets = [];
+  for (let k = 0; k < cfg.K; k++) {
+    if (Date.now() - t0 > cfg.budgetMs * 0.25) break;    // 나머지는 롤아웃 몫이다
+    const d = determinizeFrom(game, seat, rng);
+    if (d) dets.push(d);
+  }
+  if (dets.length < 4) return null;
+  let bestIdx = null, bestVal = -Infinity;
+  for (const ci of cands) {
+    let sum = 0, n = 0;
+    for (const d of dets) {
+      if (Date.now() - t0 > cfg.budgetMs) break;
+      const sim = cloneGameState(d);
+      const a0 = M.actionToEngine(ci, sim, []);
+      if (!a0) continue;
+      try { sim.act(a0); } catch (e) { continue; }
+      let guard = 0;
+      while (sim.phase !== 'done' && sim.phase !== 'redeal' && guard++ < 200)
+        sim.act(await rollAct(sim, sim.currentPlayer));
+      if (sim.phase !== 'done') continue;
+      sum += sim.result.prizes[seat]; n++;
+    }
+    if (n >= 4 && sum / n > bestVal) { bestVal = sum / n; bestIdx = ci; }
+  }
+  return bestIdx === null ? null : M.actionToEngine(bestIdx, game, []);
+}
+
 /** onnxruntime 세션 생성. ort와 모델 경로는 호출자가 넘긴다
  *  (v2.11부터 세 티어가 각자 다른 세대를 쓰므로 기본값을 두지 않는다). */
 async function loadMaster(ort, modelPath) {
@@ -3391,16 +3666,74 @@ async function createAgent(opts = {}) {
   if (tier === 'master') {
     if (!session || !ort) throw new Error('master 티어에는 {session, ort}가 필요하다');
     const pick = [];
+    // 국면 한정 탐색 설정. false·미지정이면 기존 경로 그대로다(비용 0).
+    const scfg = opts.classSearch ? { ...SEARCH_DEFAULTS, ...opts.classSearch } : null;
+    // 탐색 롤아웃은 배포와 같은 조건으로 둔다 — 정책만이 아니라 가드까지 포함해야
+    // 탐색이 보는 미래가 실제 판과 같다(실측도 이 조건에서 냈다).
+    const rollAct = async (g, s) => {
+      for (let guard = 0; guard < 8; guard++) {
+        const a = await M.chooseAction(session, ort, g, s, []);
+        const act = M.actionToEngine(a, g, []);
+        if (act) return applyGuards(session, ort, g, s, act, opts);
+      }
+      throw new Error('master rollout: 액션 확정 실패');
+    };
     return {
       tier, label: TIER_LABEL[tier],
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
+        // 마이티 무늬 리드 금지 목록 — 탐색 후보에서 빼고, 정책 수도 여기 걸리면
+        // 다음 후보로 바꾼다(리드 국면에서만 만들어지므로 비용은 무시할 만하다).
+        let banned = null;
+        if (opts.mightyLeadGuard !== false && game.phase === 'play' &&
+            game.play && game.play.table.length === 0 && attackerSeat(game, seat)) {
+          const legal = game._legalPlays(seat);
+          if (legal.length >= 2) {
+            const bad = legal.filter(mv => mightySuitLeadBanned(game, seat, mv));
+            if (bad.length && bad.length < legal.length)
+              banned = new Set(bad.map(mv => M.actionIndex(mv)));
+          }
+        }
+        const cls = scfg && (weakleadState(game, seat) ? 'weaklead'
+                    : oppwinState(game, seat) ? 'oppwin'
+                    : friendLeadState(game, seat) ? 'friendlead'
+                    : declarerState(game, seat) ? 'declarer' : null);
+        if (cls) {
+          // 클래스마다 문턱이 다르다 — 전부 같은 방식으로 잰 분위별 실측에서 왔다.
+          // friendlead는 네 분위 전부 이득이라 문턱이 없다(null).
+          const gateOf = { weaklead: scfg.gate, oppwin: scfg.gateOppwin,
+                           declarer: scfg.gateDeclarer, friendlead: null };
+          const gate = gateOf[cls];
+          let go = true;
+          if (gate != null) {
+            const { margin } = await topCandidates(session, ort, game, seat, scfg.topM);
+            go = margin < gate;
+          }
+          if (go) {
+            const found = await searchWeaklead(session, ort, game, seat, rollAct, scfg, rng, banned);
+            if (found) {
+              if (scfg.count) scfg.count.fired = (scfg.count.fired || 0) + 1;
+              return applyGuards(session, ort, game, seat, found, opts);
+            }
+          }
+        }
         for (let guard = 0; guard < 8; guard++) {
           const a = await M.chooseAction(session, ort, game, seat, pick);
           const act = M.actionToEngine(a, game, pick);
-          // null이면 교환 카드 누적 중 → 다시 고른다
-          if (act) return applyGuards(session, ort, game, seat, act, opts);
+          if (!act) continue;                       // 교환 카드 누적 중 → 다시 고른다
+          if (banned && banned.size) {
+            const idx = M.actionIndex({ card: act.card, jokerSuit: act.jokerSuit });
+            if (banned.has(idx)) {
+              const alt = await topCandidates(session, ort, game, seat, M.ACTION_DIM);
+              const pickIdx = alt.cands.find(i => !banned.has(i));
+              if (pickIdx !== undefined) {
+                const swapped = M.actionToEngine(pickIdx, game, pick);
+                if (swapped) return applyGuards(session, ort, game, seat, swapped, opts);
+              }
+            }
+          }
+          return applyGuards(session, ort, game, seat, act, opts);
         }
         throw new Error('master: 액션 확정 실패');
       },
@@ -3432,7 +3765,8 @@ const PERSONA_KEYS = ['gambler', 'balanced', 'careful'];
  */
 async function createTable(opts = {}) {
   const { tiers = 'advanced', rng = Math.random, session = null, ort = null,
-          personas = null, revealPersona = false, sessions = null } = opts;
+          personas = null, revealPersona = false, sessions = null,
+          classSearch = null } = opts;
   const seats = opts.seats || E.NUM_PLAYERS;
   const tierAt = s => (Array.isArray(tiers) ? tiers[s] : tiers);
   const assigned = [], agents = [];
@@ -3443,9 +3777,12 @@ async function createTable(opts = {}) {
       : (personas ? personas[s] : PERSONA_KEYS[Math.floor(rng() * PERSONA_KEYS.length)]);
     assigned.push(persona);
     // v2.8: 혼합 운영 — 좌석별 모델 세션(성향차)을 허용한다
+    // 국면 한정 탐색은 마스터 좌석에만 넘긴다 — 고급 좌석까지 강해지면 티어 서열이
+    // 흐려지고, 실측도 마스터 세대(v16e)에서만 냈다.
     agents.push(await createAgent({ tier, persona: persona || 'balanced',
                                     rng, session: (sessions && sessions[s]) || session,
-                                    ort, revealPersona }));
+                                    ort, revealPersona,
+                                    classSearch: tier === 'master' ? classSearch : null }));
   }
   return {
     seats, agents,
@@ -3456,6 +3793,7 @@ async function createTable(opts = {}) {
 }
 
 const api = { createAgent, createTable, loadMaster, applyGuards,
+              weakleadState, searchWeaklead,
               keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
               jokerCallGuard, trumpSaveGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };
@@ -3491,6 +3829,7 @@ const I18N_EN = {
   '프렌드(비공개)':'Friend (hidden)', '(비공개)':'(hidden)',
   // 기본 화면
   '마이티':'Mighty', '패스':'Pass', '취소':'Cancel', '없음':'None', '판':'Round',
+  '직접 플레이로 전환합니다':'Switched to manual play',
   '다음 판':'Next round', '최종 결과 보기':'Final results', '시트':'Sheet', '시트 닫기':'Close sheet',
   '누적':'Total', '플레이어':'Player',
   // 공약
@@ -3838,8 +4177,21 @@ const TF = {
 };
 const tf = (k,...a) => TF[k](...a);
 
-const APP_VERSION = 'v2.13.0';
-const APP_BUILD = '2026-08-17 빌드 — 비딩 칩 (누가 어떤 순서로 공약했나)';
+// 국면 한정 탐색 설정 — 끄려면 null로 둔다(즉시 이전 동작). 근거는 10~12절.
+// gate 1.3: 로짓 1·2위 차가 이보다 작으면 켠다. 0.6에서 넓혔다 — 0.58~1.29 구간도
+//   정책 실수율 4.1%에 탐색 2.8~3.6%로 이득이 있었다. 1.3 이상은 정책이 0.5%로
+//   이미 정확하고 탐색이 오히려 나빠서(1.9%) 그대로 둔다.
+// K 32: 결정화 16벌(대형실수 3.5%)보다 32벌(3.2%)이 낫다. 예산 안에서 잘리므로
+//   느린 기기는 자동으로 16벌 수준으로 내려간다.
+// budgetMs 2000: 32벌은 1,200ms에서 잘렸다(데스크톱 중앙 1,201ms = 예산 상한).
+//   사용자가 사고 시간은 문제없다고 확인해 예산을 올렸다. 느린 기기는 여전히
+//   여기서 잘리고 결정화 수만 줄어든다.
+// 클래스별 문턱(로짓 1·2위 차가 이보다 작으면 켠다). 근거는 10~13절.
+//   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
+const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
+                       topM: 5, budgetMs: 2000 };
+const APP_VERSION = 'v2.16.9';
+const APP_BUILD = '2026-08-24 빌드 — 탐색이 실제 판을 움직이던 문제';
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -3892,6 +4244,11 @@ let matchOver = false;
 // 진행과 무관하게 고정한다 — 그 화면이 판의 결말이라 줄일 대상이 아니다.
 // 수거 애니메이션 다음은 곧장 결과 화면이다(중간에 빈 판을 보여주지 않는다).
 const FINAL_TRICK_HOLD = 1400;
+// 비딩 한 수를 보여 주는 시간. 봇이 60ms 간격으로 몰아치면 칩·퍽이 눈에 안 들어온다
+// (제보 2026-08-18). 이 예산 안에서 '생각 중'을 잠깐 띄우고, 공약을 그린 뒤 나머지를
+// 붙잡는다 — 그래서 비딩 과정과 칩 표시가 같은 속도로 흐른다.
+const BID_TURN = () => (claimMode ? 0 :
+  ({fast:700, normal:1000, slow:1400})[settings.ui.speed] || 1000);
 const SPD = () => ({fast:{bot:250,pre:250,show:550,collect:250},
                     normal:{bot:550,pre:450,show:900,collect:340},
                     slow:{bot:900,pre:650,show:1400,collect:420}})[settings.ui.speed];
@@ -4296,6 +4653,11 @@ async function buildAgents(reassign){
       botTable = await MightyAI.createTable({
         tiers, rng: Math.random, session: masterSess, ort: ortLib,
         sessions: useNN ? sessions : null,
+        // 마스터 티어에서만 국면 한정 탐색을 켠다(v2.14.0). 프렌드가 아군이 이기는
+        // 트릭에 개입할지 정하는 자리에서만 발화하고, 정책이 확신하면 건너뛴다 —
+        // 딜당 0.69회·데스크톱 0.5초·저사양 1.2초(예산에서 절단). 실측은
+        // docs/SESSION-HANDOFF.md 10절.
+        classSearch: tier==='master' ? CLASS_SEARCH : null,
       });
     }catch(e){
       // 어떤 이유로든 좌석을 못 만들면 순수 규칙기반으로 되돌린다.
@@ -4472,11 +4834,11 @@ function friendDeclText(){
  * 누가 어떤 순서로 공약했는지 좌석 카드 자리에 남긴다. 상태를 따로 들지 않고
  * roundRec.actions에서 파생시킨다 — 되돌리기가 actions를 잘라내므로 칩도 자동으로
  * 맞는다(별도 스냅샷을 두면 어긋날 자리가 생긴다).
- * 공개는 0.5초 간격 순차. 비딩이 끝나면 잠깐 두고 지운다. */
-const BID_CHIP_STEP = 500;    // 칩 하나씩 나타나는 간격
-const BID_CHIP_HOLD = 900;    // 비딩 종료 후 남겨 두는 시간
-let bidRevealN = 0;           // 지금까지 공개한 비딩 착수 수
-let bidChipTimer = null;
+ * 칩은 **기록된 즉시** 그린다. v2.13.0에서는 0.5초 간격 공개 큐를 따로 돌렸는데,
+ * 봇의 실제 비딩 속도와 큐 속도가 달라 칩이 뒤늦게 떠 상태와 어긋났다(제보 2026-08-18).
+ * 대신 비딩 한 수마다 BID_TURN만큼 화면을 잡아 두어 눈으로 따라갈 수 있게 한다.
+ * 비딩이 끝나면 잠깐 두고 지운다. */
+const BID_CHIP_HOLD = 1200;   // 비딩 종료 후 남겨 두는 시간
 let bidChipClear = null;
 // 비딩이 끝난 뒤 한 번만 처리했다는 표식. 이게 없으면 플레이 중 render()마다
 // 공개 큐가 다시 돌아 칩이 카드 낼 때마다 되살아난다(제보 2026-08-17).
@@ -4489,9 +4851,7 @@ function bidActions(){
 /** 타이머·DOM·카운터만 정리한다. bidChipsDone은 건드리지 않는다 —
  *  여기서 되돌리면 플레이 중에 다시 공개가 시작된다. */
 function clearBidChips(){
-  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
   if (bidChipClear){ clearTimeout(bidChipClear); bidChipClear = null; }
-  bidRevealN = 0;
   for (let p = 0; p < 5; p++){
     const c = $('#bidchip-' + p);
     if (c){ c.className = 'bidchip'; c.innerHTML = ''; }
@@ -4499,12 +4859,11 @@ function clearBidChips(){
 }
 /** 새 라운드·되돌리기용 — 표식까지 초기화해 다음 비딩에서 다시 보이게 한다. */
 function resetBidChips(){ clearBidChips(); bidChipsDone = false; }
-/** 공개된 착수까지만 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
+/** 기록된 비딩을 그대로 칩에 반영한다. 같은 좌석이 다시 부르면(수정) 마지막 것만 남는다. */
 function paintBidChips(){
   const acts = bidActions();
-  const shown = Math.min(bidRevealN, acts.length);
   const latest = {};                       // 좌석 → {ord, a}
-  for (let i = 0; i < shown; i++) latest[acts[i].p] = { ord: i + 1, a: acts[i].a };
+  for (let i = 0; i < acts.length; i++) latest[acts[i].p] = { ord: i + 1, a: acts[i].a };
   const wonBy = (game && game.phase !== 'bidding' && game.declarer != null) ? game.declarer : null;
   for (let p = 0; p < 5; p++){
     const c = $('#bidchip-' + p);
@@ -4524,37 +4883,19 @@ function paintBidChips(){
     c.innerHTML = `<span class="cl">${label}</span><span class="ord">${rec.ord}</span>`;
   }
 }
-/** 0.5초 간격으로 하나씩 공개 (비딩 중에만 돈다). */
-function pumpBidChips(){
-  if (bidChipTimer) return;
-  const acts = bidActions();
-  if (bidRevealN >= acts.length) return;
-  const myGen = stateGen;
-  bidChipTimer = setTimeout(() => {
-    bidChipTimer = null;
-    if (myGen !== stateGen) return;
-    bidRevealN++;
-    paintBidChips();
-    pumpBidChips();
-  }, BID_CHIP_STEP);
-}
 function renderBidChips(){
   if (replay || !game || !roundRec){ clearBidChips(); return; }
   const acts = bidActions();
   if (!acts.length){ resetBidChips(); return; }
   if (game.phase === 'bidding'){
     bidChipsDone = false;
-    if (bidRevealN > acts.length) bidRevealN = acts.length;   // 되돌리기로 줄어든 경우
     paintBidChips();
-    pumpBidChips();
     return;
   }
   // 비딩이 끝났다. 남은 것을 한 번에 보여주고 잠깐 뒤 지운 다음 **다시 그리지 않는다**.
   // 여기서 빠져나가지 않으면 플레이 중 render()마다 칩이 되살아난다.
   if (bidChipsDone) return;
   bidChipsDone = true;
-  if (bidChipTimer){ clearTimeout(bidChipTimer); bidChipTimer = null; }
-  bidRevealN = acts.length;
   paintBidChips();
   const myGen = stateGen;
   bidChipClear = setTimeout(() => {
@@ -4624,6 +4965,14 @@ function renderTrick(){
 
 /* ---------------- 손패 렌더 ---------------- */
 let selDiscard=[];  // 바닥패 교환 선택
+// 카드 착수의 탭 스루 차단 (제보 2026-08-23: 로딩 후 첫 트릭에 패가 저절로 나감).
+// click만 보면, 시트(바닥패·프렌드)나 모달이 닫히면서 그 자리에 들어온 카드가
+// 직전 탭의 '유령 클릭'을 그대로 받는다 — 주공은 프렌드 지정 직후가 곧 첫 리드라
+// 그 한 탭이 첫 트릭 착수가 된다. 수정 전 코드에서 pointerdown 없는 순수 click
+// 하나로 카드가 나가는 것을 tests/tapthrough.test.js로 실증했다.
+// 그래서 **그 카드 위에서 시작한 포인터**만 착수로 친다. 모달 버튼의 시간 유예
+// (MODAL_TAP_GUARD)와 달리 진짜 탭에는 지연이 전혀 없다.
+let tapCard=null;
 function renderHand(){
   const wrap=$('#hand'); wrap.innerHTML='';
   if (!game || !game.hands[HUMAN]) return;
@@ -4644,7 +4993,15 @@ function renderHand(){
       if (selDiscard.some(s=>E.sameCard(s,c))) h.classList.add('sel');
       h.onclick=()=>{ toggleDiscard(c); };
     } else if (legalSet){
-      if (legalSet.has(id)){ h.classList.add('legal'); h.onclick=()=>humanPlay(c); }
+      if (legalSet.has(id)){
+        h.classList.add('legal');
+        h.addEventListener('pointerdown', ()=>{ tapCard=id; });
+        h.addEventListener('pointercancel', ()=>{ tapCard=null; });
+        h.onclick=()=>{
+          if (tapCard!==id) return;      // 이 카드에서 시작하지 않은 탭 = 유령 클릭
+          tapCard=null; humanPlay(c);
+        };
+      }
       else h.classList.add('dim');
     }
     wrap.append(h);
@@ -4877,6 +5234,12 @@ function jokerCallUseful(){
 
 /* ---------------- 모달 유틸 ---------------- */
 let modalResolve = null;         // 열려 있는 모달을 외부에서 취소하기 위한 핸들
+// 모달이 뜬 직후의 탭은 무시한다. 카드를 내려고 누르는 순간 세팅 모달이 튀어나오면
+// 그 탭이 그대로 주 버튼('자동 진행')에 꽂혀, 그 판 내내 AI가 사람 카드를 낸다
+// ("내기도 전에 AI 추천 패가 나간다" 제보 2026-08-23). 모바일에서 특히 잘 난다.
+const MODAL_TAP_GUARD = 450;     // ms
+let modalShownAt = 0;
+const modalTapTooSoon = () => Date.now() - modalShownAt < MODAL_TAP_GUARD;
 function cancelOpenModal(){
   if (modalResolve){ const r=modalResolve; modalResolve=null; $('#modal').classList.remove('show'); r(null); }
 }
@@ -4889,12 +5252,13 @@ function pickSuit(title){
     for(const g of ['S','D','H','C']){
       const b=el('button','chip '+suCls(g), SUIT_GLYPH[g]+' '+t({S:'스페이드',D:'다이아',H:'하트',C:'클로버'}[g]));
       b.style.fontSize='1rem';
-      b.onclick=()=>{ close(); res(g); };
+      b.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(g); };
       chips.append(b);
     }
     const cancel=el('button','btn ghost',t('취소')); cancel.style.marginTop='14px';
-    cancel.onclick=()=>{ close(); res(null); };
+    cancel.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(null); };
     box.append(chips,cancel);
+    modalShownAt = Date.now();
     $('#modal').classList.add('show');
     function close(){ modalResolve=null; $('#modal').classList.remove('show'); }
   });
@@ -4905,9 +5269,10 @@ function confirmModal(title, html, yes, no){
     const box=$('#modal-box');
     box.innerHTML=`<h2>${title}</h2><div class="sub">${html}</div>`;
     const row=el('div','btnrow');
-    const n=el('button','btn ghost',no); n.onclick=()=>{ close(); res(false); };
-    const y=el('button','btn primary',yes); y.onclick=()=>{ close(); res(true); };
+    const n=el('button','btn ghost',no); n.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(false); };
+    const y=el('button','btn primary',yes); y.onclick=()=>{ if(modalTapTooSoon()) return; close(); res(true); };
     row.append(n,y); box.append(row);
+    modalShownAt = Date.now();
     $('#modal').classList.add('show');
     function close(){ modalResolve=null; $('#modal').classList.remove('show'); }
   });
@@ -5004,6 +5369,9 @@ async function playWithAnimation(p, action){
     // 룰 구현인 엔진을 건드리지 않고, 마지막 트릭은 빈 테이블로 그린 뒤 곧장
     // 결과 화면으로 넘긴다.
     if (isFinalTrick){
+      // 수거 연출(await) 뒤다 — 그 사이 되돌리기가 들어왔으면 여기서 pump를 부르는
+      // 순간 봇 루프가 겹친다(제보 2026-08-22와 같은 계열).
+      if (myGen!==stateGen){ busy=false; return; }
       ghost={plays:[], winner:null};      // 테이블을 비운 상태로 고정
       render();
       busy=false;
@@ -5015,6 +5383,9 @@ async function playWithAnimation(p, action){
       toast(game.friend===null?t('초구를 주공이 승리 — 사실상 노프렌드'):tf('friendToast', NAMES[game.friend]));
     }
   }
+  // 수거 연출까지 끝난 뒤에도 세대를 다시 본다 — 그 사이 되돌리기가 들어오면
+  // 여기서 pump를 부르는 순간 봇 루프가 겹친다.
+  if (myGen!==stateGen){ busy=false; return; }
   busy=false;
   render(); pump();
 }
@@ -5193,10 +5564,18 @@ function checkClaim(){
   let remainPts=0;
   for(let q=0;q<5;q++) for(const c of game.hands[q]) if(E.isPointCard(c)) remainPts++;
   busy=true; renderSheet();
+  const myGen=stateGen;
+  // 버튼 배치는 원래 설계를 지킨다 — '자동 진행'이 오른쪽 주 버튼이고, 그게 자연스러운
+  // 선택이 되도록 의도한 것이다(2026-08-23 사용자 확인). 오작동은 배치가 아니라
+  // 탭 스루가 원인이었고 그건 모달 탭 유예로 막는다.
   confirmModal(t('세팅 — 전승 확정'),
     tf('claimBody', NAMES[p], sideOf(p), left, remainPts),
     t('자동 진행'), t('직접 플레이')).then(auto=>{
+      // 되돌리기·새 라운드가 모달을 취소하면 이 콜백이 **나중에** 돈다. 가드가 없으면
+      // busy를 내리고 pump를 한 번 더 불러 봇 루프가 둘이 된다(제보 2026-08-22).
+      if (myGen!==stateGen) return;
       claimMode=!!auto;
+
       busy=false;
       if (claimMode) toast(tf('claimToast', NAMES[p]), 1400);
       render(); pump();
@@ -5222,13 +5601,13 @@ function thinkTime(){
   const base={fast:[160,340], normal:[520,1150], slow:[900,1800]}[settings.ui.speed]||[520,1150];
   return base[0] + Math.random()*(base[1]-base[0]);
 }
-async function botThink(p){
+async function botThink(p, ms){
   if (claimMode) return;
   const seat=$('#seat-'+p);
   const bub=$(`#seat-${p} .bubble`);
   if (seat) seat.classList.add('thinking');
   if (bub){ bub.innerHTML='<span class="think-dots"><i></i><i></i><i></i></span>'; bub.classList.add('show'); }
-  await sleep(thinkTime());
+  await sleep(ms === undefined ? thinkTime() : ms);
   if (seat) seat.classList.remove('thinking');
   if (bub) bub.classList.remove('show');
 }
@@ -5251,14 +5630,34 @@ function recStart(seed, cfg, dealer, g){
   };
 }
 /** game.act를 감싸 모든 행동을 기록한다 */
+/**
+ * 착수를 기록에 남기도록 game.act를 감싼다.
+ *
+ * **복제본에 딸려가면 안 된다.** 예전 구현은 `const orig = g.act.bind(g)`로 원본에
+ * 묶은 화살표 함수를 열거 가능한 자기 속성으로 얹었다. 탐색(PIMC)과 AI 복기는
+ * `Object.keys(g)`를 훑어 시뮬레이션 판을 만드는데, 함수는 그대로 복사되므로
+ * **시뮬레이션의 sim.act()가 원본 판을 움직이고 기록에 가짜 액션을 쌓았다**.
+ * 2026-08-24 실측: 시뮬 착수 한 번에 기록 7→8, 원본 turn 0→1, 테이블 0→1.
+ * 마스터 티어 첫 판부터 기록이 깨져 복기가 illegal play로 죽었다 —
+ * "패가 저절로 나간다"와 "복기가 안 된다"가 이 한 뿌리에서 나왔다.
+ *
+ * 두 겹으로 막는다.
+ *   1) enumerable:false — Object.keys에 안 걸려 복제본이 아예 가져가지 않는다
+ *   2) prototype의 원본을 `this`로 부르고, 기록은 이 인스턴스일 때만 남긴다
+ *      — 혹시 복사되더라도 복제본 자신에게 작용하고 기록은 건드리지 않는다
+ */
 function instrument(g){
   if (g.__inst) return;
-  g.__inst = true;
-  const orig = g.act.bind(g);
-  g.act = (action) => {
-    if (roundRec) roundRec.actions.push({ p: g.currentPlayer, ph: g.phase, a: JSON.parse(JSON.stringify(action)) });
-    return orig(action);
-  };
+  const base = Object.getPrototypeOf(g).act;      // 엔진 원본 act
+  Object.defineProperty(g, '__inst', { value: true, enumerable: false, configurable: true });
+  Object.defineProperty(g, 'act', {
+    enumerable: false, configurable: true, writable: true,
+    value: function(action){
+      if (roundRec && this === g)
+        roundRec.actions.push({ p: this.currentPlayer, ph: this.phase, a: JSON.parse(JSON.stringify(action)) });
+      return base.call(this, action);
+    },
+  });
 }
 /** 기록에서 게임을 재구성 (upto개 행동까지 적용) */
 function rebuildGame(rec, upto){
@@ -6081,6 +6480,12 @@ function showExportModal(name, md, count, downloaded){
 }
 /** 진행이 멈춘 채 busy만 남는 상황을 감지해 복구한다 (내보내기·복기 등 외부 조작 후 대비) */
 let watchdogTimer = null;
+// 감시 타이머 한도. 탐색을 켜면 봇 한 턴이 길어진다 — 생각 550 + 탐색 최대 1,894
+// + 비행 300 + 트릭 연출 1,690이면 4.4초다(브라우저 실측). 3,500ms 고정이던 시절엔
+// 정상 진행 중에 워치독이 발동해 stateGen을 올리고 봇 루프를 다시 깔았다.
+// 그러면 진행 중이던 턴이 무효화되고 새 루프가 겹쳐 카드가 저절로 나가거나
+// 되돌리기가 안 먹는 것처럼 보인다(제보 2026-08-22).
+const WATCHDOG_MS = () => 3500 + (CLASS_SEARCH ? 2 * (CLASS_SEARCH.budgetMs || 0) : 0);
 function armWatchdog(){
   if (watchdogTimer) clearTimeout(watchdogTimer);
   if (!game || replay) return;
@@ -6100,7 +6505,7 @@ function armWatchdog(){
         render(); pump();
       }
     }
-  }, 3500);
+  }, WATCHDOG_MS());
 }
 function refreshTools(){
   armWatchdog();
@@ -6132,8 +6537,9 @@ function pump(){
     busy=true; renderSheet();
     const myGen=stateGen;
     setTimeout(async()=>{
-      busy=false;
+      // 가드가 먼저다. 무효화된 콜백이 busy를 내리면 살아 있는 루프와 겹친다.
       if (myGen!==stateGen) return;
+      busy=false;
       if (!claimMode || !game || game.phase!=='play' || game.play.turn!==HUMAN){ pump(); return; }
       await playWithAnimation(HUMAN, autoPickForHuman());
     }, CLAIM_SPD.bot);
@@ -6152,15 +6558,25 @@ function pump(){
   if (cur!==HUMAN && !busy){
     busy=true; renderSheet();
     const myGen = stateGen;
-    setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 60 : claimSpeed().bot);
+    setTimeout(()=>{ if (myGen===stateGen) botStep(); }, game.phase==='bidding' ? 0 : claimSpeed().bot);
   }
 }
+// 봇 루프 계측. 되돌리기·감시 타이머가 새 루프를 깔면 무효화된 옛 루프가 아직
+// await에 걸려 있을 수 있다 — 그 겹침 자체는 정상이고 옛 루프는 다음 가드에서 끝난다.
+// **진짜 불변식은 "무효화된 루프가 착수까지 가지 않는다"** 이므로 그걸 따로 센다.
+// staleActs가 0이 아니면 가드가 뚫린 것이고, 그때 카드가 저절로 나간다.
+let botChains = 0, botChainsMax = 0, staleActs = 0;
 async function botStep(){
+  botChains++; if (botChains > botChainsMax) botChainsMax = botChains;
+  try { return await botStepInner(); } finally { botChains--; }
+}
+async function botStepInner(){
   const myGen=stateGen;
   const p=game.currentPlayer;
   const phase=game.phase;
   if (!agentsReady || !agents[p]) await buildAgents();
-  if (phase==='bidding') await botThink(p);
+  const turn = BID_TURN();
+  if (phase==='bidding') await botThink(p, turn * 0.3);
   if (myGen!==stateGen){ busy=false; return; }
   let action;
   try{ action = await agents[p].act(game, p); }
@@ -6177,7 +6593,14 @@ async function botStep(){
     if (action.type==='pass'){ bubble(p,t('패스')); logLine(tf('logPass', NAMES[p]));
       const st=$('#seat-'+p); if(st){ st.classList.remove('announce'); void st.offsetWidth; st.classList.add('announce'); } }
     else { announceBid(p, action.count, action.giruda); logLine(tf('logBid', NAMES[p], action.count, action.giruda)); }
-    busy=false; render();
+    render();                                   // 칩·퍽을 먼저 그리고
+    await sleep(turn * 0.7);                    // 눈으로 따라갈 시간을 준다
+    if (myGen!==stateGen){ busy=false; return; }
+    busy=false;
+    // busy를 내린 **뒤** 한 번 더 그린다. renderSheet는 busy면 시트를 숨기므로,
+    // 여기서 다시 그리지 않으면 마지막 AI 공약 뒤 내 차례가 와도 비딩 시트가
+    // 숨은 채로 남는다(v2.15.1 회귀, 모바일에서 제보).
+    render();
     if (game.phase==='floor' ) logLine(tf('logDeclarer', NAMES[game.declarer], contractText(game.contract)));
     pump(); return;
   }
@@ -6200,6 +6623,7 @@ async function botStep(){
     busy=false; render(); pump(); return;
   }
   if (phase==='play'){
+    if (myGen!==stateGen){ staleActs++; busy=false; return; }   // 여기까지 오면 가드가 뚫린 것
     busy=false;
     await playWithAnimation(p, {type:'play', ...action});
     return;
@@ -6407,7 +6831,9 @@ function renderLanding(){
 }
 
 /* ---------------- 초기화 ---------------- */
-globalThis.MUI = { get game(){return game}, get busy(){return busy}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+globalThis.MUI = { get game(){return game}, get busy(){return busy},
+  get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -6438,6 +6864,9 @@ addEventListener('keydown', ev=>{
   else if (k==='escape'){
     if ($('#expmodal').classList.contains('show')){ $('#expmodal').classList.remove('show'); render(); pump(); }
     else if (replay) closeReplay();
+    // 자동 진행이 켜져 있으면 빠져나올 길을 준다 — 실수로 켜졌을 때 되돌리기 말고는
+    // 방법이 없었다(제보 2026-08-23).
+    else if (claimMode){ claimMode=false; toast(t('직접 플레이로 전환합니다')); render(); pump(); }
   }
   else if (replay && k===' '){ ev.preventDefault(); toggleReplayPlay(); }
 });

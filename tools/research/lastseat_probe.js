@@ -37,6 +37,9 @@ const K = parseInt(process.env.K || '64', 10);
 // 확정승 아니고 뒤에 2명+ | oppwin = 최강이 야당. 8/16 제보(컷 미실행)를 비율이
 // 아니라 후회로 재측정하기 위해 넣었다 — 비율 일치는 국면 선택 오류를 못 잡는다.
 const CLASS = process.env.CLASS || 'lastseat';
+// BLUNDER: 대형 실수 판정선(상금). 라벨 이득 중앙값이 88·평균 141이라 200이면
+// '한눈에 보이는 실수'에 해당한다.
+const BLUNDER = parseFloat(process.env.BLUNDER || '200');
 const A_PLAY0 = 149, A_JS0 = 201, A_JOKER = 205;
 const SUITS4 = ['S', 'D', 'H', 'C'];
 
@@ -68,7 +71,9 @@ function knownTo(g, seat) {
 function voidsOf(g) {
   const v = []; for (let p = 0; p < E.NUM_PLAYERS; p++) v.push(new Set());
   const scan = (plays, led) => { if (!led) return;
-    for (const e of plays) { if (E.isJoker(e.card)) continue;
+    for (const e of plays) {
+      // 마이티·조커는 팔로우 면제 — 오프수트로 나와도 '무늬 없음'의 근거가 아니다
+      if (E.isJoker(e.card) || (g.mightyCard && E.sameCard(e.card, g.mightyCard))) continue;
       if (e.card.suit !== led) v[e.player].add(led); } };
   for (const t of g.play.history)
     scan(t.plays, t.ledSuit || (t.plays[0] && !E.isJoker(t.plays[0].card) ? t.plays[0].card.suit : null));
@@ -166,8 +171,8 @@ async function topAction(sess, g, seat) {
   for (let p = 0; p < 5; p++) ag.push(await AI.createAgent({ tier: 'master', session: sess[GEN], ort }));
   let sc = 24680; const rnd = () => { sc = (sc * 1103515245 + 12345) & 0x7fffffff; return sc / 0x7fffffff; };
 
-  const hit = {}, regret = {};
-  for (const id of MODELS) { hit[id] = 0; regret[id] = []; }
+  const hit = {}, regret = {}, paired = {}, honest = {}, blunder = {};
+  for (const id of MODELS) { hit[id] = 0; regret[id] = []; paired[id] = []; honest[id] = []; blunder[id] = []; }
   let states = 0, deals = 0, pimcDone = 0, pimcWin = 0, pimcGain = [];
 
   for (let i = 0; i < N; i++) {
@@ -195,17 +200,24 @@ async function topAction(sess, g, seat) {
             const cands = cls.legal.slice(0, 6);
             const scores = [];
             for (const mv of cands) {
-              let sum = 0, n = 0;
-              for (const d of dets) {
-                const sim = cloneGame(d);
+              let sum = 0, n = 0, sumA = 0, nA = 0, sumB = 0, nB = 0;
+              for (let di = 0; di < dets.length; di++) {
+                const sim = cloneGame(dets[di]);
                 try { sim.act({ type: 'play', card: mv.card, jokerSuit: mv.jokerSuit }); }
                 catch (e) { continue; }
                 let gd = 0;
                 while (sim.phase !== 'done' && sim.phase !== 'redeal' && gd++ < 200)
                   sim.act(await ag[sim.currentPlayer].act(sim, sim.currentPlayer));
-                if (sim.phase === 'done') { sum += sim.result.prizes[p]; n++; }
+                if (sim.phase === 'done') {
+                  const pr = sim.result.prizes[p];
+                  sum += pr; n++;
+                  if (di % 2) { sumB += pr; nB++; } else { sumA += pr; nA++; }
+                }
               }
-              if (n) scores.push({ mv, v: sum / n });
+              // A/B 분할: 최선수를 A에서 고르고 값은 B에서 읽는다. 같은 표본에서
+              // 고르고 재면 표본 최대가 위로 편향돼(승자의 저주) 후회가 부풀려진다.
+              if (n) scores.push({ mv, v: sum / n,
+                                   a: nA ? sumA / nA : null, b: nB ? sumB / nB : null });
             }
             if (scores.length > 1) {
               scores.sort((a, b) => b.v - a.v);
@@ -213,9 +225,29 @@ async function topAction(sess, g, seat) {
               if (winIdx.has(idxOf(scores[0].mv))) pimcWin++;
               // 후회 = 교사 최선수 값 − 정책이 고른 수의 값. 실제로 흘린 상금이다.
               const byIdx = new Map(scores.map(x => [idxOf(x.mv), x.v]));
+              // 같은 국면·같은 교사값이므로 모델 간 차이는 페어드로 재야 한다.
+              // 비페어드 평균끼리 빼면 국면 분산(σ≈115)이 그대로 남아 판당 몇십짜리
+              // 개선이 신뢰구간에 묻힌다.
+              const base = byIdx.get(polTop[MODELS[MODELS.length - 1]]);
               for (const id of MODELS) {
                 const v = byIdx.get(polTop[id]);
                 if (v !== undefined) regret[id].push(scores[0].v - v);
+                if (v !== undefined && base !== undefined) paired[id].push(v - base);
+              }
+              const ok = scores.filter(s => s.a !== null && s.b !== null);
+              if (ok.length > 1) {
+                const bestA = ok.reduce((x, y) => (y.a > x.a ? y : x));
+                const byB = new Map(ok.map(s => [idxOf(s.mv), s.b]));
+                for (const id of MODELS) {
+                  const vb = byB.get(polTop[id]);
+                  if (vb !== undefined) {
+                    honest[id].push(bestA.b - vb);
+                    // 대형 실수 = 교사 최선수보다 BLUNDER 이상 손해. 사람이 체감하는
+                    // 것은 평균 후회가 아니라 "저건 아니지" 소리 나오는 이 장면이고,
+                    // 비율이라 평균보다 신뢰구간이 훨씬 좁다(같은 국면 페어드).
+                    blunder[id].push(bestA.b - vb >= BLUNDER ? 1 : 0);
+                  }
+                }
               }
               const bestWin = scores.find(s => winIdx.has(idxOf(s.mv)));
               const bestLose = scores.find(s => !winIdx.has(idxOf(s.mv)));
@@ -231,15 +263,24 @@ async function topAction(sess, g, seat) {
   }
 
   console.log(`클래스 ${CLASS} · 생성 모델 ${GEN} · 완료 딜 ${deals}/${N} · 클래스 국면 ${states}개 (딜당 ${(states / Math.max(1, deals)).toFixed(2)})`);
-  console.log('\n모델      확정승 채택률   교사 대비 후회(상금)');
+  const stat = a => {
+    const m = a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+    const v = a.length > 1 ? a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1) : 0;
+    return { m, ci: a.length ? 1.96 * Math.sqrt(v / a.length) : 0 };
+  };
+  const BASE = MODELS[MODELS.length - 1];
+  console.log(`\n모델      확정승 채택률   후회(같은표본)   후회(A선택·B평가)   대형실수율   ${BASE} 대비 페어드`);
   for (const id of MODELS) {
-    const r = regret[id];
-    const m = r.length ? r.reduce((a, b) => a + b, 0) / r.length : 0;
-    const v = r.length > 1 ? r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1) : 0;
-    const ci = r.length ? 1.96 * Math.sqrt(v / r.length) : 0;
+    const r = stat(regret[id]), h = stat(honest[id]), d = stat(paired[id]);
     console.log(`  ${id.padEnd(7)} ${(100 * hit[id] / Math.max(1, states)).toFixed(1).padStart(6)}%` +
-      `      −${m.toFixed(0).padStart(4)} ± ${ci.toFixed(0)} (n=${r.length})`);
+      `      −${r.m.toFixed(0).padStart(4)} ± ${r.ci.toFixed(0)}` +
+      `      ${h.m >= 0 ? '−' : '+'}${Math.abs(h.m).toFixed(0).padStart(4)} ± ${h.ci.toFixed(0)}` +
+      `   ${(100 * blunder[id].reduce((x, y) => x + y, 0) / Math.max(1, blunder[id].length)).toFixed(1).padStart(5)}%` +
+      `   ${id === BASE ? '기준' : `${d.m >= 0 ? '+' : ''}${d.m.toFixed(1)} ± ${d.ci.toFixed(1)}` +
+        `${Math.abs(d.m) > d.ci ? (d.m > 0 ? ' 유의 개선' : ' 유의 악화') : ''}`}`);
   }
+  console.log('  ※ 같은 표본에서 고르고 재면 표본 최대가 위로 편향된다(승자의 저주).' +
+    ' A선택·B평가가 실제로 흘린 값이다.');
   if (pimcDone) {
     const m = pimcGain.reduce((a, b) => a + b, 0) / Math.max(1, pimcGain.length);
     const v = pimcGain.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, pimcGain.length - 1);

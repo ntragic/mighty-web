@@ -547,6 +547,273 @@ async function applyGuards(session, ort, game, seat, action, opts = {}) {
   return x;
 }
 
+/**
+ * 국면 한정 탐색 — weaklead 국면에서만 게임 중 PIMC를 돌린다 (기본 꺼짐).
+ *
+ * 왜 이 클래스만인가: 프렌드가 "아군이 이기는 중이고 뒤에 두 명 이상 남았을 때
+ * 개입할 것인가"를 정하는 자리다. 딜당 1.2회밖에 안 나오는데 틀리면 눈에 띈다.
+ * 증류로는 못 고쳤다(대형 실수율 6.9% → 6.5%). 탐색은 900국면 실측에서
+ * 5.3% → 2.4%로 줄이고 페어드 +20.5 ± 10.5로 유의했다.
+ *
+ * 왜 이렇게만 굴리는가 (전부 실측으로 좁혀진 설계다):
+ *   - 트릭 1~2에서 자르고 가치 헤드로 평가하면 **정책보다 나쁘다**(6.8~10.5%).
+ *     끝까지 굴려야 한다.
+ *   - 롤아웃을 규칙 기반으로 바꾸면 싸지만 역시 나쁘다(7.6~9.9%).
+ *   - 정책이 확신하는 국면(로짓 1-2위 차가 gate 이상)은 이미 정확하다(0.5~0.9%).
+ *     거기서 탐색은 이득이 없고 비용만 든다 — 그래서 헷갈릴 때만 켠다.
+ *
+ * 설정: createAgent({ classSearch: { K: 16, gate: 0.6, topM: 5, budgetMs: 1200 } })
+ * budgetMs를 넘기면 이미 굴린 결정화까지만 쓰고 멈춘다(저사양 기기 보호).
+ */
+// budgetMs 1,200은 브라우저 실측에서 나왔다(tools/bench/run-bench.mjs).
+// 데스크톱 크롬 wasm 1스레드에서 16벌이 한 수 521ms라 예산에 안 걸리고,
+// CPU 1/4로 감속하면 1,683ms까지 가던 것이 1,226ms에서 잘린다.
+// 예산에 걸리면 결정화 수가 줄 뿐이고, 4벌도 못 채우면 정책 수로 돌아간다.
+// 클래스별 문턱 — 전부 같은 방식(로짓 1·2위 차 분위별 대형 실수율)으로 쟀다.
+//   weaklead 1.3 · oppwin 1.8 · declarer 0.46(딜당 8회라 절반만) · friendlead 없음
+const SEARCH_DEFAULTS = { K: 16, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
+                          topM: 5, budgetMs: 1200 };
+
+/** 여당 좌석인가 — 주공이거나 프렌드 카드를 쥐었거나 공개된 프렌드. */
+function attackerSeat(game, seat) {
+  if (seat === game.declarer) return true;
+  const fd = game.friendDecl;
+  if (fd && fd.mode === 'card' && fd.card &&
+      game.hands[seat].some(c => E.sameCard(c, fd.card))) return true;
+  return !!game.friendRevealed && game.friend === seat;
+}
+
+/** 마이티가 아직 안 나왔고 내 손에도 없다 = 아군이 쥐고 있을 수 있다. */
+function mightyOutstanding(game, seat) {
+  if (!game.mightyCard || !game.play) return false;
+  const id = E.cardId(game.mightyCard);
+  for (const t of game.play.history) for (const e of t.plays) if (E.cardId(e.card) === id) return false;
+  for (const e of game.play.table) if (E.cardId(e.card) === id) return false;
+  return !game.hands[seat].some(c => E.cardId(c) === id);
+}
+
+/**
+ * 마이티 무늬 리드 억제 (사람 정석, 2026-08-18 사용자 지시).
+ *
+ * 여당(주공·프렌드)은 마이티 무늬를 돌리지 않는다 — 아군이 쥔 마이티를 값싼
+ * 트릭에 끌어내 낭비시키기 때문이다. 마이티가 이미 나왔거나 내가 들고 있으면
+ * 그 이유가 사라지므로 적용하지 않는다.
+ *
+ * **탐색은 반대로 권한다**(마이티 미출현 국면에서 32.8%, 정책 17.2%). 상금으로는
+ * 탐색이 옳을 수 있으나 사람 눈에는 정석 위반으로 보인다. 규칙을 위에 두기로 한
+ * 판단이며, 되돌리려면 createAgent({mightyLeadGuard:false}).
+ */
+function mightySuitLeadBanned(game, seat, mv) {
+  if (!game.play || game.play.table.length !== 0) return false;   // 리드에만 건다
+  if (!mv || E.isJoker(mv.card)) return false;
+  if (!attackerSeat(game, seat) || !mightyOutstanding(game, seat)) return false;
+  const ms = game.mightyCard ? game.mightyCard.suit : null;
+  return !!ms && mv.card.suit === ms;
+}
+
+/** 야당이 이기고 있는 트릭에서 프렌드가 따라가는 국면 — weaklead의 반대쪽이다.
+ *  700국면 실측: 정책 대형 실수 6.3% → 탐색 2.6%(페어드 +22.3 ± 8.9). 다만 정책이
+ *  확신하는 구간(로짓차 1.8 이상)에서는 2.3% → 4.0%로 탐색이 나빠 문턱을 둔다. */
+function oppwinState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length === 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  let best = null, bk = [-2, -1];
+  for (const e of game.play.table) {
+    const k = game._cardStrength(e, game.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return null;
+  const ally = best.player === game.declarer ||
+    (game.friendRevealed && game.friend === best.player && best.player !== seat);
+  if (ally) return null;
+  const legal = game._legalPlays(seat);
+  if (legal.length < 2) return null;
+  return legal.some(mv => {
+    const k = game._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: seat,
+                                  jokerCall: mv.jokerCall }, game.play);
+    return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
+  }) ? legal : null;
+}
+
+/** 주공 좌석의 플레이 결정 — 지금까지 잰 클래스 중 결함이 가장 크다.
+ *  700국면 실측: 정책 대형 실수 24.1% → 탐색 10.3%(페어드 +122.6 ± 42.3).
+ *  네 분위 전부 이득이지만 딜당 8회라 전부 켜면 판당 7초다. 사용자 판단으로
+ *  가장 헷갈리는 절반(로짓차 0.46 미만)만 켠다. */
+function declarerState(game, seat) {
+  if (game.phase !== 'play' || seat !== game.declarer) return null;
+  const legal = game._legalPlays(seat);
+  return legal.length >= 2 ? legal : null;
+}
+
+/** 프렌드가 선을 잡은 국면 — 리드 선택 전부가 탐색 대상이다.
+ *  개입(weaklead)과 달리 확신도 게이트를 쓰지 않는다: 900국면 실측에서 로짓차
+ *  네 분위 **전부** 탐색이 이겼다(정책 8.6~14.3% → 탐색 4.9~7.2%). */
+function friendLeadState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length !== 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  const legal = game._legalPlays(seat);
+  return legal.length >= 2 ? legal : null;
+}
+
+/** 이 좌석이 지금 weaklead 국면인가 — 좌석에서 보이는 정보만 쓴다. */
+function weakleadState(game, seat) {
+  if (game.phase !== 'play' || seat === game.declarer) return null;
+  if (!game.play || game.play.table.length === 0) return null;
+  const fd = game.friendDecl;
+  if (!(fd && fd.mode === 'card' && fd.card &&
+        game.hands[seat].some(c => E.sameCard(c, fd.card)))) return null;
+  let best = null, bk = [-2, -1];
+  for (const e of game.play.table) {
+    const k = game._cardStrength(e, game.play);
+    if (k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1])) { bk = k; best = e; }
+  }
+  if (!best) return null;
+  const ally = best.player === game.declarer ||
+    (game.friendRevealed && game.friend === best.player && best.player !== seat);
+  if (!ally || E.NUM_PLAYERS - 1 - game.play.table.length < 2) return null;
+  const legal = game._legalPlays(seat);
+  if (legal.length < 2) return null;
+  const canWin = legal.some(mv => {
+    const k = game._cardStrength({ card: mv.card, jokerSuit: mv.jokerSuit, player: seat,
+                                   jokerCall: mv.jokerCall }, game.play);
+    return k[0] > bk[0] || (k[0] === bk[0] && k[1] > bk[1]);
+  });
+  return canWin ? legal : null;
+}
+
+function cloneGameState(g) {
+  const c = Object.create(Object.getPrototypeOf(g));
+  for (const k of Object.keys(g)) {
+    const v = g[k];
+    c[k] = (typeof v === 'object' && v !== null) ? structuredClone(v) : v;
+  }
+  return c;
+}
+
+/** 좌석이 못 본 카드를 무작위로 나눠 완전정보 판을 하나 만든다(무늬 없음 존중). */
+function determinizeFrom(g, seat, rnd) {
+  const seen = new Set();
+  for (const t of g.play.history) for (const e of t.plays) seen.add(E.cardId(e.card));
+  for (const e of g.play.table) seen.add(E.cardId(e.card));
+  for (const c of g.hands[seat]) seen.add(E.cardId(c));
+  if (seat === g.declarer && g.discard) for (const c of g.discard) seen.add(E.cardId(c));
+  const pool = [];
+  const push = c => { if (!seen.has(E.cardId(c))) pool.push(c); };
+  push(E.JOKER);
+  for (const s of ['S', 'D', 'H', 'C']) for (let r = 2; r <= 14; r++) push({ suit: s, rank: r });
+  const need = [];
+  for (let p = 0; p < E.NUM_PLAYERS; p++) if (p !== seat) need.push({ seat: p, n: g.hands[p].length });
+  const kittyN = (seat === g.declarer || !g.discard) ? 0 : g.discard.length;
+  if (need.reduce((a, b) => a + b.n, 0) + kittyN !== pool.length) return null;
+  // 지나간 트릭에서 못 낸 무늬 = 그 좌석에 그 무늬가 없다. 지키지 않으면 탐색이
+  // 불가능한 판을 평균낸다.
+  const voids = [];
+  for (let p = 0; p < E.NUM_PLAYERS; p++) voids.push(new Set());
+  const scan = (plays, led) => {
+    if (!led) return;
+    for (const e of plays) {
+      // 마이티·조커는 팔로우 면제다 — 오프수트로 나와도 그 무늬가 없다는 근거가
+      // 못 된다. 세지 않으면 '주공이 기루다를 든 세계'를 아예 상상하지 못한다
+      // (2026-08-20 제보에서 발견: 마이티를 낸 주공을 항상 기루다 0장으로 봤다).
+      if (E.isJoker(e.card) || (g.mightyCard && E.sameCard(e.card, g.mightyCard))) continue;
+      if (e.card.suit !== led) voids[e.player].add(led);
+    }
+  };
+  for (const t of g.play.history)
+    scan(t.plays, t.ledSuit || (t.plays[0] && !E.isJoker(t.plays[0].card) ? t.plays[0].card.suit : null));
+  scan(g.play.table, g.play.ledSuit);
+  const order = need.slice().sort((a, b) => voids[b.seat].size - voids[a.seat].size);
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const bag = pool.slice();
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    const assign = new Map();
+    let ok = true;
+    for (const { seat: p, n } of order) {
+      const take = [];
+      for (let i = 0; i < bag.length && take.length < n; i++) {
+        const c = bag[i];
+        if (!E.isJoker(c) && voids[p].has(c.suit)) continue;
+        take.push(c); bag[i] = null;
+      }
+      if (take.length < n) { ok = false; break; }
+      for (let i = bag.length - 1; i >= 0; i--) if (bag[i] === null) bag.splice(i, 1);
+      assign.set(p, take);
+    }
+    if (!ok || bag.length !== kittyN) continue;
+    const clone = cloneGameState(g);
+    for (const [p, cards] of assign) clone.hands[p] = cards;
+    if (kittyN) clone.discard = bag;
+    return clone;
+  }
+  return null;
+}
+
+/** 정책 로짓 상위 후보와 1-2위 차를 함께 돌려준다. */
+async function topCandidates(session, ort, game, seat, topM) {
+  let obs = M.encodeObs(game, seat, []);
+  const mask = M.legalMask(game, []);
+  const want = M.modelObsDim(session);
+  if (want !== obs.length) obs = obs.subarray(0, want);
+  const out = await session.run({
+    obs: new ort.Tensor('float32', obs, [1, want]),
+    mask: new ort.Tensor('bool', mask, [1, M.ACTION_DIM]),
+  });
+  const lg = out.logits.data;
+  const v = [];
+  for (let i = 0; i < M.ACTION_DIM; i++) if (mask[i]) v.push([lg[i], i]);
+  v.sort((a, b) => b[0] - a[0]);
+  return { cands: v.slice(0, topM).map(x => x[1]),
+           margin: v.length > 1 ? v[0][0] - v[1][0] : Infinity };
+}
+
+/**
+ * 후보마다 결정화 판을 끝까지 굴려 평균 상금이 가장 큰 수를 고른다.
+ * 못 고르면(결정화 실패·예산 초과) null을 돌려 정책 수를 그대로 쓰게 한다.
+ */
+async function searchWeaklead(session, ort, game, seat, rollAct, cfg, rng, banned) {
+  const t0 = Date.now();
+  let { cands } = await topCandidates(session, ort, game, seat, cfg.topM);
+  if (banned && banned.size) {
+    const keep = cands.filter(i => !banned.has(i));
+    if (keep.length) cands = keep;                  // 전부 금지면 어쩔 수 없이 둔다
+  }
+  if (cands.length < 2) return null;
+  const dets = [];
+  for (let k = 0; k < cfg.K; k++) {
+    if (Date.now() - t0 > cfg.budgetMs * 0.25) break;    // 나머지는 롤아웃 몫이다
+    const d = determinizeFrom(game, seat, rng);
+    if (d) dets.push(d);
+  }
+  if (dets.length < 4) return null;
+  let bestIdx = null, bestVal = -Infinity;
+  for (const ci of cands) {
+    let sum = 0, n = 0;
+    for (const d of dets) {
+      if (Date.now() - t0 > cfg.budgetMs) break;
+      const sim = cloneGameState(d);
+      const a0 = M.actionToEngine(ci, sim, []);
+      if (!a0) continue;
+      try { sim.act(a0); } catch (e) { continue; }
+      let guard = 0;
+      while (sim.phase !== 'done' && sim.phase !== 'redeal' && guard++ < 200)
+        sim.act(await rollAct(sim, sim.currentPlayer));
+      if (sim.phase !== 'done') continue;
+      sum += sim.result.prizes[seat]; n++;
+    }
+    if (n >= 4 && sum / n > bestVal) { bestVal = sum / n; bestIdx = ci; }
+  }
+  return bestIdx === null ? null : M.actionToEngine(bestIdx, game, []);
+}
+
 /** onnxruntime 세션 생성. ort와 모델 경로는 호출자가 넘긴다
  *  (v2.11부터 세 티어가 각자 다른 세대를 쓰므로 기본값을 두지 않는다). */
 async function loadMaster(ort, modelPath) {
@@ -567,16 +834,74 @@ async function createAgent(opts = {}) {
   if (tier === 'master') {
     if (!session || !ort) throw new Error('master 티어에는 {session, ort}가 필요하다');
     const pick = [];
+    // 국면 한정 탐색 설정. false·미지정이면 기존 경로 그대로다(비용 0).
+    const scfg = opts.classSearch ? { ...SEARCH_DEFAULTS, ...opts.classSearch } : null;
+    // 탐색 롤아웃은 배포와 같은 조건으로 둔다 — 정책만이 아니라 가드까지 포함해야
+    // 탐색이 보는 미래가 실제 판과 같다(실측도 이 조건에서 냈다).
+    const rollAct = async (g, s) => {
+      for (let guard = 0; guard < 8; guard++) {
+        const a = await M.chooseAction(session, ort, g, s, []);
+        const act = M.actionToEngine(a, g, []);
+        if (act) return applyGuards(session, ort, g, s, act, opts);
+      }
+      throw new Error('master rollout: 액션 확정 실패');
+    };
     return {
       tier, label: TIER_LABEL[tier],
       reset() { pick.length = 0; },
       async act(game, seat) {
         if (seat === undefined) seat = game.currentPlayer;
+        // 마이티 무늬 리드 금지 목록 — 탐색 후보에서 빼고, 정책 수도 여기 걸리면
+        // 다음 후보로 바꾼다(리드 국면에서만 만들어지므로 비용은 무시할 만하다).
+        let banned = null;
+        if (opts.mightyLeadGuard !== false && game.phase === 'play' &&
+            game.play && game.play.table.length === 0 && attackerSeat(game, seat)) {
+          const legal = game._legalPlays(seat);
+          if (legal.length >= 2) {
+            const bad = legal.filter(mv => mightySuitLeadBanned(game, seat, mv));
+            if (bad.length && bad.length < legal.length)
+              banned = new Set(bad.map(mv => M.actionIndex(mv)));
+          }
+        }
+        const cls = scfg && (weakleadState(game, seat) ? 'weaklead'
+                    : oppwinState(game, seat) ? 'oppwin'
+                    : friendLeadState(game, seat) ? 'friendlead'
+                    : declarerState(game, seat) ? 'declarer' : null);
+        if (cls) {
+          // 클래스마다 문턱이 다르다 — 전부 같은 방식으로 잰 분위별 실측에서 왔다.
+          // friendlead는 네 분위 전부 이득이라 문턱이 없다(null).
+          const gateOf = { weaklead: scfg.gate, oppwin: scfg.gateOppwin,
+                           declarer: scfg.gateDeclarer, friendlead: null };
+          const gate = gateOf[cls];
+          let go = true;
+          if (gate != null) {
+            const { margin } = await topCandidates(session, ort, game, seat, scfg.topM);
+            go = margin < gate;
+          }
+          if (go) {
+            const found = await searchWeaklead(session, ort, game, seat, rollAct, scfg, rng, banned);
+            if (found) {
+              if (scfg.count) scfg.count.fired = (scfg.count.fired || 0) + 1;
+              return applyGuards(session, ort, game, seat, found, opts);
+            }
+          }
+        }
         for (let guard = 0; guard < 8; guard++) {
           const a = await M.chooseAction(session, ort, game, seat, pick);
           const act = M.actionToEngine(a, game, pick);
-          // null이면 교환 카드 누적 중 → 다시 고른다
-          if (act) return applyGuards(session, ort, game, seat, act, opts);
+          if (!act) continue;                       // 교환 카드 누적 중 → 다시 고른다
+          if (banned && banned.size) {
+            const idx = M.actionIndex({ card: act.card, jokerSuit: act.jokerSuit });
+            if (banned.has(idx)) {
+              const alt = await topCandidates(session, ort, game, seat, M.ACTION_DIM);
+              const pickIdx = alt.cands.find(i => !banned.has(i));
+              if (pickIdx !== undefined) {
+                const swapped = M.actionToEngine(pickIdx, game, pick);
+                if (swapped) return applyGuards(session, ort, game, seat, swapped, opts);
+              }
+            }
+          }
+          return applyGuards(session, ort, game, seat, act, opts);
         }
         throw new Error('master: 액션 확정 실패');
       },
@@ -608,7 +933,8 @@ const PERSONA_KEYS = ['gambler', 'balanced', 'careful'];
  */
 async function createTable(opts = {}) {
   const { tiers = 'advanced', rng = Math.random, session = null, ort = null,
-          personas = null, revealPersona = false, sessions = null } = opts;
+          personas = null, revealPersona = false, sessions = null,
+          classSearch = null } = opts;
   const seats = opts.seats || E.NUM_PLAYERS;
   const tierAt = s => (Array.isArray(tiers) ? tiers[s] : tiers);
   const assigned = [], agents = [];
@@ -619,9 +945,12 @@ async function createTable(opts = {}) {
       : (personas ? personas[s] : PERSONA_KEYS[Math.floor(rng() * PERSONA_KEYS.length)]);
     assigned.push(persona);
     // v2.8: 혼합 운영 — 좌석별 모델 세션(성향차)을 허용한다
+    // 국면 한정 탐색은 마스터 좌석에만 넘긴다 — 고급 좌석까지 강해지면 티어 서열이
+    // 흐려지고, 실측도 마스터 세대(v16e)에서만 냈다.
     agents.push(await createAgent({ tier, persona: persona || 'balanced',
                                     rng, session: (sessions && sessions[s]) || session,
-                                    ort, revealPersona }));
+                                    ort, revealPersona,
+                                    classSearch: tier === 'master' ? classSearch : null }));
   }
   return {
     seats, agents,
@@ -632,6 +961,7 @@ async function createTable(opts = {}) {
 }
 
 const api = { createAgent, createTable, loadMaster, applyGuards,
+              weakleadState, searchWeaklead,
               keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
               jokerCallGuard, trumpSaveGuard,
               TIERS, TIER_LABEL, PERSONA_KEYS };

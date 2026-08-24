@@ -42,7 +42,8 @@ function voidsOf(g) {
   const scan = (plays, led) => {
     if (!led) return;
     for (const e of plays) {
-      if (E.isJoker(e.card)) continue;
+      // 마이티·조커는 팔로우 면제 — 오프수트로 나와도 '무늬 없음'의 근거가 아니다
+      if (E.isJoker(e.card) || (g.mightyCard && E.sameCard(e.card, g.mightyCard))) continue;
       if (e.card.suit !== led) v[e.player].add(led);
     }
   };
