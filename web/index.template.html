@@ -205,7 +205,7 @@ body{
 #hand .hcard.sel{transform:translateY(-18px)}
 #hand .hcard.sel .cardface{outline:3px solid var(--gold); outline-offset:-1px}
 #hand .hcard .from-floor{position:absolute; top:-7px; left:50%; transform:translateX(-50%);
-  width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 8px rgba(223,175,79,.8)}
+  width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 2px 5px rgba(0,0,0,.65)}
 /* ---------- 액션 시트 ---------- */
 #sheet{position:absolute; left:50%; bottom:calc(var(--card-h) + 44px); transform:translateX(-50%);
   z-index:25; background:var(--panel); backdrop-filter:blur(8px);
@@ -275,6 +275,22 @@ body{
 #modal th{font-weight:500; color:var(--txt-dim); text-align:left; padding:5px 2px; border-bottom:1px solid var(--panel-line); font-size:.72rem; letter-spacing:.08em}
 #modal td{padding:6px 2px; border-bottom:1px solid rgba(255,255,255,.05); font-variant-numeric:tabular-nums}
 #modal td.num{text-align:right}
+.ab-cta{width:100%; margin:0 0 12px; padding:12px 14px; border:1px solid rgba(223,175,79,.45);
+  border-radius:12px; background:rgba(223,175,79,.1); color:var(--gold); font:inherit; font-weight:700;
+  cursor:pointer; display:flex; justify-content:space-between; align-items:center}
+.ab-cta span{font-size:.7rem; color:var(--txt-dim); letter-spacing:.08em}
+#ab-form{display:grid; gap:10px}
+.ab-question{border:1px solid var(--panel-line); border-radius:12px; padding:10px 12px 12px; min-width:0}
+.ab-question legend{padding:0 5px; font-size:.8rem; font-weight:650; color:var(--txt)}
+.ab-scale{display:grid; grid-template-columns:58px 1fr 58px; gap:8px; align-items:center}
+.ab-scale>span{font-size:.62rem; line-height:1.25; color:var(--txt-dim); text-align:center}
+.ab-scale>div{display:grid; grid-template-columns:repeat(5,1fr); gap:5px}
+.ab-scale label{cursor:pointer}
+.ab-scale input{position:absolute; opacity:0; pointer-events:none}
+.ab-scale label span{display:grid; place-items:center; min-height:32px; border:1px solid var(--panel-line);
+  border-radius:8px; color:var(--txt-dim); font-size:.78rem; transition:background .15s,border-color .15s,color .15s}
+.ab-scale input:checked+span{background:var(--gold); border-color:var(--gold); color:#241C05; font-weight:800}
+.ab-scale input:focus-visible+span{outline:2px solid var(--mint); outline-offset:2px}
 .pos{color:var(--mint)} .neg{color:#E08A83}
 /* ---------- 토스트/FX ---------- */
 /* 토스트는 HUD 바로 아래에 붙인다 — 중앙의 공약 퍽(기루다/공약/선/프렌드)을 가리지 않도록 */
@@ -474,6 +490,7 @@ body.replaying #seat-0 .rhand{display:none}
   #puck .row{font-size:.64rem} #puck .row .k{font-size:.56rem} #puck .row .v{max-width:84px}
   #modal{padding:12px} #modal .box{padding:20px 18px 18px; width:min(96vw,420px)}
   #modal h2{font-size:.98rem} #modal .sub{font-size:.74rem; line-height:1.6}
+  .ab-scale{grid-template-columns:48px 1fr 48px; gap:5px}.ab-scale>div{gap:3px}.ab-scale label span{min-height:30px}
   #expmodal{padding:12px} #expmodal .box{padding:20px 18px; width:min(96vw,540px)}
 }
 

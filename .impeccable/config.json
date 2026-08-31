@@ -1,0 +1,44 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "dark-glow",
+        "value": "0 0 0 3px var(--gold), 0 6px 24px rgba(232,193,90,.4)",
+        "createdAt": "2026-08-31T05:12:20.496Z",
+        "reason": "Existing domain-specific replay card emphasis; animation and outline identify the reviewed trick card, unrelated to the survey UI."
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.2,1.5,.4,1)",
+        "createdAt": "2026-08-31T05:22:06.855Z",
+        "reason": "Existing poker-chip arrival motion; the overshoot communicates a physical chip being placed."
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.2,1.4,.4,1)",
+        "createdAt": "2026-08-31T05:22:07.047Z",
+        "reason": "Existing contract-puck arrival motion; the overshoot is domain-specific placement feedback."
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.3,1.5,.4,1)",
+        "createdAt": "2026-08-31T05:22:07.228Z",
+        "reason": "Existing seat announcement motion; brief physical emphasis identifies the acting player."
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.3,1.4,.4,1)",
+        "createdAt": "2026-08-31T05:22:07.385Z",
+        "reason": "Existing contract-puck flash motion; brief physical emphasis identifies a contract change."
+      },
+      {
+        "rule": "dark-glow",
+        "value": "#e8c15a",
+        "createdAt": "2026-08-31T05:22:07.565Z",
+        "reason": "Existing replay-card emphasis color; it identifies the exact reviewed card and is unrelated to the survey UI."
+      }
+    ]
+  }
+}

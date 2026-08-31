@@ -31,7 +31,7 @@
 | mighty_master_v6b.onnx | 6.5MB | 1630 | v1.4.0~v2.4.1 | b1attn — 어텐션 + conv=0.05 (+value 헤드) | 보관(롤백용) |
 | mighty_master_v7.onnx | 6.5MB | 1630 | v2.5.0~v2.5.2 | b4a — v6b 앵커 증류(topLead·tfeed 내재화) | 보관(롤백용) |
 | mighty_master_v8.onnx | 6.5MB | 1630 | v2.6.0~v2.6.0 | b5b — v7 앵커 증류(+확정승 컷, kl2.0·conv0.5) | 보관(롤백용) |
-| mighty_master_v9.onnx | 6.5MB | 1630 | v2.7.0~현행 | v9 — key_cand 선언 함의 주입 + 위치 예측 헤드 + PPO 재학습 | 혼합 풀 (1좌석) |
+| mighty_master_v9.onnx | 6.5MB | 1630 | v2.7.0~v2.10.5 | v9 — key_cand 선언 함의 주입 + 위치 예측 헤드 + PPO 재학습 | 보존(비교용) |
 | mighty_master_v13.onnx | 6.5MB | 1630 | v2.10.0~v2.11.3 | v13 — v9 앵커 + PIMC 탐색 교사 증류(라벨 73,223건) | 보존(비교·롤백 후보) |
 | mighty_master_v16e.onnx | 6.5MB | **1653** | v2.12.0~현행 | v16e — 관측 파생량 3종 + net2net + 키카드 타이밍 증류(KL 1.0·8에폭) | **현행 배포 (마스터 전좌석)** |
 

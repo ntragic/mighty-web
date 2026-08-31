@@ -430,6 +430,8 @@ async function valueOf(sess, g, seat) {
                 ws.write(JSON.stringify({
                   seed, dealer: g.dealer, cfg: g.config, upto: actions.length, seat: p,
                   target: best.i, policyTop: polTop, gain: +(gainB === null ? gain : gainB).toFixed(4),
+                  targetPolicyRank: cands.indexOf(best.i) + 1,
+                  legalCount: idx.length, candidateCount: cands.length,
                   gainRaw: gainB === null ? undefined : +gain.toFixed(4), jc: isJC ? 1 : 0,
                   cls: cls || undefined, slack: slack === null ? undefined : slack,
                   src: R ? 'replay' : (FORCE_BID ? 'forcedbid' : 'selfplay'),

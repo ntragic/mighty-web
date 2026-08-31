@@ -17,7 +17,7 @@
 npm install          # jsdom, onnxruntime-node (테스트·벤치마크용)
 npm run build        # src/ → web/index.html
 npm run serve        # http://localhost:8080
-npm test             # 엔진 59건 + UI 스모크
+npm test             # 엔진·AI 가드·A/B 설문·UI·복기 회귀 전체
 ```
 
 브라우저에서 `web/index.html`을 파일로 직접 열어도 게임은 돌아가지만, **마스터 티어는
@@ -74,6 +74,7 @@ docs/                   CHANGELOG · GLOSSARY · HANDOFF · TRAINING-BRIEF
 - **복기** — 전원 손패를 공개한 상태로 트릭 재생 (단축키 `R`)
 - **되돌리기** — 비딩 1회 + 플레이 1회 (단축키 `Z`)
 - **로그 내보내기** — 라운드/매치 단위 마크다운, 재현용 시드 포함
+- **마스터 AI A/B 조사** — 매치 후 4문항, 로컬 저장·결과 복사(서버 전송 없음)
 - 세팅(전승 확정) 자동 진행, 매치 결과 누적 상금 차트
 
 ## 라이선스
