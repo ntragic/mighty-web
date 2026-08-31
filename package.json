@@ -1,6 +1,6 @@
 {
   "name": "mighty-web",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "private": true,
   "description": "혼자 즐기는 5인 마이티 카드게임 — 단일 HTML 정적 배포",
   "scripts": {

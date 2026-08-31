@@ -7,7 +7,7 @@
         "rule": "dark-glow",
         "value": "0 0 0 3px var(--gold), 0 6px 24px rgba(232,193,90,.4)",
         "createdAt": "2026-08-31T05:12:20.496Z",
-        "reason": "Existing domain-specific replay card emphasis; animation and outline identify the reviewed trick card, unrelated to the survey UI."
+        "reason": "Existing replay-card emphasis identifies the exact reviewed trick card; this scoped final-modal layout change did not add or modify it."
       },
       {
         "rule": "bounce-easing",

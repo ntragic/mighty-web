@@ -390,8 +390,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.0';
-const APP_BUILD = '2026-08-31 빌드 — 공정 탐색과 마스터 AI 경험 조사';
+const APP_VERSION = 'v3.0.1';
+const APP_BUILD = '2026-08-31 빌드 — 매치 종료 2열 레이아웃';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -1960,7 +1960,7 @@ function statsLineHtml(){
   const pz=(s2.prize/s2.rounds>=0?'+':'')+Math.round(s2.prize/s2.rounds);
   let txt=tf('statsLine', s2.rounds, w, s2.declR, s2.declW, pz);
   if (s2.anR) txt+=tf('statsMistakes', s2.crit+s2.loss, s2.anR);
-  return `<div class="an-sub" style="margin:2px 0 12px">${txt}</div>`;
+  return `<div class="an-sub stats-line">${txt}</div>`;
 }
 
 /* ---------------- v2 AI 복기 (분석·하이라이트) ---------------- */
@@ -2925,7 +2925,7 @@ function buildFinalChart(){
   const span0=hi-lo; hi+=span0*0.06; lo-=span0*0.06;
   const X=i=>P.l+(W-P.l-P.r)*(n<=1?0:i/(n-1));
   const Y=v=>P.t+(H-P.t-P.b)*(1-(v-lo)/(hi-lo));
-  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">`;
   // 그리드 + 눈금 (동적 범위)
   const step=niceStep(hi-lo);
   for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step){
@@ -2947,9 +2947,7 @@ function buildFinalChart(){
     s+=`<circle class="fin-dot" data-p="${p}" fill="${FIN_COLORS[p]}" r="3.2" cx="${X(n-1).toFixed(1)}" cy="${Y(hist[n-1][p]).toFixed(1)}" opacity="0"/>`;
   }
   s+='</svg>';
-  const legend=[0,1,2,3,4].map(p=>
-    `<span><span class="sw" style="background:${FIN_COLORS[p]}"></span>${NAMES[p]} <b class="${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</b></span>`).join('');
-  return `<div id="fin-chart">${s}</div><div class="fin-legend">${legend}</div>`;
+  return `<div id="fin-chart">${s}</div>`;
 }
 function animateFinalChart(){
   const paths=document.querySelectorAll('#fin-chart .fin-line');
@@ -3050,17 +3048,23 @@ function showFinal(writeLog=true){
   const order=[0,1,2,3,4].sort((a,b)=>totals[b]-totals[a]);
   const M=settings.match;
   const why = M.mode==='rounds' ? tf('matchWhyRounds', M.rounds) : tf('matchWhyTarget', M.targetPrize);
-  box.innerHTML=`<h2>${t('매치 종료')}</h2><div class="sub">${tf('matchSub', why, roundNo)}</div>
-    ${buildFinalChart()}
-    <div style="margin:4px 0 18px">
-    ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
-      <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
-        (nnSeatsActive()?` <span class="style-tag">${t(poolOf(seatModels[p])?poolOf(seatModels[p]).nick:'규칙기반')}</span>`:'')}</div>
-      <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
-    </div>`).join('')}</div>
-    ${statsLineHtml()}
-    ${abEligible()?`<button class="ab-cta" id="final-ab">${t('플레이 경험 남기기')} <span>1–5</span></button>`:''}
-    <div class="btnrow grid2"><button class="btn quiet" id="final-ai">${t('매치 AI 요약')}</button><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>`;
+  box.innerHTML=`<div class="final-head"><h2>${t('매치 종료')}</h2><div class="sub">${tf('matchSub', why, roundNo)}</div></div>
+    <div class="final-layout">
+      <div class="final-ranks">
+        ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
+          <div class="no">${i+1}</div><span class="sw" style="background:${FIN_COLORS[p]}"></span>
+          <div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
+            (nnSeatsActive()?` <span class="style-tag">${t(poolOf(seatModels[p])?poolOf(seatModels[p]).nick:'규칙기반')}</span>`:'')}</div>
+          <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
+        </div>`).join('')}
+        ${statsLineHtml()}
+      </div>
+      <div class="final-trend">${buildFinalChart()}</div>
+    </div>
+    <div class="final-footer">
+      ${abEligible()?`<button class="ab-cta" id="final-ab">${t('플레이 경험 남기기')} <span>1–5</span></button>`:''}
+      <div class="btnrow grid2"><button class="btn quiet" id="final-ai">${t('매치 AI 요약')}</button><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>
+    </div>`;
   $('#modal').classList.add('show');
   animateFinalChart();
   if (writeLog) logLine(tf('logMatchEnd', NAMES[order[0]], totals[order[0]]));
