@@ -133,6 +133,14 @@ const I18N_EN = {
   // 기타
   '진행 기록':'Game log', '기록':'Log', '매치 시작':'Start Match', '새 매치':'New match',
   '매치 종료':'Match complete', '이번 판':'This round', '컴퓨터 성향 — ':'Computer styles — ',
+  '플레이 경험 남기기':'Rate this match', '이번 AI와의 플레이는 어땠나요?':'How was this match with the AI?',
+  '응답은 이 기기에만 저장됩니다. A/B 그룹은 표시하지 않습니다.':'Your response stays on this device. The A/B group is kept hidden.',
+  '프렌드가 필요한 때에 개입했다':'The Friend stepped in at the right time',
+  '중요한 카드를 불필요하게 쓰지 않았다':'The AI did not waste important cards',
+  'AI의 플레이가 납득 가능했다':'The AI’s play made sense',
+  '이 AI와 다시 플레이하고 싶다':'I would play with this AI again',
+  '전혀 아니다':'Not at all', '매우 그렇다':'Very much', '건너뛰기':'Skip', '응답 저장':'Save response',
+  '응답이 저장되었습니다':'Response saved', '누적 A/B 결과 복사':'Copy all A/B results', '계속':'Continue',
   '(나)':' (you)', ' · 런!':' · Run!', ' · 백런!':' · Back run!', ' · 노프렌드':' · no friend',
   ' · 초구(주공 셀프)':' · first trick (declarer solo)',
   '5인 트릭테이킹의 정석, 마이티.':'Mighty — the classic five-player trick-taking game.',
@@ -382,8 +390,13 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v2.16.9';
-const APP_BUILD = '2026-08-24 빌드 — 탐색이 실제 판을 움직이던 문제';
+const APP_VERSION = 'v3.0.1';
+const APP_BUILD = '2026-08-31 빌드 — 매치 종료 2열 레이아웃';
+const AB_TEST_ID = 'master-round-robin-v300';
+const AB_NEXT_KEY = 'mighty_ab_next_v300';
+const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
+let abArm = 'N';
+let matchFeedback = null;
 const HUMAN = 0;
 let NAMES = DEFAULT_NAMES.ko.slice();
 function isDefaultNames(arr){
@@ -824,10 +837,21 @@ function currentTier(){
 }
 /** 그 티어 좌석이 실제로 신경망을 쓰는가 (로드 실패 시 규칙기반으로 떨어진다) */
 function nnSeatsActive(){ return masterState==='ready' && !!seatModels[1]; }
+function assignAbArm(){
+  if (currentTier()!=='master'){ abArm='N'; matchFeedback=null; return abArm; }
+  let next;
+  try{ next=localStorage.getItem(AB_NEXT_KEY); }catch(e){}
+  if (next!=='A' && next!=='B') next=Math.random()<0.5?'A':'B';
+  abArm=next;
+  try{ localStorage.setItem(AB_NEXT_KEY, next==='A'?'B':'A'); }catch(e){}
+  matchFeedback=null;
+  return abArm;
+}
+function activeClassSearch(){ return currentTier()==='master' && abArm==='A' ? CLASS_SEARCH : null; }
 async function buildAgents(reassign){
   const tier = currentTier();
   const useNN = nnSeatsActive();
-  const key = tier + (useNN?':nn':'');
+  const key = tier + (useNN?':nn':'') + (tier==='master'?':ab'+abArm:'');
   if (reassign || !botTable || botTable.tier !== key){
     // 좌석별로 신경망/규칙기반이 섞인다 — NN 좌석은 master 티어 + 그 좌석 세션.
     // 신경망이 안 실린 좌석은 규칙기반으로 간다. 마스터 티어는 규칙기반 등가가
@@ -849,7 +873,7 @@ async function buildAgents(reassign){
         // 트릭에 개입할지 정하는 자리에서만 발화하고, 정책이 확신하면 건너뛴다 —
         // 딜당 0.69회·데스크톱 0.5초·저사양 1.2초(예산에서 절단). 실측은
         // docs/SESSION-HANDOFF.md 10절.
-        classSearch: tier==='master' ? CLASS_SEARCH : null,
+        classSearch: activeClassSearch(),
       });
     }catch(e){
       // 어떤 이유로든 좌석을 못 만들면 순수 규칙기반으로 되돌린다.
@@ -1816,6 +1840,8 @@ function recStart(seed, cfg, dealer, g){
   roundRec = {
     round: roundNo, seed, dealer, cfg: JSON.parse(JSON.stringify(cfg)),
     version: APP_VERSION, tier: currentTier(), names: NAMES.slice(),
+    abTest: currentTier()==='master' ? AB_TEST_ID : null,
+    abArm: currentTier()==='master' ? abArm : null,
     hands0: g.hands.map(h => h.map(E.cardId)),
     floor0: g.floor.map(E.cardId),
     actions: [], result: null, ts: new Date().toISOString(),
@@ -1934,7 +1960,7 @@ function statsLineHtml(){
   const pz=(s2.prize/s2.rounds>=0?'+':'')+Math.round(s2.prize/s2.rounds);
   let txt=tf('statsLine', s2.rounds, w, s2.declR, s2.declW, pz);
   if (s2.anR) txt+=tf('statsMistakes', s2.crit+s2.loss, s2.anR);
-  return `<div class="an-sub" style="margin:2px 0 12px">${txt}</div>`;
+  return `<div class="an-sub stats-line">${txt}</div>`;
 }
 
 /* ---------------- v2 AI 복기 (분석·하이라이트) ---------------- */
@@ -2514,6 +2540,7 @@ function buildReportMd(rec){
   L.push(`# 마이티 복기 — ${rec.round}${LANG==='en'?' round':'판'} (seed ${rec.seed})`);
   L.push('');
   L.push(`- 버전: ${rec.version} · 난이도: ${rec.tier} · 딜러: ${nm(rec.dealer)}`);
+  if (rec.abTest) L.push(`- A/B 테스트: ${rec.abTest} · 그룹: ${rec.abArm}`);
   L.push(`- 기록 시각: ${rec.ts}`);
   if (g.contract) L.push(`- 공약: **${g.contract.count}${gLabel(g.contract.giruda)}** · 주공: **${nm(g.declarer)}**` +
     ` · 프렌드: ${g.friendDecl ? (g.friendDecl.mode==='card' ? cardLabel(g.friendDecl.card) : g.friendDecl.mode) : '-'}` +
@@ -2572,6 +2599,7 @@ function buildReportMd(rec){
   L.push('## 재현용 원본');
   L.push('```json');
   L.push(JSON.stringify({ seed: rec.seed, dealer: rec.dealer, version: rec.version, tier: rec.tier,
+                          abTest: rec.abTest, abArm: rec.abArm, abFeedback: rec.abFeedback,
                           cfg: rec.cfg, actions: rec.actions }, null, 1));
   L.push('```');
   return L.join('\n');
@@ -2677,6 +2705,8 @@ let watchdogTimer = null;
 // 정상 진행 중에 워치독이 발동해 stateGen을 올리고 봇 루프를 다시 깔았다.
 // 그러면 진행 중이던 턴이 무효화되고 새 루프가 겹쳐 카드가 저절로 나가거나
 // 되돌리기가 안 먹는 것처럼 보인다(제보 2026-08-22).
+// A/B의 차이는 탐색 여부 하나로 제한한다. B도 같은 한도를 써서 기기 성능이나
+// 워치독 재시작이 결과에 섞이지 않게 한다.
 const WATCHDOG_MS = () => 3500 + (CLASS_SEARCH ? 2 * (CLASS_SEARCH.budgetMs || 0) : 0);
 function armWatchdog(){
   if (watchdogTimer) clearTimeout(watchdogTimer);
@@ -2895,7 +2925,7 @@ function buildFinalChart(){
   const span0=hi-lo; hi+=span0*0.06; lo-=span0*0.06;
   const X=i=>P.l+(W-P.l-P.r)*(n<=1?0:i/(n-1));
   const Y=v=>P.t+(H-P.t-P.b)*(1-(v-lo)/(hi-lo));
-  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">`;
   // 그리드 + 눈금 (동적 범위)
   const step=niceStep(hi-lo);
   for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step){
@@ -2917,9 +2947,7 @@ function buildFinalChart(){
     s+=`<circle class="fin-dot" data-p="${p}" fill="${FIN_COLORS[p]}" r="3.2" cx="${X(n-1).toFixed(1)}" cy="${Y(hist[n-1][p]).toFixed(1)}" opacity="0"/>`;
   }
   s+='</svg>';
-  const legend=[0,1,2,3,4].map(p=>
-    `<span><span class="sw" style="background:${FIN_COLORS[p]}"></span>${NAMES[p]} <b class="${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</b></span>`).join('');
-  return `<div id="fin-chart">${s}</div><div class="fin-legend">${legend}</div>`;
+  return `<div id="fin-chart">${s}</div>`;
 }
 function animateFinalChart(){
   const paths=document.querySelectorAll('#fin-chart .fin-line');
@@ -2940,32 +2968,118 @@ function animateFinalChart(){
   }));
 }
 
+/* ---------------- 마스터 AI A/B 플레이 경험 ---------------- */
+const AB_QUESTIONS = [
+  ['friendTiming','프렌드가 필요한 때에 개입했다'],
+  ['keyDiscipline','중요한 카드를 불필요하게 쓰지 않았다'],
+  ['predictability','AI의 플레이가 납득 가능했다'],
+  ['playAgain','이 AI와 다시 플레이하고 싶다'],
+];
+function abEligible(){ return currentTier()==='master' && (abArm==='A' || abArm==='B'); }
+function loadAbFeedbacks(){
+  try{ const list=JSON.parse(localStorage.getItem(AB_FEEDBACK_KEY)||'[]'); return Array.isArray(list)?list:[]; }
+  catch(e){ return []; }
+}
+function copyAbResults(){
+  const text=JSON.stringify({ schema:1, testId:AB_TEST_ID, responses:loadAbFeedbacks() }, null, 2);
+  let done=false;
+  const fallback=()=>{
+    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+    ta.select(); try{ done=document.execCommand('copy'); }catch(e){} ta.remove();
+    toast(done?t('복사했습니다'):t('직접 선택해 복사하세요'), 1800);
+  };
+  try{
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(()=>toast(t('복사했습니다'),1800)).catch(fallback);
+    else fallback();
+  }catch(e){ fallback(); }
+}
+function saveAbFeedback(ratings){
+  const order=[0,1,2,3,4].sort((a,b)=>totals[b]-totals[a]);
+  const payload={
+    schema:1, testId:AB_TEST_ID, arm:abArm, version:APP_VERSION,
+    timestamp:new Date().toISOString(), language:LANG, tier:currentTier(),
+    rounds:roundNo, humanPrize:totals[HUMAN], humanRank:order.indexOf(HUMAN)+1,
+    ratings,
+  };
+  matchFeedback=payload;
+  for(const rec of matchLog) rec.abFeedback=payload;
+  if (roundRec) roundRec.abFeedback=payload;
+  try{
+    const list=loadAbFeedbacks();
+    list.push(payload);
+    localStorage.setItem(AB_FEEDBACK_KEY, JSON.stringify(list.slice(-200)));
+  }catch(e){}
+  return payload;
+}
+function showAbThanks(after){
+  const box=$('#modal-box');
+  box.innerHTML=`<h2>${t('응답이 저장되었습니다')}</h2>
+    <div class="sub">${t('응답은 이 기기에만 저장됩니다. A/B 그룹은 표시하지 않습니다.')}</div>
+    <div class="btnrow"><button class="btn ghost" id="ab-copy">${t('누적 A/B 결과 복사')}</button><button class="btn primary" id="ab-continue">${t('계속')}</button></div>`;
+  $('#ab-copy').onclick=()=>copyAbResults();
+  $('#ab-continue').onclick=()=>{ $('#modal').classList.remove('show'); after ? after() : showFinal(false); };
+}
+function openAbSurvey(after){
+  if (!abEligible()){ if (after) after(); return; }
+  if (matchFeedback){ showAbThanks(after); return; }
+  const box=$('#modal-box');
+  box.innerHTML=`<h2>${t('이번 AI와의 플레이는 어땠나요?')}</h2>
+    <div class="sub">${t('응답은 이 기기에만 저장됩니다. A/B 그룹은 표시하지 않습니다.')}</div>
+    <form id="ab-form">${AB_QUESTIONS.map(([key,label])=>`
+      <fieldset class="ab-question"><legend>${t(label)}</legend>
+        <div class="ab-scale"><span>${t('전혀 아니다')}</span><div>${[1,2,3,4,5].map(n=>`<label><input type="radio" name="${key}" value="${n}" required><span>${n}</span></label>`).join('')}</div><span>${t('매우 그렇다')}</span></div>
+      </fieldset>`).join('')}
+      <div class="btnrow"><button class="btn ghost" type="button" id="ab-skip">${t('건너뛰기')}</button><button class="btn primary" type="submit">${t('응답 저장')}</button></div>
+    </form>`;
+  $('#modal').classList.add('show');
+  $('#ab-skip').onclick=()=>{ $('#modal').classList.remove('show'); after ? after() : showFinal(false); };
+  $('#ab-form').onsubmit=e=>{
+    e.preventDefault();
+    const fd=new FormData(e.currentTarget), ratings={};
+    for(const [key] of AB_QUESTIONS) ratings[key]=Number(fd.get(key));
+    saveAbFeedback(ratings); showAbThanks(after);
+  };
+}
+
 /* ---------------- 최종 결과 ---------------- */
-function showFinal(){
+function showFinal(writeLog=true){
   const box=$('#modal-box');
   const order=[0,1,2,3,4].sort((a,b)=>totals[b]-totals[a]);
   const M=settings.match;
   const why = M.mode==='rounds' ? tf('matchWhyRounds', M.rounds) : tf('matchWhyTarget', M.targetPrize);
-  box.innerHTML=`<h2>${t('매치 종료')}</h2><div class="sub">${tf('matchSub', why, roundNo)}</div>
-    ${buildFinalChart()}
-    <div style="margin:4px 0 18px">
-    ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
-      <div class="no">${i+1}</div><div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
-        (nnSeatsActive()?` <span class="style-tag">${t(poolOf(seatModels[p])?poolOf(seatModels[p]).nick:'규칙기반')}</span>`:'')}</div>
-      <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
-    </div>`).join('')}</div>
-    ${statsLineHtml()}
-    <div class="btnrow grid2"><button class="btn quiet" id="final-ai">${t('매치 AI 요약')}</button><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>`;
+  box.innerHTML=`<div class="final-head"><h2>${t('매치 종료')}</h2><div class="sub">${tf('matchSub', why, roundNo)}</div></div>
+    <div class="final-layout">
+      <div class="final-ranks">
+        ${order.map((p,i)=>`<div class="rank-row${i===0?' first':''}">
+          <div class="no">${i+1}</div><span class="sw" style="background:${FIN_COLORS[p]}"></span>
+          <div class="nm">${NAMES[p]}${p===HUMAN?t('(나)'):
+            (nnSeatsActive()?` <span class="style-tag">${t(poolOf(seatModels[p])?poolOf(seatModels[p]).nick:'규칙기반')}</span>`:'')}</div>
+          <div class="amt ${totals[p]>0?'pos':totals[p]<0?'neg':''}">${totals[p]>0?'+':''}${num(totals[p])}</div>
+        </div>`).join('')}
+        ${statsLineHtml()}
+      </div>
+      <div class="final-trend">${buildFinalChart()}</div>
+    </div>
+    <div class="final-footer">
+      ${abEligible()?`<button class="ab-cta" id="final-ab">${t('플레이 경험 남기기')} <span>1–5</span></button>`:''}
+      <div class="btnrow grid2"><button class="btn quiet" id="final-ai">${t('매치 AI 요약')}</button><button class="btn ghost" id="final-exp">${t('전체 내보내기')}</button><button class="btn ghost" id="final-set">${t('룰 설정')}</button><button class="btn primary" id="rematch-btn">${t('새 매치')}</button></div>
+    </div>`;
   $('#modal').classList.add('show');
   animateFinalChart();
-  logLine(tf('logMatchEnd', NAMES[order[0]], totals[order[0]]));
-  $('#rematch-btn').onclick=()=>{ $('#modal').classList.remove('show'); newMatch(); };
+  if (writeLog) logLine(tf('logMatchEnd', NAMES[order[0]], totals[order[0]]));
+  $('#rematch-btn').onclick=()=>{
+    if (abEligible() && !matchFeedback){ openAbSurvey(newMatch); return; }
+    $('#modal').classList.remove('show'); newMatch();
+  };
+  const fab=$('#final-ab'); if (fab) fab.onclick=()=>openAbSurvey();
   $('#final-set').onclick=()=>openSettings();
   const fe=$('#final-exp'); if (fe) fe.onclick=()=>exportMatch();
   const fa=$('#final-ai'); if (fa) fa.onclick=()=>openMatchSummary();
 }
 function newMatch(){
   matchHistory=[];
+  assignAbArm();
   // v2.8: 매치마다 좌석 모델(성향) 재추첨 — 로드는 비동기, 완료 전엔 규칙기반 폴백.
   // 티어를 반드시 넘긴다. v2.11.0에서 인자 없이 불러 planFor(undefined)가 중급
   // 구성으로 떨어졌고, 마스터를 골라도 v5 한 좌석 + 규칙기반 셋이 앉았다.
@@ -3025,7 +3139,7 @@ function renderLanding(){
 /* ---------------- 초기화 ---------------- */
 globalThis.MUI = { get game(){return game}, get busy(){return busy},
   get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
-  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{

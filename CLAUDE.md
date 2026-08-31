@@ -3,7 +3,8 @@
 혼자 즐기는 5인 마이티(Mighty) 카드게임. 서버 없이 **단일 HTML 파일**로 동작하며
 itch.io에 정적 배포한다. AI는 규칙 기반 2티어 + 신경망 1티어.
 
-- 현재 버전: **v1.2.2** (`src/ui.js`의 `APP_VERSION`이 단일 소스)
+- 현재 개발 버전: **v3.0.0** · 이전 배포 기준선: **v2.16.9**
+  (`src/ui.js`의 `APP_VERSION`이 단일 소스)
 - 배포처: itch.io (비공개 테스트)
 - 스코어링은 「마이티리그 시즌6」 엑셀 수식을 그대로 이식했다. **임의로 바꾸지 마라.**
 
@@ -12,7 +13,7 @@ itch.io에 정적 배포한다. AI는 규칙 기반 2티어 + 신경망 1티어.
 ## 자주 쓰는 명령
 
 ```bash
-npm test            # 엔진 단위 테스트(59건) + UI 스모크
+npm test            # 엔진·AI 가드·A/B 설문·UI·복기 회귀 전체
 npm run build       # src/ → web/index.html 조립
 npm run serve       # web/ 을 로컬 서버로 (http://localhost:8080)
 npm run release     # 검사 → 빌드 → 테스트 → dist/mighty-itch-vX.Y.Z.zip
@@ -35,7 +36,7 @@ src/                     소스 (여기를 고친다)
 web/
   index.template.html    HTML/CSS 뼈대 + 주입 플레이스홀더
   index.html             빌드 산출물 (직접 편집 금지)
-  model/                 mighty_master_v4.onnx (16MB)
+  model/                 현행 mighty_master_v16e.onnx + 비교·롤백 모델
   ort/                   onnxruntime-web 로컬 번들 (13MB, CDN 의존 제거용)
 tests/                   엔진 단위 테스트, jsdom 기반 UI 스모크
 tools/                   빌드·릴리스·벤치마크·진화학습
@@ -86,10 +87,10 @@ v1.2.2에서 이걸로 게임이 멈추는 버그가 있었다.
 |---|---|---|
 | `intermediate` 중급 | 규칙 기반 | 기준 |
 | `advanced` 고급 | 규칙 기반 + 협력 추론 | 중급 상대 판당 +13 |
-| `master` 마스터 | 신경망 v4 (관측 688차원) | 고급 상대 판당 +365 |
+| `master` 마스터 | 신경망 v16e 4좌석 (관측 1653차원) + 국면 한정 탐색 | 현행 최상위 |
 
 ```js
-const session = await MightyAI.loadMaster(ort, './model/mighty_master_v4.onnx');
+const session = await MightyAI.loadMaster(ort, './model/mighty_master_v16e.onnx');
 const table = await MightyAI.createTable({ tiers: [...], rng, session, ort });
 game.act(await table.agents[seat].act(game, seat));
 ```
@@ -122,7 +123,7 @@ game.act(await table.agents[seat].act(game, seat));
 새 모델을 받으면:
 
 1. `web/model/`에 넣고 `src/ui.js`의 `MASTER_MODEL` 경로 확인
-2. `node tools/accept-v4.js 900 advanced` — 수용 기준 확인
+2. `node tools/accept-v4.js 3000 advanced` — 수용 기준 확인
 3. `npm run bench` — 티어 서열 회귀
 4. 버전 올리고 CHANGELOG 작성 → `npm run release`
 

@@ -17,9 +17,7 @@ grep -q "현재 버전\*\*: $VER" docs/CHANGELOG.md \
 echo "CHANGELOG 동기화 확인"
 
 node tools/build.mjs
-node tests/mighty-engine.test.js > /dev/null && echo "엔진 테스트 통과"
-node tests/smoke.test.js > /dev/null 2>&1 && echo "UI 스모크 통과"
-node tests/replay-resume.test.js > /dev/null 2>&1 && echo "복기 재개 테스트 통과"
+npm test && echo "전체 테스트 통과"
 
 # 배포에 넣을 모델은 빌드 결과가 실제로 참조하는 것만 고른다.
 # web/model에는 연구·비교용 세대가 함께 있어(v4·v7·v9·v11b·v12·v14…) 통째로

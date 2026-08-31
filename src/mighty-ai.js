@@ -794,22 +794,42 @@ async function searchWeaklead(session, ort, game, seat, rollAct, cfg, rng, banne
     if (d) dets.push(d);
   }
   if (dets.length < 4) return null;
-  let bestIdx = null, bestVal = -Infinity;
-  for (const ci of cands) {
-    let sum = 0, n = 0;
-    for (const d of dets) {
-      if (Date.now() - t0 > cfg.budgetMs) break;
+  // 후보 순서대로 결정화를 몰아주면 벽시계 예산 끝에서 뒤 후보의 표본이 줄어든다.
+  // 결정화 한 벌마다 모든 후보를 한 번씩 평가하고, 중간에 예산이 끝난 벌은 통째로
+  // 버린다. 비교에 들어가는 표본 수가 후보마다 항상 같아 정책 순위 편향이 없다.
+  const score = new Map(cands.map(ci => [ci, { sum: 0, n: 0 }]));
+  let droppedPartial = 0;
+  for (const d of dets) {
+    const row = [];
+    let complete = true;
+    for (const ci of cands) {
+      if (Date.now() - t0 > cfg.budgetMs) { complete = false; break; }
       const sim = cloneGameState(d);
       const a0 = M.actionToEngine(ci, sim, []);
-      if (!a0) continue;
-      try { sim.act(a0); } catch (e) { continue; }
+      if (!a0) { complete = false; break; }
+      try { sim.act(a0); } catch (e) { complete = false; break; }
       let guard = 0;
       while (sim.phase !== 'done' && sim.phase !== 'redeal' && guard++ < 200)
         sim.act(await rollAct(sim, sim.currentPlayer));
-      if (sim.phase !== 'done') continue;
-      sum += sim.result.prizes[seat]; n++;
+      if (sim.phase !== 'done') { complete = false; break; }
+      row.push([ci, sim.result.prizes[seat]]);
     }
-    if (n >= 4 && sum / n > bestVal) { bestVal = sum / n; bestIdx = ci; }
+    if (!complete || row.length !== cands.length) { droppedPartial++; break; }
+    for (const [ci, value] of row) {
+      const s = score.get(ci); s.sum += value; s.n++;
+    }
+  }
+  const ns = [...score.values()].map(s => s.n);
+  if (cfg.count) {
+    cfg.count.completedRounds = (cfg.count.completedRounds || 0) + Math.min(...ns);
+    cfg.count.droppedPartial = (cfg.count.droppedPartial || 0) + droppedPartial;
+    cfg.count.sampleSkewMax = Math.max(cfg.count.sampleSkewMax || 0, Math.max(...ns) - Math.min(...ns));
+  }
+  if (Math.min(...ns) < 4) return null;
+  let bestIdx = null, bestVal = -Infinity;
+  for (const ci of cands) {
+    const s = score.get(ci), value = s.sum / s.n;
+    if (value > bestVal) { bestVal = value; bestIdx = ci; }
   }
   return bestIdx === null ? null : M.actionToEngine(bestIdx, game, []);
 }

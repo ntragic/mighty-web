@@ -1,12 +1,12 @@
 {
   "name": "mighty-web",
-  "version": "1.2.3",
+  "version": "3.0.1",
   "private": true,
   "description": "혼자 즐기는 5인 마이티 카드게임 — 단일 HTML 정적 배포",
   "scripts": {
     "build": "node tools/build.mjs",
     "check": "node tools/build.mjs --check",
-    "test": "node tests/mighty-engine.test.js && node tests/topguard.test.js && node tests/tfeedguard.test.js && node tests/cutguard.test.js && node tests/jcallguard.test.js && node tests/trumpsaveguard.test.js && node tests/timing.test.js && node tests/bidchip.test.js && node tests/mightylead.test.js && node tests/tierplan.test.js && node tests/class-search.test.js && node tests/turnrace.test.js && node tests/modalguard.test.js && node tests/tapthrough.test.js && node tests/instrument.test.js && node tests/smoke.test.js && TIER=master node tests/nnseat.test.js && TIER=advanced node tests/nnseat.test.js && TIER=intermediate node tests/nnseat.test.js && node tests/replay-resume.test.js",
+    "test": "node tests/mighty-engine.test.js && node tests/topguard.test.js && node tests/tfeedguard.test.js && node tests/cutguard.test.js && node tests/jcallguard.test.js && node tests/trumpsaveguard.test.js && node tests/timing.test.js && node tests/bidchip.test.js && node tests/mightylead.test.js && node tests/tierplan.test.js && node tests/class-search.test.js && node tests/key-decision-audit.test.js && node tests/turnrace.test.js && node tests/modalguard.test.js && node tests/tapthrough.test.js && node tests/instrument.test.js && node tests/ab-feedback.test.js && node tests/smoke.test.js && TIER=master node tests/nnseat.test.js && TIER=advanced node tests/nnseat.test.js && TIER=intermediate node tests/nnseat.test.js && node tests/replay-resume.test.js",
     "test:engine": "node tests/mighty-engine.test.js",
     "test:ui": "node tests/smoke.test.js",
     "serve": "node tools/serve.mjs",

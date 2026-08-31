@@ -116,6 +116,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const ranks = w.document.querySelectorAll('.rank-row').length;
   console.log('final ranking rows:', ranks, '(expect 5)');
   if (ranks !== 5) { console.error('final modal missing'); process.exit(1); }
+  if (!w.document.querySelector('.final-layout .final-ranks') || !w.document.querySelector('.final-layout .final-trend')) {
+    console.error('final two-column structure missing'); process.exit(1);
+  }
+  if (w.document.querySelector('.fin-legend')) { console.error('duplicate final legend remains'); process.exit(1); }
   // v2 P4: 매치 AI 요약 버튼 + 누적 통계 반영
   if (!w.document.querySelector('#final-ai')) { console.error('match summary button missing'); process.exit(1); }
   if (!MUI.lifeStats || MUI.lifeStats.rounds < 1) { console.error('life stats not updated'); process.exit(1); }

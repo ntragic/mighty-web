@@ -44,9 +44,13 @@ const DEALS = parseInt(process.env.DEALS || '6', 10);
 
   assert.ok(done > 0, '탐색을 켠 채로 끝난 판이 없다');
   assert.ok(count.fired > 0, 'weaklead 국면에서 탐색이 한 번도 발화하지 않았다');
+  assert.strictEqual(count.sampleSkewMax, 0, '후보별 탐색 표본 수가 다르다');
+  assert.ok(count.completedRounds >= count.fired * 4,
+    `발화당 최소 4개 완결 라운드가 없다(${count.completedRounds}/${count.fired})`);
   // 예산 2,000ms + 진행 중이던 한 롤아웃의 여유. 넘으면 예산 로직이 깨진 것이다.
   assert.ok(msMax < 6000, `한 수 최대 ${msMax}ms — 예산이 새고 있다`);
-  console.log(`classSearch: PASS (${done}/${DEALS}판 · 수 ${moves} · 탐색 발화 ${count.fired} · 최대 ${msMax}ms)`);
+  console.log(`classSearch: PASS (${done}/${DEALS}판 · 수 ${moves} · 탐색 발화 ${count.fired}` +
+    ` · 균등 라운드 ${count.completedRounds} · 부분폐기 ${count.droppedPartial || 0} · 최대 ${msMax}ms)`);
 
   // 끈 상태(기본값)에서는 발화가 없어야 한다 — 배포 기본 경로 보호
   const off = await AI.createAgent({ tier: 'master', session, ort });
