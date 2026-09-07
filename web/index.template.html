@@ -220,7 +220,8 @@ body{
 #sheet{position:relative; z-index:25; background:var(--panel); backdrop-filter:blur(8px);
   border:1px solid var(--panel-line); border-radius:16px; padding:14px 16px;
   box-shadow:0 12px 34px rgba(0,0,0,.5); min-width:min(92vw, 380px); max-width:94vw;
-  display:none; flex-direction:column; gap:10px}
+  display:none; flex-direction:column; gap:10px;
+  max-height:calc(var(--vvh,100dvh) - var(--card-h) - 96px); overflow-y:auto}
 #sheet.show{display:flex}
 #sheet h3{font-size:.8rem; letter-spacing:.14em; color:var(--gold); font-weight:600}
 #sheet .hint{font-size:.74rem; color:var(--txt-dim)}
@@ -323,6 +324,64 @@ body{
 }
 
 /* ---------- 설정 패널 ---------- */
+/* 연습판 안내 띠 — 지금 무엇을 하면 되는지 절차를 말한다. 조언 상자가 '무엇이
+   좋은 수인가'를 말한다면 이쪽은 '어디를 누르면 되는가'를 말한다. HUD 바로 아래에
+   두어 손패 쪽 근거 버블과 자리를 다투지 않게 한다. */
+#practice{position:absolute; left:50%; top:60px; transform:translateX(-50%); z-index:26;
+  display:none; align-items:center; gap:10px; max-width:94vw;
+  background:rgba(35,131,226,.14); border:1px solid rgba(35,131,226,.42);
+  border-radius:12px; padding:8px 12px; backdrop-filter:blur(6px)}
+#practice.show{display:flex}
+#practice-txt{font-size:.74rem; line-height:1.5; color:#dce8f5; word-break:keep-all}
+body.practicing #sheet{max-height:calc(var(--vvh,100dvh) - var(--card-h) - 96px
+  - var(--pracH,0px) - 78px)}
+/* 시트가 안쪽으로 스크롤되면 아래쪽 버튼이 화면 밖으로 밀린다 — 초보자가 '공약 선언'을
+   못 찾는다. 행동 버튼은 늘 보이게 바닥에 붙인다. */
+#sheet .btnrow{position:sticky; bottom:-14px; z-index:1;
+  margin:0 -16px -14px; padding:10px 16px 14px;
+  background:#0E1A16; border-top:1px solid rgba(255,255,255,.06)}
+#practice-end{flex:0 0 auto; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06);
+  color:var(--txt); border-radius:9px; padding:5px 10px; font:inherit; font-size:.7rem;
+  cursor:pointer; white-space:nowrap}
+/* 용어 — 본문 속에서 눌러 뜻을 볼 수 있는 낱말. 밑줄만 긋고 버튼처럼 굴지 않는다.
+   문장 흐름을 끊지 않으면서 '누를 수 있다'만 알리면 된다. */
+.term{background:none; border:none; padding:0; font:inherit; color:inherit; cursor:pointer;
+  text-decoration:underline dotted rgba(109,179,242,.85); text-underline-offset:3px;
+  text-decoration-thickness:1.5px}
+.term:hover{color:#9fccf5}
+#termpop{position:fixed; z-index:78; display:none; max-width:min(84vw,300px);
+  background:linear-gradient(165deg,#1B2C26,#0E1815); border:1px solid rgba(109,179,242,.5);
+  border-radius:12px; padding:10px 13px; box-shadow:0 10px 28px rgba(0,0,0,.55); word-break:keep-all}
+#termpop.show{display:block}
+#termpop .tk{font-size:.82rem; font-weight:700; color:#8cc4f7; margin-bottom:4px}
+#termpop .td{font-size:.76rem; line-height:1.65; color:var(--txt)}
+#termpop .tall{margin-top:8px; font-size:.7rem; color:var(--txt-dim); background:none; border:none;
+  padding:0; font-family:inherit; cursor:pointer; text-decoration:underline}
+/* 사전 목록 */
+.gl-row{padding:9px 0; border-bottom:1px solid rgba(255,255,255,.06)}
+.gl-row:last-child{border-bottom:none}
+.gl-k{font-size:.82rem; font-weight:600; color:var(--gold); margin-bottom:2px}
+.gl-d{font-size:.75rem; line-height:1.65; color:var(--txt-dim); word-break:keep-all}
+#tut{position:fixed; inset:0; z-index:76; background:rgba(4,8,7,.82); backdrop-filter:blur(4px);
+  display:none; place-items:center; padding:16px}
+#tut.show{display:grid}
+#tut .panel{background:linear-gradient(165deg,#172621,#0E1815); border:1px solid var(--panel-line);
+  border-radius:20px; width:min(94vw,460px); max-height:88vh; display:flex; flex-direction:column;
+  box-shadow:0 24px 60px rgba(0,0,0,.6)}
+#tut .panel>header{display:flex; align-items:center; justify-content:space-between; padding:18px 20px 10px}
+#tut h2{font-size:1rem; letter-spacing:.06em; color:var(--gold); word-break:keep-all; line-height:1.4}
+#tut .close{background:none;border:none;color:var(--txt-dim);font-size:1.1rem;cursor:pointer}
+#tut-body{overflow-y:auto; padding:2px 20px 14px; flex:1}
+.tut-p{font-size:.83rem; line-height:1.75; color:var(--txt); margin-bottom:9px; word-break:keep-all}
+.tut-cards{display:flex; gap:5px; justify-content:center; flex-wrap:wrap; margin:14px 0 6px}
+.tut-cards .cardface.win{outline:2px solid var(--gold); outline-offset:2px;
+  transform:translateY(-7px); box-shadow:0 8px 18px rgba(0,0,0,.45)}
+.tut-note{font-size:.72rem; color:var(--txt-dim); text-align:center; word-break:keep-all}
+#tut footer{padding:10px 20px 18px; display:flex; align-items:center; gap:12px}
+#tut footer .btnrow{flex:1; margin:0}
+#tut-dots{display:flex; gap:5px}
+.tut-dot{width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.18); cursor:pointer}
+.tut-dot.on{background:var(--gold)}
 #settings{position:fixed; inset:0; z-index:70; background:rgba(4,8,7,.78); backdrop-filter:blur(4px); display:none; place-items:center; padding:16px}
 #settings.show{display:grid}
 #settings .panel{background:linear-gradient(165deg,#172621,#0E1815); border:1px solid var(--panel-line); border-radius:20px; width:min(94vw,460px); max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.6)}
@@ -338,6 +397,8 @@ body{
 .land-row{display:flex; align-items:center; justify-content:space-between; gap:10px}
 .land-lbl{font-size:.78rem; color:var(--txt-dim)}
 .land-seg{display:flex; gap:5px}
+.land-note{font-size:.7rem; color:var(--txt-dim); opacity:.8; line-height:1.5;
+  margin:-4px 0 2px; text-align:left; word-break:keep-all}
 .land-seg button{border:1px solid var(--panel-line); background:rgba(255,255,255,.05); color:var(--txt);
   border-radius:9px; padding:6px 11px; font:inherit; font-size:.76rem; cursor:pointer}
 .land-seg button.on{background:var(--gold); color:#241C05; border-color:var(--gold); font-weight:700}
@@ -436,6 +497,7 @@ body.replaying #seat-0 .rhand{display:none}
 #start .en{letter-spacing:.5em; font-size:.7rem; color:var(--txt-dim); margin:6px 0 22px; text-indent:.5em}
 #start p{font-size:.8rem; color:var(--txt-dim); line-height:1.9; margin-bottom:26px}
 #start .btn{width:100%; padding:14px 0; font-size:1rem}
+#start .btn+.btn{margin-top:9px}
 
 /* ===== v2 AI 복기 ===== */
 .an-card{display:flex; align-items:center; gap:10px; padding:10px 12px;
@@ -464,6 +526,15 @@ body.replaying #seat-0 .rhand{display:none}
   border-radius:10px; padding:7px 11px; font-size:.72rem; line-height:1.55;
   color:#e8ecf2; box-shadow:0 6px 18px rgba(0,0,0,.4); word-break:keep-all}
 #coach-tip div:first-child{color:#6db3f2; font-weight:700}
+/* 시트 조언 상자 — 코칭 버블과 같은 파랑 계열로 묶는다. 좌측 강조선 대신 틴트. */
+#sheet .coach-note{background:rgba(35,131,226,.10); border:1px solid rgba(35,131,226,.32);
+  border-radius:10px; padding:8px 11px; font-size:.74rem; line-height:1.6;
+  color:var(--txt-dim); word-break:keep-all}
+#sheet .coach-note .ch{color:#6db3f2; font-weight:700; font-size:.8rem; margin-bottom:3px}
+/* 추천 항목 — 내 선택(.on, 금색)과 겹치지 않게 파란 테두리로만 표시한다 */
+.chip.rec{border-color:#2383e2; box-shadow:inset 0 0 0 1px rgba(35,131,226,.35)}
+.chip.on.rec{border-color:var(--gold); box-shadow:none}
+.btn.rec{box-shadow:0 0 0 2px rgba(35,131,226,.45)}
 #replay-head .alt-tag{color:var(--gold); font-weight:700}
 .rank-row .style-tag{font-size:.68rem; color:#6db3f2; border:1px solid rgba(35,131,226,.45);
   border-radius:999px; padding:1px 7px; margin-left:6px; vertical-align:middle; word-break:keep-all}
@@ -499,6 +570,8 @@ body.replaying #seat-0 .rhand{display:none}
   #replay-bar button{padding:6px 9px; font-size:.72rem}
   #replay-bar .info{min-width:74px; font-size:.68rem}
   /* 복기 헤드는 맨 위에 두고, 그 대신 위쪽 좌석을 내려 자리를 만든다 */
+  #practice{top:92px; padding:7px 10px}
+  #practice-txt{font-size:.68rem}
   #replay-head{top:80px; font-size:.66rem; padding:5px 9px; max-width:90vw; line-height:1.4}
   body.replaying #seat-2, body.replaying #seat-3{top:136px}
   body.replaying #seat-0{bottom:calc(var(--card-h) + 152px)}
@@ -570,13 +643,25 @@ body.replaying #seat-0 .rhand{display:none}
     <div id="set-body"></div>
     <footer><button class="btn ghost" id="set-reset">리그 룰로 초기화</button><button class="btn primary" id="set-done">완료</button></footer>
   </div></div>
+  <div id="termpop"></div>
+  <div id="practice"><span id="practice-txt"></span><button id="practice-end"></button></div>
+  <div id="tut"><div class="panel">
+    <header><h2 id="tut-title"></h2><button class="close" id="tut-close">✕</button></header>
+    <div id="tut-body"></div>
+    <footer>
+      <div id="tut-dots"></div>
+      <div class="btnrow"><button class="btn ghost" id="tut-prev"></button>
+                          <button class="btn primary" id="tut-next"></button></div>
+    </footer>
+  </div></div>
   <div id="start"><div class="inner">
     <h1>마이티</h1><div class="en">MIGHTY · SOLO TABLE</div>
     <div style="font-size:.62rem;color:var(--txt-dim);letter-spacing:.1em;margin-bottom:14px"><span class="app-ver"></span></div>
     <p>5인 트릭테이킹의 정석, 마이티.<br>당신과 네 명의 컴퓨터 플레이어가 한 테이블에 앉습니다.<br>공약을 선언하고, 프렌드를 찾고, 판을 지배하세요.</p>
     <div id="landing-opts"></div>
+    <button class="btn primary" id="tut-btn">규칙 배우기</button>
     <button class="btn primary" id="start-btn">매치 시작</button>
-    <button class="btn ghost" id="start-set-btn" style="width:100%;margin-top:9px">룰 설정</button>
+    <button class="btn ghost" id="start-set-btn">룰 설정</button>
   </div></div>
 </div>
 
@@ -593,6 +678,9 @@ body.replaying #seat-0 .rhand{display:none}
 </script>
 <script>
 /*__INJECT:ai__*/
+</script>
+<script>
+/*__INJECT:tutorial__*/
 </script>
 <script>
 /*__INJECT:ui__*/

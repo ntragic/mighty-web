@@ -99,6 +99,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(sim.play.table.length === tableBefore + 1,
      '복제본 자신에게 착수가 반영되지 않았다 — 탐색이 굴러가지 않는다');
 
+  // 5) 엔진이 거부한 수는 기록에 남지 않아야 한다. 남으면 되돌리기가 그 기록을
+  //    재생하다 같은 자리에서 다시 던지고, 재생은 try로 감싸이지 않아 판이 멈춘다.
+  //    (turnrace 스트레스에서 'illegal play: 조커' 로 재현됐다)
+  const recBeforeBad = MUI.roundRec.actions.length;
+  try { g.act({ type: 'play', card: { suit: 'S', rank: 99 } }); } catch (e) { /* 거부가 정상 */ }
+  ok(MUI.roundRec.actions.length === recBeforeBad,
+     `거부당한 수가 기록에 남았다 (${recBeforeBad} → ${MUI.roundRec.actions.length}) — ` +
+     '되돌리기가 그 기록을 재생하다 죽는다');
+
   console.log(pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FAIL:', e && e.stack); process.exit(1); });

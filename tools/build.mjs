@@ -9,6 +9,7 @@
  *   engine → 전역 스코프 (window.MightyEngine 노출)
  *   master → IIFE 로 감싼다 (엔진과 SUITS 등 상수명이 겹친다)
  *   ai     → 전역 스코프 (window.MightyAI 노출)
+ *   tutorial → 전역 스코프 (window.MightyTutorial — 규칙 튜토리얼 슬라이드 텍스트)
  *   ui     → 전역 스코프 (게임 드라이버)
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,6 +25,7 @@ const parts = {
   master: read('src/mighty-master.js'),
   analysis: read('src/mighty-analysis.js'),
   ai: read('src/mighty-ai.js'),
+  tutorial: read('src/tutorial.js'),
   ui: read('src/ui.js'),
 };
 

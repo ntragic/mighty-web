@@ -70,8 +70,20 @@ const I18N_EN = {
   '대안 라인':'Alt line', '실제 라인':'Actual line', '보기':'View', '닫기':'Close',
   '대안 라인(가정)':'alt line (hypothetical)',
   '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
-  '코칭 (마스터 추천 카드)':'Coaching (Master hint)',
-  '플레이 중 마스터가 낼 카드를 손패에 표시합니다':'Marks the card Master would play during your turn',
+  '코칭 (추천과 근거)':'Coaching (suggestion & reason)',
+  '초보자 모드':'Beginner mode',
+  '규칙 배우기':'Learn the rules', '규칙 튜토리얼':'Rules tutorial',
+  '연습판':'Practice round', '연습 한 판 해보기':'Try a practice round',
+  '용어 사전':'Glossary', '전체 용어 보기':'See all terms', '닫기':'Close',
+  '진짜 판 시작':'Start a real match', '연습 끝내기':'End practice',
+  '연습이 끝났습니다. 이제 진짜 판을 시작해 보세요.':
+    'Practice over. Time for a real match.',
+  '다른 사람이 두는 중입니다.':'Another player is thinking.',
+  '튜토리얼 다시 보기':'Replay the tutorial', '시작하기':'Start playing',
+  '이전':'Back', '다음':'Next',
+  '추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다':
+    'Shows the suggested move and why on every turn, and slows the pace down',
+  '내 차례마다 추천 수와 그 이유를 보여줍니다':'Shows the suggested move and why, on every turn of yours',
   '끔':'Off', '켬':'On', '기대상금':'EV', '평균':'avg',
   '매치 AI 요약':'Match AI summary', '이번 매치 결정적 순간':'Key moments of this match',
   '분석할 라운드가 없습니다':'No rounds to analyze',
@@ -273,6 +285,63 @@ const TF = {
   coachPts:(n,b)=> LANG==='en'
     ? `${n} point card${n>1?'s':''} at stake${b?` · ${b} behind`:''}`
     : `점수카드 ${n}장 걸림${b?` · 뒤 ${b}명`:''}`,
+  /* 비딩·바닥패·프렌드 국면 조언 — 규칙기반 조언자의 근거를 말로 편다.
+     플레이 국면(coach*)과 달리 '무엇이 좋은 수인가'에 더해 '왜 그 규칙 때문인가'를
+     말한다. 규칙을 모르는 사람이 읽는 문장이라 용어를 풀어 쓴다. */
+  advBid:(c,g)=> LANG==='en' ? `Suggested — bid ${c}${gLabel(g)}` : `추천 — ${c}${gLabel(g)} 공약`,
+  advPass:()=> LANG==='en' ? 'Suggested — pass' : '추천 — 패스',
+  advEst:(n)=> LANG==='en' ? `Hand is worth about ${n} points` : `이 손패의 기대 점수 약 ${n}점`,
+  advShort:(n)=> LANG==='en' ? `Below the ${n} minimum — passing costs nothing`
+                             : `최소 공약 ${n}에 못 미칩니다 — 패스는 손해가 없습니다`,
+  advTrumpLen:(g,n)=> LANG==='en' ? `${gLabel(g)} ${n} long — your trump suit`
+                                  : `${gLabel(g)} ${n}장 — 기루다로 삼을 무늬`,
+  advHasM:()=> LANG==='en' ? 'You hold the Mighty — one trick guaranteed'
+                           : '마이티 보유 — 확정 트릭 1장',
+  advHasJ:()=> LANG==='en' ? 'You hold the Joker — near-certain trick'
+                           : '조커 보유 — 사실상 확정 트릭',
+  advAces:(n)=> LANG==='en' ? `${n} side ace${n>1?'s':''} outside trump` : `기루다 밖 A ${n}장`,
+  advVoid:(n)=> LANG==='en' ? `${n} empty suit${n>1?'s':''} — you can trump those in`
+                            : `빈 무늬 ${n}개 — 기루다로 끊을 수 있습니다`,
+  advBidRule:(n)=> LANG==='en'
+    ? `A bid promises how many of the ${n} point cards your side will take`
+    : `공약은 우리 편이 가져올 점수카드 수 약속입니다 (전체 ${n}장)`,
+  advBury:(list)=> LANG==='en' ? `Suggested — bury ${list}` : `추천 — ${list} 묻기`,
+  advBuryKeep:()=> LANG==='en' ? 'Point cards (10 J Q K A) and trumps stay in hand'
+                               : '점수카드(10 J Q K A)와 기루다는 남깁니다',
+  advBuryVoid:()=> LANG==='en' ? 'Emptying a short suit lets you trump it later'
+                               : '짧은 무늬를 비우면 나중에 기루다로 끊을 수 있습니다',
+  advRevise:(c,g)=> LANG==='en' ? `Also worth revising the bid to ${c}${gLabel(g)}`
+                                : `공약을 ${c}${gLabel(g)}로 수정할 만합니다`,
+  advFriendCard:(nm)=> LANG==='en' ? `Suggested — call ${nm} as friend` : `추천 — ${nm} 프렌드`,
+  advFriendFirst:()=> LANG==='en' ? 'Suggested — first-trick friend' : '추천 — 초구 프렌드',
+  advFriendNone:()=> LANG==='en' ? 'Suggested — no friend (go solo)' : '추천 — 노프렌드(단독)',
+  advFriendWhy:()=> LANG==='en' ? 'Call the strongest card you do not hold'
+                                : '내가 안 가진 카드 중 가장 센 것을 부릅니다',
+  advFriendSolo:()=> LANG==='en' ? 'You hold both Mighty and Joker — strong enough alone'
+                                 : '마이티와 조커를 모두 쥐었습니다 — 단독으로 충분',
+  pracBid:()=> LANG==='en'
+    ? 'Pick a suit, then declare. The blue outline is the suggestion.'
+    : '무늬를 고르고 공약 선언을 누르세요. 파란 테두리가 추천입니다.',
+  pracFloor:()=> LANG==='en'
+    ? 'Choose three cards to bury. The AI badges mark the suggestion.'
+    : '묻을 3장을 손패에서 고르세요. AI 표식이 추천입니다.',
+  pracFriend:()=> LANG==='en'
+    ? 'Call a friend — the strongest card you do not hold.'
+    : '프렌드를 부르세요. 내가 안 가진 카드 중 가장 센 것입니다.',
+  pracPlay:()=> LANG==='en'
+    ? 'Tap a card to play it. The AI badge is the suggestion, with the reason beside it.'
+    : '카드를 눌러 내세요. AI 표식이 추천이고, 그 이유가 옆에 뜹니다.',
+  pracDone:(n)=> LANG==='en'
+    ? `That is every rule in play — ${n} tricks in. Play on, or start a real match now.`
+    : `규칙은 여기까지 다 나왔습니다 (${n}트릭). 계속 둬도 되고, 지금 진짜 판을 시작해도 됩니다.`,
+  ruleLead:()=> LANG==='en' ? 'You lead — any card is legal' : '내가 리드 — 아무 카드나 낼 수 있습니다',
+  ruleFollow:(g)=> LANG==='en' ? `${gLabel(g)} was led — you must follow suit`
+                               : `리드 무늬는 ${gLabel(g)} — 있으면 반드시 따라야 합니다`,
+  ruleFree:()=> LANG==='en' ? 'You are void in the led suit — any card is legal'
+                            : '리드 무늬가 없습니다 — 아무 카드나 낼 수 있습니다',
+  advFriendFirstWhy:()=> LANG==='en'
+    ? 'No strong card left to call — whoever wins the first trick becomes your friend'
+    : '부를 만한 강한 카드가 없습니다 — 첫 트릭을 가져가는 사람이 프렌드가 됩니다',
   statsLine:(n,w,dn,dw,pz)=> LANG==='en'
     ? `Lifetime ${n} rounds · win ${w}% · declarer ${dw}/${dn} · ${pz}/round`
     : `누적 ${n}판 · 내 승률 ${w}% · 주공일 때 ${dw}/${dn} · 판당 ${pz}`,
@@ -390,8 +459,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.2';
-const APP_BUILD = '2026-09-07 빌드 — 모바일 하단 배치 견고화';
+const APP_VERSION = 'v3.0.7';
+const APP_BUILD = '2026-09-07 빌드 — 용어 툴팁과 사전';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -424,7 +493,7 @@ function defaultSettings(){
     preset:'league',
     match:{ mode:'rounds', rounds:10, targetPrize:20000, dealerRule:'friend' },
     ui:{ speed:'normal', difficulty:'intermediate', sound:true, lang:null, autoClaim:true, undo:true,
-         coach:false },
+         coach:false, beginner:null, tutorialDone:false },
     _tierV:2,
     names:['나','서준','하린','도윤','유나'],
     engine:{
@@ -488,6 +557,21 @@ async function loadSettings(){
         engine:{...d.engine, ...(s.engine||{}), scoring:{...d.engine.scoring, ...((s.engine||{}).scoring||{})}} };
     }
   }catch(e){}
+}
+/* 초보자 모드 — 새 화면이 아니라 묶음이다. 켜면 안내가 켜지고 판이 느려진다.
+ * 좌석 성향은 여전히 감춘다(CLAUDE.md 규율). 끌 때 나머지를 되돌리지는 않는다 —
+ * 그 사이 사용자가 직접 만진 값일 수 있고, 되돌리면 그 조정이 사라진다. */
+function applyBeginner(on){
+  settings.ui.beginner = !!on;
+  if (!on) return;
+  settings.ui.coach = true;         // 추천과 근거
+  settings.ui.undo = true;          // 되돌리기 — 실수해도 배울 수 있게
+  settings.ui.speed = 'slow';       // 봇이 몰아치면 무슨 일이 일어났는지 못 본다
+  settings.ui.difficulty = 'intermediate';
+  // 치트시트 — 남은 카드를 세는 법을 눈으로 익히게 한다. 다만 좁은 화면에서는
+  // 열지 않는다: 390px에서 재보니 시트가 판 전체를 덮어 첫 판을 오히려 가린다.
+  // 720px는 모바일 규칙이 갈리는 기존 분기점이다.
+  cheatOpen = (typeof window!=='undefined' && window.innerWidth > 720);
 }
 function applyPreset(key){
   const d = defaultSettings();
@@ -557,11 +641,33 @@ function renderSetGeneral(b,S){
     : masterState==='loading' ? t('AI 모델 로딩 중…')
     : masterState==='failed' ? t('AI 모델을 불러오지 못했습니다. 규칙 기반으로 대체 진행합니다.')
     : tf('nnFirstUse', nnSizeMB(currentTier()))));
-  // v2 코칭 — 기본 OFF. 켜면 마스터 모델을 로드해 내 차례에 추천 카드를 표시한다
-  b.append(segRow(t('코칭 (마스터 추천 카드)'), t('플레이 중 마스터가 낼 카드를 손패에 표시합니다'),
+  // 코칭 — 기본 OFF. 켜면 네 국면 모두에서 추천과 근거를 보여준다.
+  // 모델이 없으면 규칙기반으로 돌고, 모델이 오면 플레이 국면 추천만 그쪽으로 바뀐다.
+  b.append(segRow(t('코칭 (추천과 근거)'), t('내 차례마다 추천 수와 그 이유를 보여줍니다'),
     [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
     ()=>S.ui.coach?'on':'off',
-    v=>{ S.ui.coach=(v==='on'); if(S.ui.coach) ensureMaster(); coachUpdate(); }));
+    // 끌 때 시트의 조언 상자까지 지우려면 시트를 다시 그려야 한다
+    v=>{ S.ui.coach=(v==='on');
+         if(S.ui.coach && !S.ui.beginner) ensureMaster();
+         renderHand(); renderSheet(); }));
+  // 규칙 튜토리얼 — 언제든 다시 볼 수 있게 둔다
+  {
+    const row=el('div','set-row');
+    row.append(el('div','lbl', t('규칙 튜토리얼')));
+    const seg=el('div','seg');
+    const btn=el('button','chip', t('튜토리얼 다시 보기'));
+    btn.id='set-tut-btn';
+    btn.onclick=()=>openTutorial();
+    const gl=el('button','chip', t('용어 사전'));
+    gl.id='set-gloss-btn';
+    gl.onclick=()=>openGlossary();
+    seg.append(btn, gl); row.append(seg); b.append(row);
+  }
+  // 초보자 모드 — 코칭 바로 위에 둔다. 켜면 코칭까지 같이 켜진다.
+  b.append(segRow(t('초보자 모드'), t('추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다'),
+    [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
+    ()=>S.ui.beginner?'on':'off',
+    v=>{ applyBeginner(v==='on'); renderCheat(); applyStatic(); renderHand(); renderSheet(); }));
   // 사운드·속도
   b.append(el('div','set-sec',t('사운드')));
   b.append(segRow(t('컴퓨터 속도'),'', [{v:'fast',l:t('빠름')},{v:'normal',l:t('보통')},{v:'slow',l:t('느림')}],
@@ -1003,7 +1109,8 @@ function renderHud(){
   const M=settings.match;
   const prog = M.mode==='rounds' ? tf('hudRounds', roundNo, M.rounds)
              : M.mode==='target' ? tf('hudTarget', roundNo, M.targetPrize) : tf('hudPlain', roundNo);
-  $('#hud-round').innerHTML = roundNo?tf('hudDealer', prog, NAMES[dealer]):'';
+  $('#hud-round').innerHTML = practiceOn ? tf('hudDealer', t('연습판'), NAMES[dealer])
+                            : roundNo ? tf('hudDealer', prog, NAMES[dealer]) : '';
   const ct=game&&game.contract;
   $('#hud-contract').innerHTML = ct?tf('hudContract', contractText(ct), NAMES[game.declarer]):'';
   if (ct) $('#hud-contract').innerHTML += friendDeclText();
@@ -1236,9 +1343,10 @@ let bidSel={giruda:null,count:null};
 let reviseSel={on:false, giruda:null, count:null};
 function renderSheet(){
   const sh=$('#sheet');
-  if (!game || busy){ sh.classList.remove('show'); return; }
+  const hide=()=>{ sh.classList.remove('show'); sh.innerHTML=''; };
+  if (!game || busy){ hide(); return; }
   const phase=game.phase, cur=game.currentPlayer;
-  if (cur!==HUMAN || !['bidding','floor','friend'].includes(phase)){ sh.classList.remove('show'); return; }
+  if (cur!==HUMAN || !['bidding','floor','friend'].includes(phase)){ hide(); return; }
   sh.classList.add('show'); sh.innerHTML='';
   if (phase==='bidding') sheetBidding(sh);
   else if (phase==='floor') sheetFloor(sh);
@@ -1248,9 +1356,11 @@ function sheetBidding(sh){
   const best=game.bidding.best;
   sh.append(el('h3','', t('공약 선언')),
     el('div','hint', best?tf('bidBest', NAMES[best.player], best.count, best.giruda):tf('bidFirst', game.config.minBid)));
+  const rec=sheetAdvice(sh);          // 추천은 맨 위에 — 규칙을 모르면 여기부터 읽는다
+  const recBid = rec && rec.type==='bid' ? rec : null;
   const suits=el('div','chips');
   for(const g of ['S','D','H','C','N']){
-    const b=el('button','chip '+suCls(g)+(bidSel.giruda===g?' on':''), g==='N'?t('노기루다'):SUIT_GLYPH[g]+' '+t({S:'스페이드',D:'다이아',H:'하트',C:'클로버'}[g]||''));
+    const b=el('button','chip '+suCls(g)+(bidSel.giruda===g?' on':'')+(recBid&&recBid.giruda===g?' rec':''), g==='N'?t('노기루다'):SUIT_GLYPH[g]+' '+t({S:'스페이드',D:'다이아',H:'하트',C:'클로버'}[g]||''));
     b.onclick=()=>{
       bidSel.giruda=g;
       const av=game.legalActions().filter(a=>a.type==='bid'&&a.giruda===g).map(a=>a.count);
@@ -1266,7 +1376,8 @@ function sheetBidding(sh){
   const list=bidSel.giruda?av(bidSel.giruda):[];
   const lo=game.config.minBid - game.config.noGirudaBidDiscount;
   for(let c=lo;c<=20;c++){
-    const b=el('button','chip'+(bidSel.count===c?' on':''), c);
+    const b=el('button','chip'+(bidSel.count===c?' on':'')
+      +(recBid&&recBid.giruda===bidSel.giruda&&recBid.count===c?' rec':''), c);
     b.disabled=!list.includes(c);
     b.onclick=()=>{ bidSel.count=c; renderSheet(); };
     counts.append(b);
@@ -1281,7 +1392,7 @@ function sheetBidding(sh){
     row.append(dm);
   }
   const ready=!!(bidSel.giruda&&bidSel.count);
-  const pass=el('button','btn '+(ready?'quiet':'ghost'),t('패스'));
+  const pass=el('button','btn '+(ready?'quiet':'ghost')+(rec&&rec.type==='pass'?' rec':''),t('패스'));
   pass.onclick=()=>humanAct({type:'pass'}, tf('logPass', NAMES[HUMAN]));
   const go=el('button','btn primary'+(ready?' ready':''), ready?tf('bidBtn', bidSel.count, bidSel.giruda):t('공약 선언'));
   go.disabled=!ready;
@@ -1296,6 +1407,7 @@ function sheetBidding(sh){
 function sheetFloor(sh){
   sh.append(el('h3','',t('바닥패 교환')),
     el('div','hint',t('바닥패 3장이 손패에 합쳐졌습니다(● 표시). 묻을 3장을 선택하세요. 묻은 점수카드는 여당에 귀속됩니다.')));
+  sheetAdvice(sh);                    // 묻을 3장은 손패에도 AI 표식으로 찍힌다
   // 공약 수정
   const cur=game.contract;
   const revRow=el('div','chips');
@@ -1352,17 +1464,30 @@ function sheetFriend(sh){
   sh.append(el('h3','',t('프렌드 지정')));
   const hand=game.hands[HUMAN];
   const m=game.mightyCard;
+  const rec=sheetAdvice(sh);
+  const recCard = rec && rec.mode==='card' ? rec.card : null;
   const quick=el('div','chips');
   const has=c=>hand.some(h=>E.sameCard(h,c));
-  const mk=(label,act)=>{ const b=el('button','chip',label); b.onclick=act; return b; };
-  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티')))));
-  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드'))));
+  const mk=(label,act,on)=>{ const b=el('button','chip'+(on?' rec':''),label); b.onclick=act; return b; };
+  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티'))),
+    recCard && E.sameCard(recCard, m)));
+  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드')),
+    recCard && E.isJoker(recCard)));
   if (game.contract.giruda!=='N'){
     const gA={suit:game.contract.giruda, rank:14};
-    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A')))));
+    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A'))),
+      recCard && E.sameCard(recCard, gA)));
   }
-  quick.append(mk(t('초구 프렌드'), ()=>callFriend({type:'friend',mode:'first'},t('초구 프렌드'))));
-  quick.append(mk(t('노프렌드'), ()=>callFriend({type:'friend',mode:'none'},t('노프렌드'))));
+  quick.append(mk(t('초구 프렌드'), ()=>callFriend({type:'friend',mode:'first'},t('초구 프렌드')),
+    rec && rec.mode==='first'));
+  quick.append(mk(t('노프렌드'), ()=>callFriend({type:'friend',mode:'none'},t('노프렌드')),
+    rec && rec.mode==='none'));
+  // 추천이 빠른 선택에 없는 카드(기루다 K 등)면 그 카드를 칩으로 붙인다.
+  // 안 그러면 '추천 — ♠K 프렌드'를 읽고도 누를 곳이 없어 직접 선택까지 펼쳐야 한다.
+  if (recCard && !quick.querySelector('.rec'))
+    quick.append(mk(cardLabel(recCard),
+      ()=>callFriend({type:'friend',mode:'card',card:recCard}, tf('cardFriend', cardLabel(recCard))),
+      true));
   quick.append(mk(t('직접 선택')+(friendCustom?' ▲':' ▼'), ()=>{ friendCustom=!friendCustom; renderSheet(); }));
   sh.append(quick);
   if (friendCustom){
@@ -1871,9 +1996,15 @@ function instrument(g){
   Object.defineProperty(g, 'act', {
     enumerable: false, configurable: true, writable: true,
     value: function(action){
+      // 엔진이 받아들인 뒤에 기록한다. 먼저 기록하면 거부당한 수(엔진이 던진 수)까지
+      // 기록에 남고, 나중에 되돌리기가 그 기록을 재생하다 같은 자리에서 다시 던진다
+      // — 재생은 try로 감싸이지 않아 판이 통째로 멈춘다.
+      // p·ph는 실행 전 값이라야 하므로 미리 잡아 둔다.
+      const p = this.currentPlayer, ph = this.phase;
+      const ret = base.call(this, action);
       if (roundRec && this === g)
-        roundRec.actions.push({ p: this.currentPlayer, ph: this.phase, a: JSON.parse(JSON.stringify(action)) });
-      return base.call(this, action);
+        roundRec.actions.push({ p, ph, a: JSON.parse(JSON.stringify(action)) });
+      return ret;
     },
   });
 }
@@ -2111,6 +2242,93 @@ function toggleAltLine(){
 }
 
 /* ---------------- v2 코칭 (마스터 추천 카드 + 근거 버블) ---------------- */
+/* ---------------- 규칙기반 조언자 ----------------
+ * 코칭은 지금까지 마스터 모델이 있어야만 돌았고, 플레이 국면만 다뤘다. 초보자에게
+ * 16MB 내려받기를 강요하면 첫 판을 두기도 전에 이탈하고, 정작 막막한 공약 선언·
+ * 바닥패 묻기·프렌드 지정에는 아무 안내가 없었다.
+ *
+ * 규칙기반 고급 에이전트는 네 국면 전부에 답을 내고, evalHand가 근거를 성분으로
+ * 쪼개 놓아(기루다 길이·마이티/조커 보유·사이드 A·보이드) 그대로 말로 풀 수 있다.
+ * 신경망 추천은 왜 그런지를 말해주지 못하므로, 설명이 필요한 국면에서는 이쪽이 낫다.
+ *
+ * 성향은 밸런스 고정, rng는 고정 시드다 — 같은 자리에서 추천이 흔들리면 신뢰가 깨진다.
+ * 매번 새로 만드는 이유도 그것이다(rng 상태가 넘어가면 재렌더마다 답이 달라진다).
+ */
+function ruleAdvice(){
+  if (!game) return null;
+  try{
+    const ag=new E.HeuristicAgent(E.PERSONAS.balanced, E.makeRng(0x4D2), {tier:'advanced'});
+    return { ag, act: ag.act(game) };
+  }catch(e){ return null; }        // 조언은 조용히 실패한다 — 게임은 계속돼야 한다
+}
+
+/** 기루다가 정해지기 전에도 마이티는 정해진다 — 기루다가 스페이드면 다이아 A. */
+function mightyFor(g){ return g==='S' ? {suit:'D',rank:14} : {suit:'S',rank:14}; }
+
+/** 공약 근거로 쓸 손패 성분. evalHand가 보는 것과 같은 관점으로 센다. */
+function handShape(hand, g){
+  const m=mightyFor(g), by={S:0,D:0,H:0,C:0};
+  let aces=0, hasM=false, hasJ=false;
+  for(const c of hand){
+    if (E.isJoker(c)){ hasJ=true; continue; }
+    by[c.suit]++;
+    if (E.sameCard(c,m)) hasM=true;
+    else if (c.rank===14 && c.suit!==g) aces++;
+  }
+  let voids=0;
+  if (g!=='N') for(const s of E.SUITS) if (s!==g && by[s]===0) voids++;
+  return { aces, hasM, hasJ, voids, len: g==='N' ? 0 : by[g] };
+}
+
+function adviceBidding(ag, act){
+  const hand=game.hands[HUMAN], R=[];
+  if (act.type!=='bid'){
+    const best=ag.bestGiruda(hand, game);
+    R.push(TF.advPass(), TF.advEst(Math.max(0, Math.round(best.est))),
+           TF.advShort(game.config.minBid));
+  } else {
+    const g=act.giruda, sh=handShape(hand, g);
+    R.push(TF.advBid(act.count, g), TF.advEst(Math.round(ag.evalHand(hand, g, game).est)));
+    if (g!=='N' && sh.len) R.push(TF.advTrumpLen(g, sh.len));
+    if (sh.hasM) R.push(TF.advHasM());
+    if (sh.hasJ) R.push(TF.advHasJ());
+    if (sh.aces) R.push(TF.advAces(sh.aces));
+    if (sh.voids) R.push(TF.advVoid(sh.voids));
+  }
+  R.push(TF.advBidRule(E.TOTAL_POINT_CARDS));
+  return R;
+}
+
+function adviceFloor(act){
+  const R=[TF.advBury(act.discard.map(cardLabel).join(' ')),
+           TF.advBuryKeep(), TF.advBuryVoid()];
+  if (act.revise) R.push(TF.advRevise(act.revise.count, act.revise.giruda));
+  return R;
+}
+
+function adviceFriend(act){
+  if (act.mode==='none') return [TF.advFriendNone(), TF.advFriendSolo()];
+  if (act.mode==='first') return [TF.advFriendFirst(), TF.advFriendFirstWhy()];
+  return [TF.advFriendCard(cardLabel(act.card)), TF.advFriendWhy()];
+}
+
+/** 시트 맨 위 조언 상자. 추천 액션을 돌려줘 칩 강조에 쓴다. */
+function sheetAdvice(sh){
+  if (!settings.ui.coach) return null;
+  const adv=ruleAdvice(); if (!adv) return null;
+  const act=adv.act;
+  let lines=null;
+  if (game.phase==='bidding') lines=adviceBidding(adv.ag, act);
+  else if (game.phase==='floor' && act.type==='exchange') lines=adviceFloor(act);
+  else if (game.phase==='friend' && act.type==='friend') lines=adviceFriend(act);
+  if (!lines) return null;
+  const box=el('div','coach-note');
+  box.append(el('div','ch', withTerms(lines[0])));
+  for (const l of lines.slice(1)) box.append(el('div','cb', withTerms(l)));
+  sh.append(box);
+  return act;
+}
+
 let coachGen=0;
 let coachTipEl=null;
 function coachTipHide(){ if(coachTipEl){ coachTipEl.remove(); coachTipEl=null; } }
@@ -2243,8 +2461,26 @@ async function coachUpdate(){
   document.querySelectorAll('#hand .hcard.coach').forEach(e=>e.classList.remove('coach'));
   coachTipHide();
   if (!settings.ui.coach || !game || replay) return;
-  if (game.phase!=='play' || game.currentPlayer!==HUMAN || busy) return;
-  if (!masterSess){ ensureMaster(); return; }        // 코칭은 대표 모델이 필요하다
+  if (game.currentPlayer!==HUMAN || busy) return;
+
+  // 바닥패: 묻을 3장을 손패에 찍는다. 근거는 시트의 조언 상자가 말한다.
+  if (game.phase==='floor'){
+    const adv=ruleAdvice();
+    if (adv && adv.act.type==='exchange') for (const c of adv.act.discard) markCoach(E.cardId(c));
+    return;
+  }
+  if (game.phase!=='play') return;
+
+  // 모델이 아직 없으면 비워두는 대신 규칙기반 추천을 먼저 보여준다. 16MB를
+  // 기다리는 동안 아무 안내도 못 받던 구간이 여기였다. 모델이 오면 갈아끼운다.
+  if (!masterSess){
+    const adv=ruleAdvice();
+    if (adv && adv.act.type==='play')
+      markCoach(E.cardId(adv.act.card),
+                beginnerPlayRule().concat(coachReasons(game, adv.act, false)));
+    if (!settings.ui.beginner) ensureMaster();   // 초보자에게 16MB를 강요하지 않는다
+    return;
+  }
   try{
     // 마스터 좌석의 실제 플레이 경로와 완전히 동일해야 한다:
     // chooseAction(정책) → actionToEngine → keyCardGuard(낭비 차단 후처리).
@@ -2258,13 +2494,29 @@ async function coachUpdate(){
     const act=await MightyAI.applyGuards(masterSess, ortLib, game, HUMAN, raw);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
-    const cid=E.cardId(act.card);
-    const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
-    if (elc){
-      elc.classList.add('coach');
-      coachTipShow(elc, coachReasons(game, act, guardFired));
-    }
+    markCoach(E.cardId(act.card),
+              beginnerPlayRule().concat(coachReasons(game, act, guardFired)));
   }catch(e){ /* 코칭은 조용히 실패 */ }
+}
+
+/** 초보자 모드에서만 붙는 규칙 한 줄. coachReasons는 건드리지 않는다 —
+ *  그 함수의 출력 계약(1~3줄)에 기대는 곳이 있다(tests/smoke.test.js). */
+function beginnerPlayRule(){
+  if (!settings.ui.beginner || !game || game.phase!=='play') return [];
+  const pl=game.play;
+  if (!pl.table.length) return [TF.ruleLead()];
+  const led=pl.ledSuit;
+  if (!led) return [];
+  return [game.hands[HUMAN].some(c=>!E.isJoker(c) && c.suit===led)
+    ? TF.ruleFollow(led) : TF.ruleFree()];
+}
+
+/** 손패의 그 카드에 AI 표식을 찍고, 근거가 있으면 버블까지 띄운다. */
+function markCoach(cid, lines){
+  const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
+  if (!elc) return;
+  elc.classList.add('coach');
+  if (lines && lines.length) coachTipShow(elc, lines);
 }
 
 /** 매치 전 라운드 통합 AI 요약 — 결정적 순간 상위 3선 */
@@ -2760,12 +3012,12 @@ function refreshTools(){
 
 /* ---------------- 게임 루프 ---------------- */
 function render(){
-  if (replay){ renderReplay(); refreshTools(); return; }
+  if (replay){ renderReplay(); refreshTools(); renderPractice(); return; }
   document.querySelectorAll('.rhand').forEach(e=>e.remove());
   for (let p=1;p<5;p++){ const bk=$('#backs-'+p); if (bk) bk.style.display=''; }
   renderSeats(); renderHud(); renderPuck(); renderBidChips();
   renderTrick(); renderHand(); renderSheet(); renderCheat();
-  refreshTools();
+  refreshTools(); renderPractice();
 }
 function pump(){
   if (!game) return;
@@ -2885,6 +3137,10 @@ function showSettlement(){
   // 총점·기록·효과음은 라운드당 한 번만. 복기 후 정산 화면을 다시 띄워도 중복 반영되지 않는다.
   if (!settledRound){
     settledRound = true;
+    // 연습판은 총점·생애 통계·매치 기록 어디에도 남기지 않는다.
+    if (practiceOn){
+      if (humanWin) SFX.winJingle(); else SFX.loseJingle();
+    } else {
     if (roundRec && !roundRec.result){
       roundRec.result = JSON.parse(JSON.stringify(r));
       matchLog.push(roundRec);
@@ -2896,6 +3152,7 @@ function showSettlement(){
     if (HUMAN===r.declarer){ lifeStats.declR++; if (r.win) lifeStats.declW++; }
     lifeStats.prize+=r.prizes[HUMAN];
     saveStats();
+    }
   }
   const box=$('#modal-box');
   box.innerHTML=`
@@ -2915,7 +3172,11 @@ function showSettlement(){
   const M=settings.match;
   matchOver = (M.mode==='rounds' && roundNo>=M.rounds) ||
               (M.mode==='target' && Math.max(...totals)>=M.targetPrize);
-  $('#next-btn').textContent = matchOver ? t('최종 결과 보기') : t('다음 판');
+  $('#next-btn').textContent = practiceOn ? t('진짜 판 시작')
+                             : matchOver ? t('최종 결과 보기') : t('다음 판');
+  if (practiceOn) for (const id of ['#ai-rv-btn','#rv-btn','#ex-btn']){
+    const b=$(id); if (b) b.disabled=true;      // 연습은 기록을 남기지 않아 열 것이 없다
+  }
   $('#modal').classList.add('show');
   const rvb=$('#rv-btn'), exb=$('#ex-btn'), arb=$('#ai-rv-btn');
   if (rvb) rvb.onclick=()=>{ $('#modal').classList.remove('show'); startReplay(matchLog[matchLog.length-1]); };
@@ -2923,6 +3184,7 @@ function showSettlement(){
   if (exb) exb.onclick=()=>exportRound(matchLog[matchLog.length-1]);
   $('#next-btn').onclick=()=>{
     $('#modal').classList.remove('show');
+    if (practiceOn){ endPractice(); return; }
     if (matchOver){ showFinal(); return; }
     // 딜러 룰: 전 라운드 프렌드가 딜러 (노프렌드/셀프면 주공)
     if (settings.match.dealerRule==='friend') dealer = (r.friend!==null ? r.friend : r.declarer);
@@ -3122,8 +3384,9 @@ function startRound(inc){
   claimMode=false; claimShown=false; claimBy=null; bidFlash=null; resetBidChips();
   if (botTable && botTable.reset) botTable.reset();
   trumpSeenThisRound=false;
-  const cfg = buildEngineConfig();
-  cfg.seed = (Math.random()*2147483647)|0;   // 복기·되돌리기를 위한 재현 시드
+  const cfg = practiceOn ? practiceConfig() : buildEngineConfig();
+  cfg.seed = practiceOn ? PRACTICE_SEED       // 연습판은 늘 같은 패라야 안내가 맞는다
+                        : (Math.random()*2147483647)|0;   // 복기·되돌리기를 위한 재현 시드
   undoUsed = { bidding:0, play:0 };
   settledRound=false; settleLogged=false;
   stateGen++; cancelOpenModal();
@@ -3135,6 +3398,248 @@ function startRound(inc){
   render();
   logLine(tf('logRoundStart', roundNo, NAMES[dealer]));
   pump();
+}
+
+/* ---------------- 용어 툴팁과 미니 사전 ----------------
+ * 규칙을 한 번 읽었다고 용어가 붙지는 않는다. 판이 도는 중에 '기루다가 뭐였지'가
+ * 나오면 그 자리에서 답이 나와야 한다. 치트시트는 이미 규칙을 아는 사람용이라
+ * 이 자리를 못 메운다.
+ *
+ * 표시는 초보자 모드에서만, 그리고 우리가 만든 안내 문구(조언 상자·연습 띠·튜토리얼
+ * 본문)에만 넣는다. 화면의 모든 문자열을 훑으면 사용자가 지은 이름까지 건드리게 되고,
+ * 한 문단이 밑줄투성이가 된다. 한 문단에 같은 용어는 한 번만 표시한다.
+ */
+function termList(){
+  try{ return globalThis.MightyTutorial ? MightyTutorial.terms(LANG) : []; }
+  catch(e){ return []; }
+}
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escHtml = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let termRe = null, termReLang = null;
+function termRegex(){
+  if (termRe && termReLang === LANG) return termRe;
+  const alts = [];
+  for (const x of termList()) for (const m of x.m) alts.push(escRe(m));
+  alts.sort((a,b)=>b.length-a.length);          // 긴 표제어 우선 — '노기루다'가 먼저다
+  termReLang = LANG;
+  termRe = alts.length ? new RegExp('(' + alts.join('|') + ')', LANG==='en' ? 'gi' : 'g') : null;
+  return termRe;
+}
+/** 평문을 받아 용어에 밑줄을 입힌 HTML을 돌려준다. 평문만 넣어야 한다. */
+function withTerms(text){
+  const plain = escHtml(text);
+  if (!settings.ui.beginner) return plain;
+  const re = termRegex();
+  if (!re) return plain;
+  const used = new Set();
+  let out = '', last = 0, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(text)) !== null){
+    const key = m[0].toLowerCase();
+    out += escHtml(text.slice(last, m.index));
+    if (used.has(key)) out += escHtml(m[0]);
+    else {
+      used.add(key);
+      out += '<button class="term" data-term="' + escHtml(m[0]) + '">' + escHtml(m[0]) + '</button>';
+    }
+    last = m.index + m[0].length;
+  }
+  return out + escHtml(text.slice(last));
+}
+function findTerm(word){
+  const w = String(word).toLowerCase();
+  for (const x of termList()) if (x.m.some(v => v.toLowerCase() === w)) return x;
+  return null;
+}
+function hideTermPop(){ const p=$('#termpop'); if(p) p.classList.remove('show'); }
+function showTermPop(anchor, word){
+  const x = findTerm(word), pop = $('#termpop');
+  if (!x || !pop) return;
+  pop.innerHTML = '<div class="tk">' + escHtml(x.k) + '</div><div class="td">' + escHtml(x.d) + '</div>' +
+                  '<button class="tall" id="term-all">' + t('전체 용어 보기') + '</button>';
+  pop.classList.add('show');
+  const r = anchor.getBoundingClientRect();
+  let left = r.left + r.width/2 - pop.offsetWidth/2;
+  left = Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, left));
+  // 위에 자리가 없으면 아래로 내린다 — 화면 밖으로 나가면 읽을 수가 없다
+  const above = r.top - pop.offsetHeight - 10;
+  pop.style.left = left + 'px';
+  pop.style.top = (above >= 8 ? above
+                 : Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 10)) + 'px';
+  const all = $('#term-all');
+  if (all) all.onclick = ev => { ev.stopPropagation(); hideTermPop(); openGlossary(); };
+}
+
+/* ---------------- 연습판 ----------------
+ * 튜토리얼이 말로 설명한 것을 실제로 한 판 해 보는 자리다.
+ *
+ * 시드를 고정한 이유는 대사를 하드코딩하려는 것이 아니다 — 대사는 국면에서 끌어낸다.
+ * 고정하는 진짜 이유는 '가르칠 수 있는 패'를 보장하기 위해서다. 무작위로 돌리면
+ * 사람이 주공이 못 되는 판이 흔하고, 그러면 바닥패 묻기와 프렌드 지정을 아예 못 보고
+ * 한 판이 끝난다. tools/find-practice-seed.js가 찾은 시드는 권장 공약대로 부르면
+ * 주공이 되고, 조커를 쥐고 있으며(튜토리얼에서 배운 카드다), 부를 프렌드가 남는다.
+ *
+ * 봇도 같이 고정한다. 성향이 무작위면 승부사 자리가 공약을 넘겨 버려 시드를 고정한
+ * 뜻이 사라진다. 룰도 마이티리그 기본값으로 고정한다 — 사용자가 최소 공약을 바꿔
+ * 뒀으면 같은 시드라도 다른 판이 된다.
+ *
+ * 연습판은 통계에 남기지 않는다. 튜토리얼 성적이 생애 기록을 오염시킬 이유가 없다.
+ */
+const PRACTICE_SEED = 165, PRACTICE_DEALER = 4;
+const PRACTICE_TRICKS = 4;        // 여기까지면 규칙이 다 나온다 — 열 트릭을 강요하지 않는다
+let practiceOn = false;
+
+function practiceConfig(){
+  const c = JSON.parse(JSON.stringify(defaultSettings().engine));
+  c.discardPointsTo = 'declarer';
+  // 딜미스는 끈다. 초보자 첫 판에 가르칠 개념이 아니고, 봇이 선언하면 판이 다시
+  // 돌아 안내가 통째로 어긋난다(실제로 이 시드에서 그렇게 됐다).
+  c.dealMissEnabled = false;
+  return c;
+}
+async function startPractice(){
+  practiceOn = true;
+  $('#tut').classList.remove('show');
+  $('#start').style.display='none';
+  settings.ui.tutorialDone = true; saveSettings();
+  matchLog=[]; matchHistory=[]; totals=[0,0,0,0,0]; roundNo=0; matchOver=false;
+  dealer = PRACTICE_DEALER;
+  try{
+    botTable = await MightyAI.createTable({
+      tiers:'advanced',
+      personas:['balanced','balanced','balanced','balanced','balanced'],
+      rng: E.makeRng((PRACTICE_SEED ^ 0x5bf03635)>>>0),
+    });
+    botTable.tier = 'practice';     // buildAgents의 캐시 키와 겹치지 않게
+  }catch(e){ /* 실패해도 기존 좌석으로 진행한다 — 판이 멈추는 것보다 낫다 */ }
+  startRound(true);
+}
+function endPractice(){
+  practiceOn = false;
+  $('#practice').classList.remove('show');
+  $('#modal').classList.remove('show');
+  newMatch();
+}
+/** 지금 무엇을 하면 되는지 한 줄. 조언 상자가 '무엇이 좋은 수인가'를 말한다면
+ *  이쪽은 '어디를 누르면 되는가'를 말한다. */
+function practiceText(){
+  if (!game) return '';
+  const tricks = game.play ? game.play.history.length : 0;
+  if (game.phase==='done') return t('연습이 끝났습니다. 이제 진짜 판을 시작해 보세요.');
+  if (game.phase==='play' && tricks>=PRACTICE_TRICKS) return TF.pracDone(tricks);
+  if (game.currentPlayer!==HUMAN) return t('다른 사람이 두는 중입니다.');
+  if (game.phase==='bidding') return TF.pracBid();
+  if (game.phase==='floor')   return TF.pracFloor();
+  if (game.phase==='friend')  return TF.pracFriend();
+  if (game.phase==='play')    return TF.pracPlay();
+  return '';
+}
+function renderPractice(){
+  const bar=$('#practice'); if (!bar) return;
+  syncPracticeClass();
+  if (!practiceOn || replay){ bar.classList.remove('show'); return; }
+  $('#practice-txt').innerHTML = withTerms(practiceText());
+  $('#practice-end').textContent = t('진짜 판 시작');
+  bar.classList.add('show');
+  // 띠 높이를 추측하지 않고 잰다 — 문구 길이와 언어에 따라 두 줄도 세 줄도 된다.
+  // 고정 숫자로 물리면 영어판이나 긴 문구에서 다시 겹친다.
+  document.documentElement.style.setProperty('--pracH', bar.offsetHeight + 'px');
+}
+/* 안내 띠가 화면 위쪽을 차지하므로 시트가 그만큼 낮아져야 한다. 안 그러면 띠가
+   시트의 첫 줄(추천)을 덮는다 — 실제로 390px에서 그렇게 됐다. */
+function syncPracticeClass(){
+  document.body.classList.toggle('practicing', !!practiceOn && !replay);
+}
+
+/* ---------------- 규칙 튜토리얼 ----------------
+ * 마이티를 모르는 사람이 첫 판 전에 읽는 여덟 장. 텍스트는 src/tutorial.js에 있다.
+ * 게임 모달(#modal)·내보내기 오버레이(#expmodal)와 섞지 않고 자체 오버레이를 쓴다 —
+ * v1.2.2에서 그 둘을 섞어 게임이 멈춘 적이 있다. 게임 상태를 건드리지 않으므로
+ * 진행 중에 열어도 판에 영향이 없다.
+ */
+let tutStep=0, tutMode='slides';   // slides | terms — 패널 하나를 두 쓰임에 나눠 쓴다
+function tutSlides(){
+  try{ return globalThis.MightyTutorial ? MightyTutorial.slides(LANG) : []; }
+  catch(e){ return []; }
+}
+/** 서술형 표기를 엔진 카드로 옮긴다. 튜토리얼이 엔진 로드 순서에 얽히지 않게 한다. */
+function tutCard(d){ return d==='JK' ? E.JOKER : { suit:d.s, rank:d.r }; }
+function openGlossary(){
+  if (!termList().length) return;
+  tutMode='terms'; tutStep=0;
+  hideTermPop();                      // 뜻풀이 말풍선이 사전 위에 남으면 안 된다
+  $('#settings').classList.remove('show');
+  $('#tut').classList.add('show');
+  renderTutorial();
+}
+function openTutorial(){
+  if (!tutSlides().length) return;
+  tutMode='slides'; tutStep=0;
+  hideTermPop();
+  $('#settings').classList.remove('show');   // 설정에서 열었을 때 두 겹으로 쌓이지 않게
+  $('#tut').classList.add('show');
+  renderTutorial();
+}
+/** 완주든 중도 이탈이든 '봤다'로 친다 — 안 그러면 매번 다시 권하게 된다. */
+function closeTutorial(){
+  $('#tut').classList.remove('show');
+  hideTermPop();
+  // 사전을 닫은 것은 튜토리얼을 본 것이 아니다 — 같은 패널을 쓴다고 같은 뜻이 아니다.
+  if (tutMode==='slides'){ settings.ui.tutorialDone=true; saveSettings(); renderLanding(); }
+  tutMode='slides';
+}
+function renderGlossary(){
+  $('#tut-title').textContent = t('용어 사전');
+  const b=$('#tut-body'); b.innerHTML=''; b.scrollTop=0;
+  const coll = LANG==='en' ? 'en' : 'ko';
+  for (const x of termList().slice().sort((a,b)=>a.k.localeCompare(b.k, coll))){
+    const row=el('div','gl-row');
+    row.append(el('div','gl-k', escHtml(x.k)), el('div','gl-d', escHtml(x.d)));
+    b.append(row);
+  }
+  $('#tut-dots').innerHTML='';
+  const prev=$('#tut-prev'), next=$('#tut-next');
+  prev.style.display='none';
+  next.textContent=t('닫기');
+}
+function renderTutorial(){
+  if (tutMode==='terms'){ renderGlossary(); return; }
+  const list=tutSlides();
+  if (!list.length){ closeTutorial(); return; }
+  tutStep=Math.max(0, Math.min(list.length-1, tutStep));
+  const sl=list[tutStep];
+  $('#tut-title').textContent=sl.title;
+  const b=$('#tut-body'); b.innerHTML=''; b.scrollTop=0;
+  for (const line of sl.body) b.append(el('p','tut-p', withTerms(line)));
+  if (sl.cards && sl.cards.length){
+    const row=el('div','tut-cards');
+    const hi=new Set(sl.hi||[]);
+    sl.cards.forEach((d,i)=>{
+      const c=cardEl(tutCard(d));
+      if (hi.has(i)) c.classList.add('win');   // 어느 카드가 이겼는지 그림이 말하게
+      row.append(c);
+    });
+    b.append(row);
+  }
+  if (sl.note) b.append(el('div','tut-note', sl.note));
+  const dots=$('#tut-dots'); dots.innerHTML='';
+  for (let i=0;i<list.length;i++){
+    const d=el('span','tut-dot'+(i===tutStep?' on':''));
+    d.onclick=()=>{ tutStep=i; renderTutorial(); };
+    dots.append(d);
+  }
+  const prev=$('#tut-prev'), next=$('#tut-next');
+  prev.style.display=''; prev.textContent=t('이전'); prev.disabled = tutStep===0;
+  // 마지막 장에서 초보자는 바로 연습 한 판으로 넘어간다 — 읽은 것을 그 자리에서 해 본다
+  next.textContent = tutStep!==list.length-1 ? t('다음')
+                   : settings.ui.beginner ? t('연습 한 판 해보기') : t('시작하기');
+}
+function tutNext(){
+  if (tutMode==='terms'){ closeTutorial(); return; }
+  const list=tutSlides();
+  if (tutStep<list.length-1){ tutStep++; renderTutorial(); return; }
+  if (settings.ui.beginner && !game){ closeTutorial(); startPractice(); return; }
+  closeTutorial();
 }
 
 /* ---------------- 랜딩 옵션 (언어·난이도) ---------------- */
@@ -3153,16 +3658,28 @@ function renderLanding(){
     }
     row.append(seg); return row;
   };
+  // 초보자 모드를 맨 위에 둔다 — 처음 온 사람이 가장 먼저 만나야 할 선택이다
+  box.append(mk(t('초보자 모드'), [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
+    ()=>settings.ui.beginner?'on':'off', v=>applyBeginner(v==='on')));
+  box.append(el('div','land-note', t('추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다')));
   box.append(mk(t('언어'), [{v:'ko',l:'한국어'},{v:'en',l:'English'}], ()=>LANG, v=>setLang(v)));
   box.append(mk(t('난이도'), [{v:'intermediate',l:t('중급')},{v:'advanced',l:t('고급')},{v:'master',l:t('마스터')}],
     ()=>TIER_OF[settings.ui.difficulty]||'intermediate',
     v=>{ settings.ui.difficulty=v; saveSettings(); ensureNN(); }));
+  // 규칙을 모르는 사람에게는 '규칙 배우기'가 주 버튼이어야 한다. 한 번 보고 나면
+  // 보조 버튼으로 내려간다 — 이미 아는 사람에게 계속 권하지 않는다.
+  const learn=$('#tut-btn'), start=$('#start-btn');
+  if (learn && start){
+    const lead = !!settings.ui.beginner && !settings.ui.tutorialDone;
+    learn.className = 'btn ' + (lead ? 'primary' : 'ghost');
+    start.className = 'btn ' + (lead ? 'ghost' : 'primary');
+  }
 }
 
 /* ---------------- 초기화 ---------------- */
 globalThis.MUI = { get game(){return game}, get busy(){return busy},
   get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
-  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, openTutorial, closeTutorial, openGlossary, get tutStep(){return tutStep}, get tutMode(){return tutMode}, tutSlides, termList, withTerms, startPractice, endPractice, get practiceOn(){return practiceOn}, PRACTICE_SEED, PRACTICE_TRICKS, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -3170,11 +3687,24 @@ loadSettings().then(()=>{
   LANG = saved || ((navigator.language||'ko').toLowerCase().startsWith('ko') ? 'ko' : 'en');
   settings.ui.lang = LANG;
   document.documentElement.lang = LANG;
+  // 처음 온 사람에게는 초보자 모드를 기본으로 켠다. 한 번이라도 직접 정했으면 그 선택을 따른다.
+  if (settings.ui.beginner===null) applyBeginner(lifeStats.rounds===0);
   applyNames(); applyStatic(); renderLanding();
   buildAgents().then(()=>ensureNN());          // 전 티어가 신경망을 쓴다 — 티어에 맞는 모델만 로드
 });
 $('#start-btn').onclick=()=>{ SFX.unlock(); $('#start').style.display='none'; newMatch(); };
 renderLanding();
+$('#tut-btn').onclick=()=>openTutorial();
+$('#tut-close').onclick=()=>closeTutorial();
+$('#tut-prev').onclick=()=>{ if(tutStep>0){ tutStep--; renderTutorial(); } };
+$('#tut-next').onclick=()=>tutNext();
+$('#practice-end').onclick=()=>endPractice();
+document.addEventListener('click', ev=>{
+  const el_ = ev.target && ev.target.closest ? ev.target.closest('.term') : null;
+  if (el_){ ev.preventDefault(); ev.stopPropagation(); showTermPop(el_, el_.dataset.term); return; }
+  if (!(ev.target && ev.target.closest && ev.target.closest('#termpop'))) hideTermPop();
+}, true);
+window.addEventListener('resize', hideTermPop);
 $('#start-set-btn').onclick=()=>openSettings();
 $('#set-btn').onclick=()=>openSettings();
 $('#set-close').onclick=()=>closeSettings();
@@ -3191,7 +3721,9 @@ addEventListener('keydown', ev=>{
   else if (k==='r'){ ev.preventDefault(); if(replay) closeReplay(); else openReplayPicker(); }
   else if (k==='c'){ ev.preventDefault(); cheatOpen=!cheatOpen; renderCheat(); applyStatic(); }
   else if (k==='escape'){
-    if ($('#expmodal').classList.contains('show')){ $('#expmodal').classList.remove('show'); render(); pump(); }
+    if ($('#termpop').classList.contains('show')){ hideTermPop(); }
+    else if ($('#tut').classList.contains('show')){ closeTutorial(); }
+    else if ($('#expmodal').classList.contains('show')){ $('#expmodal').classList.remove('show'); render(); pump(); }
     else if (replay) closeReplay();
     // 자동 진행이 켜져 있으면 빠져나올 길을 준다 — 실수로 켜졌을 때 되돌리기 말고는
     // 방법이 없었다(제보 2026-08-23).

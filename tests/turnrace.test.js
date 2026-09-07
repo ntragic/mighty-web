@@ -46,7 +46,20 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); 
   MUI.settings.match.mode = 'rounds';
   MUI.settings.match.rounds = 8;   // 되돌리기는 라운드·그룹당 1회라 판수를 늘려야 창이 열린다
   MUI.settings.ui.speed = 'slow';   // 봇 턴을 길게 만들어 경합 창을 넓힌다
+  // 이 테스트가 보는 것은 되돌리기와 봇 턴의 경합이지 코칭이 아니다. v3.0.4부터
+  // 기록이 없는 첫 실행에는 초보자 모드가 기본으로 켜지고 그러면 코칭까지 켜지는데,
+  // 매 렌더마다 조언을 계산하느라 경합 창이 좁아져 간헐적으로 창을 못 잡았다.
+  // 이 테스트가 재는 조건을 원래대로 되돌린다.
+  MUI.settings.ui.beginner = false;
+  MUI.settings.ui.coach = false;
   MUI.newMatch();
+  // 초보자 모드 기본값은 넓은 화면에서 치트시트를 열어 둔다. 열려 있으면 렌더마다
+  // 시트를 다시 그리느라 경합 창이 눈에 띄게 좁아진다 — 이 테스트가 재는 것과
+  // 무관하므로 닫는다.
+  {
+    const ch = w.document.querySelector('#cheat');
+    if (ch && ch.classList.contains('show')) w.document.querySelector('#cheat-btn').click();
+  }
   await sleep(150);
 
   // 1) 감시 타이머 한도가 탐색 예산을 반영하는가 — 고정 3,500ms면 정상 턴을 자른다
@@ -89,8 +102,11 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); 
     // 정작 검사하려는 착수 구간에 못 간다.
     if (g.phase === 'play') {
       const ub = w.document.querySelector('#undo-btn');
-      if (ub && !ub.disabled && (MUI.busy || Math.random() < 0.2)) {
-        if (MUI.busy) busyUndos++;            // 봇 턴 한가운데 = 진짜 경합 창
+      // 되돌리기는 라운드·그룹당 한 번뿐이다. 예전에는 20% 확률로 한가한 때도
+      // 눌렀는데, 그 한 번을 거기서 써 버리면 정작 봇 턴 창이 열렸을 때 누를 수가
+      // 없어 간헐적으로 창을 못 잡았다. 창이 열렸을 때만 누른다.
+      if (ub && !ub.disabled && MUI.busy) {
+        busyUndos++;                          // 봇 턴 한가운데 = 진짜 경합 창
         ub.click(); undos++; continue;
       }
     }
