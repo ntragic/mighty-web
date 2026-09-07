@@ -220,7 +220,8 @@ body{
 #sheet{position:relative; z-index:25; background:var(--panel); backdrop-filter:blur(8px);
   border:1px solid var(--panel-line); border-radius:16px; padding:14px 16px;
   box-shadow:0 12px 34px rgba(0,0,0,.5); min-width:min(92vw, 380px); max-width:94vw;
-  display:none; flex-direction:column; gap:10px}
+  display:none; flex-direction:column; gap:10px;
+  max-height:calc(var(--vvh,100dvh) - var(--card-h) - 96px); overflow-y:auto}
 #sheet.show{display:flex}
 #sheet h3{font-size:.8rem; letter-spacing:.14em; color:var(--gold); font-weight:600}
 #sheet .hint{font-size:.74rem; color:var(--txt-dim)}
@@ -464,6 +465,15 @@ body.replaying #seat-0 .rhand{display:none}
   border-radius:10px; padding:7px 11px; font-size:.72rem; line-height:1.55;
   color:#e8ecf2; box-shadow:0 6px 18px rgba(0,0,0,.4); word-break:keep-all}
 #coach-tip div:first-child{color:#6db3f2; font-weight:700}
+/* 시트 조언 상자 — 코칭 버블과 같은 파랑 계열로 묶는다. 좌측 강조선 대신 틴트. */
+#sheet .coach-note{background:rgba(35,131,226,.10); border:1px solid rgba(35,131,226,.32);
+  border-radius:10px; padding:8px 11px; font-size:.74rem; line-height:1.6;
+  color:var(--txt-dim); word-break:keep-all}
+#sheet .coach-note .ch{color:#6db3f2; font-weight:700; font-size:.8rem; margin-bottom:3px}
+/* 추천 항목 — 내 선택(.on, 금색)과 겹치지 않게 파란 테두리로만 표시한다 */
+.chip.rec{border-color:#2383e2; box-shadow:inset 0 0 0 1px rgba(35,131,226,.35)}
+.chip.on.rec{border-color:var(--gold); box-shadow:none}
+.btn.rec{box-shadow:0 0 0 2px rgba(35,131,226,.45)}
 #replay-head .alt-tag{color:var(--gold); font-weight:700}
 .rank-row .style-tag{font-size:.68rem; color:#6db3f2; border:1px solid rgba(35,131,226,.45);
   border-radius:999px; padding:1px 7px; margin-left:6px; vertical-align:middle; word-break:keep-all}
@@ -3943,8 +3953,8 @@ const I18N_EN = {
   '대안 라인':'Alt line', '실제 라인':'Actual line', '보기':'View', '닫기':'Close',
   '대안 라인(가정)':'alt line (hypothetical)',
   '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
-  '코칭 (마스터 추천 카드)':'Coaching (Master hint)',
-  '플레이 중 마스터가 낼 카드를 손패에 표시합니다':'Marks the card Master would play during your turn',
+  '코칭 (추천과 근거)':'Coaching (suggestion & reason)',
+  '내 차례마다 추천 수와 그 이유를 보여줍니다':'Shows the suggested move and why, on every turn of yours',
   '끔':'Off', '켬':'On', '기대상금':'EV', '평균':'avg',
   '매치 AI 요약':'Match AI summary', '이번 매치 결정적 순간':'Key moments of this match',
   '분석할 라운드가 없습니다':'No rounds to analyze',
@@ -4146,6 +4156,43 @@ const TF = {
   coachPts:(n,b)=> LANG==='en'
     ? `${n} point card${n>1?'s':''} at stake${b?` · ${b} behind`:''}`
     : `점수카드 ${n}장 걸림${b?` · 뒤 ${b}명`:''}`,
+  /* 비딩·바닥패·프렌드 국면 조언 — 규칙기반 조언자의 근거를 말로 편다.
+     플레이 국면(coach*)과 달리 '무엇이 좋은 수인가'에 더해 '왜 그 규칙 때문인가'를
+     말한다. 규칙을 모르는 사람이 읽는 문장이라 용어를 풀어 쓴다. */
+  advBid:(c,g)=> LANG==='en' ? `Suggested — bid ${c}${gLabel(g)}` : `추천 — ${c}${gLabel(g)} 공약`,
+  advPass:()=> LANG==='en' ? 'Suggested — pass' : '추천 — 패스',
+  advEst:(n)=> LANG==='en' ? `Hand is worth about ${n} points` : `이 손패의 기대 점수 약 ${n}점`,
+  advShort:(n)=> LANG==='en' ? `Below the ${n} minimum — passing costs nothing`
+                             : `최소 공약 ${n}에 못 미칩니다 — 패스는 손해가 없습니다`,
+  advTrumpLen:(g,n)=> LANG==='en' ? `${gLabel(g)} ${n} long — your trump suit`
+                                  : `${gLabel(g)} ${n}장 — 기루다로 삼을 무늬`,
+  advHasM:()=> LANG==='en' ? 'You hold the Mighty — one trick guaranteed'
+                           : '마이티 보유 — 확정 트릭 1장',
+  advHasJ:()=> LANG==='en' ? 'You hold the Joker — near-certain trick'
+                           : '조커 보유 — 사실상 확정 트릭',
+  advAces:(n)=> LANG==='en' ? `${n} side ace${n>1?'s':''} outside trump` : `기루다 밖 A ${n}장`,
+  advVoid:(n)=> LANG==='en' ? `${n} empty suit${n>1?'s':''} — you can trump those in`
+                            : `빈 무늬 ${n}개 — 기루다로 끊을 수 있습니다`,
+  advBidRule:(n)=> LANG==='en'
+    ? `A bid promises how many of the ${n} point cards your side will take`
+    : `공약은 우리 편이 가져올 점수카드 수 약속입니다 (전체 ${n}장)`,
+  advBury:(list)=> LANG==='en' ? `Suggested — bury ${list}` : `추천 — ${list} 묻기`,
+  advBuryKeep:()=> LANG==='en' ? 'Point cards (10 J Q K A) and trumps stay in hand'
+                               : '점수카드(10 J Q K A)와 기루다는 남깁니다',
+  advBuryVoid:()=> LANG==='en' ? 'Emptying a short suit lets you trump it later'
+                               : '짧은 무늬를 비우면 나중에 기루다로 끊을 수 있습니다',
+  advRevise:(c,g)=> LANG==='en' ? `Also worth revising the bid to ${c}${gLabel(g)}`
+                                : `공약을 ${c}${gLabel(g)}로 수정할 만합니다`,
+  advFriendCard:(nm)=> LANG==='en' ? `Suggested — call ${nm} as friend` : `추천 — ${nm} 프렌드`,
+  advFriendFirst:()=> LANG==='en' ? 'Suggested — first-trick friend' : '추천 — 초구 프렌드',
+  advFriendNone:()=> LANG==='en' ? 'Suggested — no friend (go solo)' : '추천 — 노프렌드(단독)',
+  advFriendWhy:()=> LANG==='en' ? 'Call the strongest card you do not hold'
+                                : '내가 안 가진 카드 중 가장 센 것을 부릅니다',
+  advFriendSolo:()=> LANG==='en' ? 'You hold both Mighty and Joker — strong enough alone'
+                                 : '마이티와 조커를 모두 쥐었습니다 — 단독으로 충분',
+  advFriendFirstWhy:()=> LANG==='en'
+    ? 'No strong card left to call — whoever wins the first trick becomes your friend'
+    : '부를 만한 강한 카드가 없습니다 — 첫 트릭을 가져가는 사람이 프렌드가 됩니다',
   statsLine:(n,w,dn,dw,pz)=> LANG==='en'
     ? `Lifetime ${n} rounds · win ${w}% · declarer ${dw}/${dn} · ${pz}/round`
     : `누적 ${n}판 · 내 승률 ${w}% · 주공일 때 ${dw}/${dn} · 판당 ${pz}`,
@@ -4263,8 +4310,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.2';
-const APP_BUILD = '2026-09-07 빌드 — 모바일 하단 배치 견고화';
+const APP_VERSION = 'v3.0.3';
+const APP_BUILD = '2026-09-07 빌드 — 네 국면 조언과 규칙기반 폴백';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -4430,11 +4477,13 @@ function renderSetGeneral(b,S){
     : masterState==='loading' ? t('AI 모델 로딩 중…')
     : masterState==='failed' ? t('AI 모델을 불러오지 못했습니다. 규칙 기반으로 대체 진행합니다.')
     : tf('nnFirstUse', nnSizeMB(currentTier()))));
-  // v2 코칭 — 기본 OFF. 켜면 마스터 모델을 로드해 내 차례에 추천 카드를 표시한다
-  b.append(segRow(t('코칭 (마스터 추천 카드)'), t('플레이 중 마스터가 낼 카드를 손패에 표시합니다'),
+  // 코칭 — 기본 OFF. 켜면 네 국면 모두에서 추천과 근거를 보여준다.
+  // 모델이 없으면 규칙기반으로 돌고, 모델이 오면 플레이 국면 추천만 그쪽으로 바뀐다.
+  b.append(segRow(t('코칭 (추천과 근거)'), t('내 차례마다 추천 수와 그 이유를 보여줍니다'),
     [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
     ()=>S.ui.coach?'on':'off',
-    v=>{ S.ui.coach=(v==='on'); if(S.ui.coach) ensureMaster(); coachUpdate(); }));
+    // 끌 때 시트의 조언 상자까지 지우려면 시트를 다시 그려야 한다
+    v=>{ S.ui.coach=(v==='on'); if(S.ui.coach) ensureMaster(); renderHand(); renderSheet(); }));
   // 사운드·속도
   b.append(el('div','set-sec',t('사운드')));
   b.append(segRow(t('컴퓨터 속도'),'', [{v:'fast',l:t('빠름')},{v:'normal',l:t('보통')},{v:'slow',l:t('느림')}],
@@ -5109,9 +5158,10 @@ let bidSel={giruda:null,count:null};
 let reviseSel={on:false, giruda:null, count:null};
 function renderSheet(){
   const sh=$('#sheet');
-  if (!game || busy){ sh.classList.remove('show'); return; }
+  const hide=()=>{ sh.classList.remove('show'); sh.innerHTML=''; };
+  if (!game || busy){ hide(); return; }
   const phase=game.phase, cur=game.currentPlayer;
-  if (cur!==HUMAN || !['bidding','floor','friend'].includes(phase)){ sh.classList.remove('show'); return; }
+  if (cur!==HUMAN || !['bidding','floor','friend'].includes(phase)){ hide(); return; }
   sh.classList.add('show'); sh.innerHTML='';
   if (phase==='bidding') sheetBidding(sh);
   else if (phase==='floor') sheetFloor(sh);
@@ -5121,9 +5171,11 @@ function sheetBidding(sh){
   const best=game.bidding.best;
   sh.append(el('h3','', t('공약 선언')),
     el('div','hint', best?tf('bidBest', NAMES[best.player], best.count, best.giruda):tf('bidFirst', game.config.minBid)));
+  const rec=sheetAdvice(sh);          // 추천은 맨 위에 — 규칙을 모르면 여기부터 읽는다
+  const recBid = rec && rec.type==='bid' ? rec : null;
   const suits=el('div','chips');
   for(const g of ['S','D','H','C','N']){
-    const b=el('button','chip '+suCls(g)+(bidSel.giruda===g?' on':''), g==='N'?t('노기루다'):SUIT_GLYPH[g]+' '+t({S:'스페이드',D:'다이아',H:'하트',C:'클로버'}[g]||''));
+    const b=el('button','chip '+suCls(g)+(bidSel.giruda===g?' on':'')+(recBid&&recBid.giruda===g?' rec':''), g==='N'?t('노기루다'):SUIT_GLYPH[g]+' '+t({S:'스페이드',D:'다이아',H:'하트',C:'클로버'}[g]||''));
     b.onclick=()=>{
       bidSel.giruda=g;
       const av=game.legalActions().filter(a=>a.type==='bid'&&a.giruda===g).map(a=>a.count);
@@ -5139,7 +5191,8 @@ function sheetBidding(sh){
   const list=bidSel.giruda?av(bidSel.giruda):[];
   const lo=game.config.minBid - game.config.noGirudaBidDiscount;
   for(let c=lo;c<=20;c++){
-    const b=el('button','chip'+(bidSel.count===c?' on':''), c);
+    const b=el('button','chip'+(bidSel.count===c?' on':'')
+      +(recBid&&recBid.giruda===bidSel.giruda&&recBid.count===c?' rec':''), c);
     b.disabled=!list.includes(c);
     b.onclick=()=>{ bidSel.count=c; renderSheet(); };
     counts.append(b);
@@ -5154,7 +5207,7 @@ function sheetBidding(sh){
     row.append(dm);
   }
   const ready=!!(bidSel.giruda&&bidSel.count);
-  const pass=el('button','btn '+(ready?'quiet':'ghost'),t('패스'));
+  const pass=el('button','btn '+(ready?'quiet':'ghost')+(rec&&rec.type==='pass'?' rec':''),t('패스'));
   pass.onclick=()=>humanAct({type:'pass'}, tf('logPass', NAMES[HUMAN]));
   const go=el('button','btn primary'+(ready?' ready':''), ready?tf('bidBtn', bidSel.count, bidSel.giruda):t('공약 선언'));
   go.disabled=!ready;
@@ -5169,6 +5222,7 @@ function sheetBidding(sh){
 function sheetFloor(sh){
   sh.append(el('h3','',t('바닥패 교환')),
     el('div','hint',t('바닥패 3장이 손패에 합쳐졌습니다(● 표시). 묻을 3장을 선택하세요. 묻은 점수카드는 여당에 귀속됩니다.')));
+  sheetAdvice(sh);                    // 묻을 3장은 손패에도 AI 표식으로 찍힌다
   // 공약 수정
   const cur=game.contract;
   const revRow=el('div','chips');
@@ -5225,17 +5279,24 @@ function sheetFriend(sh){
   sh.append(el('h3','',t('프렌드 지정')));
   const hand=game.hands[HUMAN];
   const m=game.mightyCard;
+  const rec=sheetAdvice(sh);
+  const recCard = rec && rec.mode==='card' ? rec.card : null;
   const quick=el('div','chips');
   const has=c=>hand.some(h=>E.sameCard(h,c));
-  const mk=(label,act)=>{ const b=el('button','chip',label); b.onclick=act; return b; };
-  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티')))));
-  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드'))));
+  const mk=(label,act,on)=>{ const b=el('button','chip'+(on?' rec':''),label); b.onclick=act; return b; };
+  quick.append(mk(tf('mightyFriend', cardLabel(m)), ()=>callFriend({type:'friend',mode:'card',card:m},tf('cardFriend', t('마이티'))),
+    recCard && E.sameCard(recCard, m)));
+  quick.append(mk(t('조커'), ()=>callFriend({type:'friend',mode:'card',card:E.JOKER},t('조커 프렌드')),
+    recCard && E.isJoker(recCard)));
   if (game.contract.giruda!=='N'){
     const gA={suit:game.contract.giruda, rank:14};
-    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A')))));
+    if (!E.sameCard(gA,m)) quick.append(mk(t('기루다 A'), ()=>callFriend({type:'friend',mode:'card',card:gA},tf('cardFriend', t('기루다 A'))),
+      recCard && E.sameCard(recCard, gA)));
   }
-  quick.append(mk(t('초구 프렌드'), ()=>callFriend({type:'friend',mode:'first'},t('초구 프렌드'))));
-  quick.append(mk(t('노프렌드'), ()=>callFriend({type:'friend',mode:'none'},t('노프렌드'))));
+  quick.append(mk(t('초구 프렌드'), ()=>callFriend({type:'friend',mode:'first'},t('초구 프렌드')),
+    rec && rec.mode==='first'));
+  quick.append(mk(t('노프렌드'), ()=>callFriend({type:'friend',mode:'none'},t('노프렌드')),
+    rec && rec.mode==='none'));
   quick.append(mk(t('직접 선택')+(friendCustom?' ▲':' ▼'), ()=>{ friendCustom=!friendCustom; renderSheet(); }));
   sh.append(quick);
   if (friendCustom){
@@ -5984,6 +6045,93 @@ function toggleAltLine(){
 }
 
 /* ---------------- v2 코칭 (마스터 추천 카드 + 근거 버블) ---------------- */
+/* ---------------- 규칙기반 조언자 ----------------
+ * 코칭은 지금까지 마스터 모델이 있어야만 돌았고, 플레이 국면만 다뤘다. 초보자에게
+ * 16MB 내려받기를 강요하면 첫 판을 두기도 전에 이탈하고, 정작 막막한 공약 선언·
+ * 바닥패 묻기·프렌드 지정에는 아무 안내가 없었다.
+ *
+ * 규칙기반 고급 에이전트는 네 국면 전부에 답을 내고, evalHand가 근거를 성분으로
+ * 쪼개 놓아(기루다 길이·마이티/조커 보유·사이드 A·보이드) 그대로 말로 풀 수 있다.
+ * 신경망 추천은 왜 그런지를 말해주지 못하므로, 설명이 필요한 국면에서는 이쪽이 낫다.
+ *
+ * 성향은 밸런스 고정, rng는 고정 시드다 — 같은 자리에서 추천이 흔들리면 신뢰가 깨진다.
+ * 매번 새로 만드는 이유도 그것이다(rng 상태가 넘어가면 재렌더마다 답이 달라진다).
+ */
+function ruleAdvice(){
+  if (!game) return null;
+  try{
+    const ag=new E.HeuristicAgent(E.PERSONAS.balanced, E.makeRng(0x4D2), {tier:'advanced'});
+    return { ag, act: ag.act(game) };
+  }catch(e){ return null; }        // 조언은 조용히 실패한다 — 게임은 계속돼야 한다
+}
+
+/** 기루다가 정해지기 전에도 마이티는 정해진다 — 기루다가 스페이드면 다이아 A. */
+function mightyFor(g){ return g==='S' ? {suit:'D',rank:14} : {suit:'S',rank:14}; }
+
+/** 공약 근거로 쓸 손패 성분. evalHand가 보는 것과 같은 관점으로 센다. */
+function handShape(hand, g){
+  const m=mightyFor(g), by={S:0,D:0,H:0,C:0};
+  let aces=0, hasM=false, hasJ=false;
+  for(const c of hand){
+    if (E.isJoker(c)){ hasJ=true; continue; }
+    by[c.suit]++;
+    if (E.sameCard(c,m)) hasM=true;
+    else if (c.rank===14 && c.suit!==g) aces++;
+  }
+  let voids=0;
+  if (g!=='N') for(const s of E.SUITS) if (s!==g && by[s]===0) voids++;
+  return { aces, hasM, hasJ, voids, len: g==='N' ? 0 : by[g] };
+}
+
+function adviceBidding(ag, act){
+  const hand=game.hands[HUMAN], R=[];
+  if (act.type!=='bid'){
+    const best=ag.bestGiruda(hand, game);
+    R.push(TF.advPass(), TF.advEst(Math.max(0, Math.round(best.est))),
+           TF.advShort(game.config.minBid));
+  } else {
+    const g=act.giruda, sh=handShape(hand, g);
+    R.push(TF.advBid(act.count, g), TF.advEst(Math.round(ag.evalHand(hand, g, game).est)));
+    if (g!=='N' && sh.len) R.push(TF.advTrumpLen(g, sh.len));
+    if (sh.hasM) R.push(TF.advHasM());
+    if (sh.hasJ) R.push(TF.advHasJ());
+    if (sh.aces) R.push(TF.advAces(sh.aces));
+    if (sh.voids) R.push(TF.advVoid(sh.voids));
+  }
+  R.push(TF.advBidRule(E.TOTAL_POINT_CARDS));
+  return R;
+}
+
+function adviceFloor(act){
+  const R=[TF.advBury(act.discard.map(cardLabel).join(' ')),
+           TF.advBuryKeep(), TF.advBuryVoid()];
+  if (act.revise) R.push(TF.advRevise(act.revise.count, act.revise.giruda));
+  return R;
+}
+
+function adviceFriend(act){
+  if (act.mode==='none') return [TF.advFriendNone(), TF.advFriendSolo()];
+  if (act.mode==='first') return [TF.advFriendFirst(), TF.advFriendFirstWhy()];
+  return [TF.advFriendCard(cardLabel(act.card)), TF.advFriendWhy()];
+}
+
+/** 시트 맨 위 조언 상자. 추천 액션을 돌려줘 칩 강조에 쓴다. */
+function sheetAdvice(sh){
+  if (!settings.ui.coach) return null;
+  const adv=ruleAdvice(); if (!adv) return null;
+  const act=adv.act;
+  let lines=null;
+  if (game.phase==='bidding') lines=adviceBidding(adv.ag, act);
+  else if (game.phase==='floor' && act.type==='exchange') lines=adviceFloor(act);
+  else if (game.phase==='friend' && act.type==='friend') lines=adviceFriend(act);
+  if (!lines) return null;
+  const box=el('div','coach-note');
+  box.append(el('div','ch', lines[0]));
+  for (const l of lines.slice(1)) box.append(el('div','cb', l));
+  sh.append(box);
+  return act;
+}
+
 let coachGen=0;
 let coachTipEl=null;
 function coachTipHide(){ if(coachTipEl){ coachTipEl.remove(); coachTipEl=null; } }
@@ -6116,8 +6264,25 @@ async function coachUpdate(){
   document.querySelectorAll('#hand .hcard.coach').forEach(e=>e.classList.remove('coach'));
   coachTipHide();
   if (!settings.ui.coach || !game || replay) return;
-  if (game.phase!=='play' || game.currentPlayer!==HUMAN || busy) return;
-  if (!masterSess){ ensureMaster(); return; }        // 코칭은 대표 모델이 필요하다
+  if (game.currentPlayer!==HUMAN || busy) return;
+
+  // 바닥패: 묻을 3장을 손패에 찍는다. 근거는 시트의 조언 상자가 말한다.
+  if (game.phase==='floor'){
+    const adv=ruleAdvice();
+    if (adv && adv.act.type==='exchange') for (const c of adv.act.discard) markCoach(E.cardId(c));
+    return;
+  }
+  if (game.phase!=='play') return;
+
+  // 모델이 아직 없으면 비워두는 대신 규칙기반 추천을 먼저 보여준다. 16MB를
+  // 기다리는 동안 아무 안내도 못 받던 구간이 여기였다. 모델이 오면 갈아끼운다.
+  if (!masterSess){
+    const adv=ruleAdvice();
+    if (adv && adv.act.type==='play')
+      markCoach(E.cardId(adv.act.card), coachReasons(game, adv.act, false));
+    ensureMaster();
+    return;
+  }
   try{
     // 마스터 좌석의 실제 플레이 경로와 완전히 동일해야 한다:
     // chooseAction(정책) → actionToEngine → keyCardGuard(낭비 차단 후처리).
@@ -6131,13 +6296,16 @@ async function coachUpdate(){
     const act=await MightyAI.applyGuards(masterSess, ortLib, game, HUMAN, raw);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
-    const cid=E.cardId(act.card);
-    const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
-    if (elc){
-      elc.classList.add('coach');
-      coachTipShow(elc, coachReasons(game, act, guardFired));
-    }
+    markCoach(E.cardId(act.card), coachReasons(game, act, guardFired));
   }catch(e){ /* 코칭은 조용히 실패 */ }
+}
+
+/** 손패의 그 카드에 AI 표식을 찍고, 근거가 있으면 버블까지 띄운다. */
+function markCoach(cid, lines){
+  const elc=document.querySelector(`#hand .hcard[data-cid="${cid}"]`);
+  if (!elc) return;
+  elc.classList.add('coach');
+  if (lines && lines.length) coachTipShow(elc, lines);
 }
 
 /** 매치 전 라운드 통합 AI 요약 — 결정적 순간 상위 3선 */
