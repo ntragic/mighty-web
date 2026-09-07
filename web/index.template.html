@@ -324,6 +324,25 @@ body{
 }
 
 /* ---------- 설정 패널 ---------- */
+/* 연습판 안내 띠 — 지금 무엇을 하면 되는지 절차를 말한다. 조언 상자가 '무엇이
+   좋은 수인가'를 말한다면 이쪽은 '어디를 누르면 되는가'를 말한다. HUD 바로 아래에
+   두어 손패 쪽 근거 버블과 자리를 다투지 않게 한다. */
+#practice{position:absolute; left:50%; top:60px; transform:translateX(-50%); z-index:26;
+  display:none; align-items:center; gap:10px; max-width:94vw;
+  background:rgba(35,131,226,.14); border:1px solid rgba(35,131,226,.42);
+  border-radius:12px; padding:8px 12px; backdrop-filter:blur(6px)}
+#practice.show{display:flex}
+#practice-txt{font-size:.74rem; line-height:1.5; color:#dce8f5; word-break:keep-all}
+body.practicing #sheet{max-height:calc(var(--vvh,100dvh) - var(--card-h) - 96px
+  - var(--pracH,0px) - 78px)}
+/* 시트가 안쪽으로 스크롤되면 아래쪽 버튼이 화면 밖으로 밀린다 — 초보자가 '공약 선언'을
+   못 찾는다. 행동 버튼은 늘 보이게 바닥에 붙인다. */
+#sheet .btnrow{position:sticky; bottom:-14px; z-index:1;
+  margin:0 -16px -14px; padding:10px 16px 14px;
+  background:#0E1A16; border-top:1px solid rgba(255,255,255,.06)}
+#practice-end{flex:0 0 auto; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06);
+  color:var(--txt); border-radius:9px; padding:5px 10px; font:inherit; font-size:.7rem;
+  cursor:pointer; white-space:nowrap}
 #tut{position:fixed; inset:0; z-index:76; background:rgba(4,8,7,.82); backdrop-filter:blur(4px);
   display:none; place-items:center; padding:16px}
 #tut.show{display:grid}
@@ -532,6 +551,8 @@ body.replaying #seat-0 .rhand{display:none}
   #replay-bar button{padding:6px 9px; font-size:.72rem}
   #replay-bar .info{min-width:74px; font-size:.68rem}
   /* 복기 헤드는 맨 위에 두고, 그 대신 위쪽 좌석을 내려 자리를 만든다 */
+  #practice{top:92px; padding:7px 10px}
+  #practice-txt{font-size:.68rem}
   #replay-head{top:80px; font-size:.66rem; padding:5px 9px; max-width:90vw; line-height:1.4}
   body.replaying #seat-2, body.replaying #seat-3{top:136px}
   body.replaying #seat-0{bottom:calc(var(--card-h) + 152px)}
@@ -603,6 +624,7 @@ body.replaying #seat-0 .rhand{display:none}
     <div id="set-body"></div>
     <footer><button class="btn ghost" id="set-reset">리그 룰로 초기화</button><button class="btn primary" id="set-done">완료</button></footer>
   </div></div>
+  <div id="practice"><span id="practice-txt"></span><button id="practice-end"></button></div>
   <div id="tut"><div class="panel">
     <header><h2 id="tut-title"></h2><button class="close" id="tut-close">✕</button></header>
     <div id="tut-body"></div>

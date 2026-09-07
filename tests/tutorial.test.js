@@ -89,7 +89,14 @@ const title = () => $('#tut-title').textContent.trim();
   ok(shown() && title() === ko[0].title, '다시 열면 첫 장부터');
   for (let i = 0; i < 7; i++) $('#tut-next').click();
   ok(title() === ko[7].title, '마지막 슬라이드 도달', title());
-  ok($('#tut-next').textContent.trim() === '시작하기', '마지막 장 버튼은 시작하기');
+  // 초보자에게는 마지막 장이 연습판으로 이어진다(연습판 자체는 practice.test.js가 본다).
+  ok($('#tut-next').textContent.trim() === '연습 한 판 해보기',
+     '초보자의 마지막 장 버튼은 연습판으로', $('#tut-next').textContent.trim());
+  MUI.settings.ui.beginner = false;
+  MUI.openTutorial();
+  for (let i = 0; i < 7; i++) $('#tut-next').click();
+  ok($('#tut-next').textContent.trim() === '시작하기',
+     '초보자 모드가 아니면 마지막 장 버튼은 시작하기', $('#tut-next').textContent.trim());
   $('#tut-next').click();
   ok(!shown(), '완주하면 닫힘');
 

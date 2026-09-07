@@ -73,6 +73,11 @@ const I18N_EN = {
   '코칭 (추천과 근거)':'Coaching (suggestion & reason)',
   '초보자 모드':'Beginner mode',
   '규칙 배우기':'Learn the rules', '규칙 튜토리얼':'Rules tutorial',
+  '연습판':'Practice round', '연습 한 판 해보기':'Try a practice round',
+  '진짜 판 시작':'Start a real match', '연습 끝내기':'End practice',
+  '연습이 끝났습니다. 이제 진짜 판을 시작해 보세요.':
+    'Practice over. Time for a real match.',
+  '다른 사람이 두는 중입니다.':'Another player is thinking.',
   '튜토리얼 다시 보기':'Replay the tutorial', '시작하기':'Start playing',
   '이전':'Back', '다음':'Next',
   '추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다':
@@ -313,6 +318,21 @@ const TF = {
                                 : '내가 안 가진 카드 중 가장 센 것을 부릅니다',
   advFriendSolo:()=> LANG==='en' ? 'You hold both Mighty and Joker — strong enough alone'
                                  : '마이티와 조커를 모두 쥐었습니다 — 단독으로 충분',
+  pracBid:()=> LANG==='en'
+    ? 'Pick a suit, then declare. The blue outline is the suggestion.'
+    : '무늬를 고르고 공약 선언을 누르세요. 파란 테두리가 추천입니다.',
+  pracFloor:()=> LANG==='en'
+    ? 'Choose three cards to bury. The AI badges mark the suggestion.'
+    : '묻을 3장을 손패에서 고르세요. AI 표식이 추천입니다.',
+  pracFriend:()=> LANG==='en'
+    ? 'Call a friend — the strongest card you do not hold.'
+    : '프렌드를 부르세요. 내가 안 가진 카드 중 가장 센 것입니다.',
+  pracPlay:()=> LANG==='en'
+    ? 'Tap a card to play it. The AI badge is the suggestion, with the reason beside it.'
+    : '카드를 눌러 내세요. AI 표식이 추천이고, 그 이유가 옆에 뜹니다.',
+  pracDone:(n)=> LANG==='en'
+    ? `That is every rule in play — ${n} tricks in. Play on, or start a real match now.`
+    : `규칙은 여기까지 다 나왔습니다 (${n}트릭). 계속 둬도 되고, 지금 진짜 판을 시작해도 됩니다.`,
   ruleLead:()=> LANG==='en' ? 'You lead — any card is legal' : '내가 리드 — 아무 카드나 낼 수 있습니다',
   ruleFollow:(g)=> LANG==='en' ? `${gLabel(g)} was led — you must follow suit`
                                : `리드 무늬는 ${gLabel(g)} — 있으면 반드시 따라야 합니다`,
@@ -438,8 +458,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.5';
-const APP_BUILD = '2026-09-07 빌드 — 규칙 튜토리얼';
+const APP_VERSION = 'v3.0.6';
+const APP_BUILD = '2026-09-07 빌드 — 고정 시드 연습판';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -1084,7 +1104,8 @@ function renderHud(){
   const M=settings.match;
   const prog = M.mode==='rounds' ? tf('hudRounds', roundNo, M.rounds)
              : M.mode==='target' ? tf('hudTarget', roundNo, M.targetPrize) : tf('hudPlain', roundNo);
-  $('#hud-round').innerHTML = roundNo?tf('hudDealer', prog, NAMES[dealer]):'';
+  $('#hud-round').innerHTML = practiceOn ? tf('hudDealer', t('연습판'), NAMES[dealer])
+                            : roundNo ? tf('hudDealer', prog, NAMES[dealer]) : '';
   const ct=game&&game.contract;
   $('#hud-contract').innerHTML = ct?tf('hudContract', contractText(ct), NAMES[game.declarer]):'';
   if (ct) $('#hud-contract').innerHTML += friendDeclText();
@@ -2974,12 +2995,12 @@ function refreshTools(){
 
 /* ---------------- 게임 루프 ---------------- */
 function render(){
-  if (replay){ renderReplay(); refreshTools(); return; }
+  if (replay){ renderReplay(); refreshTools(); renderPractice(); return; }
   document.querySelectorAll('.rhand').forEach(e=>e.remove());
   for (let p=1;p<5;p++){ const bk=$('#backs-'+p); if (bk) bk.style.display=''; }
   renderSeats(); renderHud(); renderPuck(); renderBidChips();
   renderTrick(); renderHand(); renderSheet(); renderCheat();
-  refreshTools();
+  refreshTools(); renderPractice();
 }
 function pump(){
   if (!game) return;
@@ -3099,6 +3120,10 @@ function showSettlement(){
   // 총점·기록·효과음은 라운드당 한 번만. 복기 후 정산 화면을 다시 띄워도 중복 반영되지 않는다.
   if (!settledRound){
     settledRound = true;
+    // 연습판은 총점·생애 통계·매치 기록 어디에도 남기지 않는다.
+    if (practiceOn){
+      if (humanWin) SFX.winJingle(); else SFX.loseJingle();
+    } else {
     if (roundRec && !roundRec.result){
       roundRec.result = JSON.parse(JSON.stringify(r));
       matchLog.push(roundRec);
@@ -3110,6 +3135,7 @@ function showSettlement(){
     if (HUMAN===r.declarer){ lifeStats.declR++; if (r.win) lifeStats.declW++; }
     lifeStats.prize+=r.prizes[HUMAN];
     saveStats();
+    }
   }
   const box=$('#modal-box');
   box.innerHTML=`
@@ -3129,7 +3155,11 @@ function showSettlement(){
   const M=settings.match;
   matchOver = (M.mode==='rounds' && roundNo>=M.rounds) ||
               (M.mode==='target' && Math.max(...totals)>=M.targetPrize);
-  $('#next-btn').textContent = matchOver ? t('최종 결과 보기') : t('다음 판');
+  $('#next-btn').textContent = practiceOn ? t('진짜 판 시작')
+                             : matchOver ? t('최종 결과 보기') : t('다음 판');
+  if (practiceOn) for (const id of ['#ai-rv-btn','#rv-btn','#ex-btn']){
+    const b=$(id); if (b) b.disabled=true;      // 연습은 기록을 남기지 않아 열 것이 없다
+  }
   $('#modal').classList.add('show');
   const rvb=$('#rv-btn'), exb=$('#ex-btn'), arb=$('#ai-rv-btn');
   if (rvb) rvb.onclick=()=>{ $('#modal').classList.remove('show'); startReplay(matchLog[matchLog.length-1]); };
@@ -3137,6 +3167,7 @@ function showSettlement(){
   if (exb) exb.onclick=()=>exportRound(matchLog[matchLog.length-1]);
   $('#next-btn').onclick=()=>{
     $('#modal').classList.remove('show');
+    if (practiceOn){ endPractice(); return; }
     if (matchOver){ showFinal(); return; }
     // 딜러 룰: 전 라운드 프렌드가 딜러 (노프렌드/셀프면 주공)
     if (settings.match.dealerRule==='friend') dealer = (r.friend!==null ? r.friend : r.declarer);
@@ -3336,8 +3367,9 @@ function startRound(inc){
   claimMode=false; claimShown=false; claimBy=null; bidFlash=null; resetBidChips();
   if (botTable && botTable.reset) botTable.reset();
   trumpSeenThisRound=false;
-  const cfg = buildEngineConfig();
-  cfg.seed = (Math.random()*2147483647)|0;   // 복기·되돌리기를 위한 재현 시드
+  const cfg = practiceOn ? practiceConfig() : buildEngineConfig();
+  cfg.seed = practiceOn ? PRACTICE_SEED       // 연습판은 늘 같은 패라야 안내가 맞는다
+                        : (Math.random()*2147483647)|0;   // 복기·되돌리기를 위한 재현 시드
   undoUsed = { bidding:0, play:0 };
   settledRound=false; settleLogged=false;
   stateGen++; cancelOpenModal();
@@ -3349,6 +3381,87 @@ function startRound(inc){
   render();
   logLine(tf('logRoundStart', roundNo, NAMES[dealer]));
   pump();
+}
+
+/* ---------------- 연습판 ----------------
+ * 튜토리얼이 말로 설명한 것을 실제로 한 판 해 보는 자리다.
+ *
+ * 시드를 고정한 이유는 대사를 하드코딩하려는 것이 아니다 — 대사는 국면에서 끌어낸다.
+ * 고정하는 진짜 이유는 '가르칠 수 있는 패'를 보장하기 위해서다. 무작위로 돌리면
+ * 사람이 주공이 못 되는 판이 흔하고, 그러면 바닥패 묻기와 프렌드 지정을 아예 못 보고
+ * 한 판이 끝난다. tools/find-practice-seed.js가 찾은 시드는 권장 공약대로 부르면
+ * 주공이 되고, 조커를 쥐고 있으며(튜토리얼에서 배운 카드다), 부를 프렌드가 남는다.
+ *
+ * 봇도 같이 고정한다. 성향이 무작위면 승부사 자리가 공약을 넘겨 버려 시드를 고정한
+ * 뜻이 사라진다. 룰도 마이티리그 기본값으로 고정한다 — 사용자가 최소 공약을 바꿔
+ * 뒀으면 같은 시드라도 다른 판이 된다.
+ *
+ * 연습판은 통계에 남기지 않는다. 튜토리얼 성적이 생애 기록을 오염시킬 이유가 없다.
+ */
+const PRACTICE_SEED = 165, PRACTICE_DEALER = 4;
+const PRACTICE_TRICKS = 4;        // 여기까지면 규칙이 다 나온다 — 열 트릭을 강요하지 않는다
+let practiceOn = false;
+
+function practiceConfig(){
+  const c = JSON.parse(JSON.stringify(defaultSettings().engine));
+  c.discardPointsTo = 'declarer';
+  // 딜미스는 끈다. 초보자 첫 판에 가르칠 개념이 아니고, 봇이 선언하면 판이 다시
+  // 돌아 안내가 통째로 어긋난다(실제로 이 시드에서 그렇게 됐다).
+  c.dealMissEnabled = false;
+  return c;
+}
+async function startPractice(){
+  practiceOn = true;
+  $('#tut').classList.remove('show');
+  $('#start').style.display='none';
+  settings.ui.tutorialDone = true; saveSettings();
+  matchLog=[]; matchHistory=[]; totals=[0,0,0,0,0]; roundNo=0; matchOver=false;
+  dealer = PRACTICE_DEALER;
+  try{
+    botTable = await MightyAI.createTable({
+      tiers:'advanced',
+      personas:['balanced','balanced','balanced','balanced','balanced'],
+      rng: E.makeRng((PRACTICE_SEED ^ 0x5bf03635)>>>0),
+    });
+    botTable.tier = 'practice';     // buildAgents의 캐시 키와 겹치지 않게
+  }catch(e){ /* 실패해도 기존 좌석으로 진행한다 — 판이 멈추는 것보다 낫다 */ }
+  startRound(true);
+}
+function endPractice(){
+  practiceOn = false;
+  $('#practice').classList.remove('show');
+  $('#modal').classList.remove('show');
+  newMatch();
+}
+/** 지금 무엇을 하면 되는지 한 줄. 조언 상자가 '무엇이 좋은 수인가'를 말한다면
+ *  이쪽은 '어디를 누르면 되는가'를 말한다. */
+function practiceText(){
+  if (!game) return '';
+  const tricks = game.play ? game.play.history.length : 0;
+  if (game.phase==='done') return t('연습이 끝났습니다. 이제 진짜 판을 시작해 보세요.');
+  if (game.phase==='play' && tricks>=PRACTICE_TRICKS) return TF.pracDone(tricks);
+  if (game.currentPlayer!==HUMAN) return t('다른 사람이 두는 중입니다.');
+  if (game.phase==='bidding') return TF.pracBid();
+  if (game.phase==='floor')   return TF.pracFloor();
+  if (game.phase==='friend')  return TF.pracFriend();
+  if (game.phase==='play')    return TF.pracPlay();
+  return '';
+}
+function renderPractice(){
+  const bar=$('#practice'); if (!bar) return;
+  syncPracticeClass();
+  if (!practiceOn || replay){ bar.classList.remove('show'); return; }
+  $('#practice-txt').textContent = practiceText();
+  $('#practice-end').textContent = t('진짜 판 시작');
+  bar.classList.add('show');
+  // 띠 높이를 추측하지 않고 잰다 — 문구 길이와 언어에 따라 두 줄도 세 줄도 된다.
+  // 고정 숫자로 물리면 영어판이나 긴 문구에서 다시 겹친다.
+  document.documentElement.style.setProperty('--pracH', bar.offsetHeight + 'px');
+}
+/* 안내 띠가 화면 위쪽을 차지하므로 시트가 그만큼 낮아져야 한다. 안 그러면 띠가
+   시트의 첫 줄(추천)을 덮는다 — 실제로 390px에서 그렇게 됐다. */
+function syncPracticeClass(){
+  document.body.classList.toggle('practicing', !!practiceOn && !replay);
 }
 
 /* ---------------- 규칙 튜토리얼 ----------------
@@ -3403,12 +3516,15 @@ function renderTutorial(){
   }
   const prev=$('#tut-prev'), next=$('#tut-next');
   prev.textContent=t('이전'); prev.disabled = tutStep===0;
-  next.textContent = tutStep===list.length-1 ? t('시작하기') : t('다음');
+  // 마지막 장에서 초보자는 바로 연습 한 판으로 넘어간다 — 읽은 것을 그 자리에서 해 본다
+  next.textContent = tutStep!==list.length-1 ? t('다음')
+                   : settings.ui.beginner ? t('연습 한 판 해보기') : t('시작하기');
 }
 function tutNext(){
   const list=tutSlides();
-  if (tutStep>=list.length-1) closeTutorial();
-  else { tutStep++; renderTutorial(); }
+  if (tutStep<list.length-1){ tutStep++; renderTutorial(); return; }
+  if (settings.ui.beginner && !game){ closeTutorial(); startPractice(); return; }
+  closeTutorial();
 }
 
 /* ---------------- 랜딩 옵션 (언어·난이도) ---------------- */
@@ -3448,7 +3564,7 @@ function renderLanding(){
 /* ---------------- 초기화 ---------------- */
 globalThis.MUI = { get game(){return game}, get busy(){return busy},
   get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
-  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, openTutorial, closeTutorial, get tutStep(){return tutStep}, tutSlides, get lifeStats(){return {...lifeStats}} };
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, openTutorial, closeTutorial, get tutStep(){return tutStep}, tutSlides, startPractice, endPractice, get practiceOn(){return practiceOn}, PRACTICE_SEED, PRACTICE_TRICKS, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -3467,6 +3583,7 @@ $('#tut-btn').onclick=()=>openTutorial();
 $('#tut-close').onclick=()=>closeTutorial();
 $('#tut-prev').onclick=()=>{ if(tutStep>0){ tutStep--; renderTutorial(); } };
 $('#tut-next').onclick=()=>tutNext();
+$('#practice-end').onclick=()=>endPractice();
 $('#start-set-btn').onclick=()=>openSettings();
 $('#set-btn').onclick=()=>openSettings();
 $('#set-close').onclick=()=>closeSettings();
