@@ -105,12 +105,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     console.error('MightyAnalysis missing'); process.exit(1);
   }
   console.log('AI review button + analysis module present');
-  // v2: 코칭 토글이 설정에 있고 기본 OFF, 손패에 코칭 마킹용 data-cid 존재
-  if (MUI.settings.ui.coach !== false) { console.error('coach should default off'); process.exit(1); }
+  // 코칭 토글이 설정에 있고, 기본은 OFF다 — 다만 초보자 모드(기록이 없는 첫 실행에서
+  // 자동으로 켜진다)가 묶음으로 코칭을 켠다. 그래서 기대값은 초보자 모드에 달렸다.
+  const coachExpect = MUI.settings.ui.beginner === true;
+  if (MUI.settings.ui.coach !== coachExpect) {
+    console.error('coach default mismatch: beginner=' + MUI.settings.ui.beginner +
+                  ' coach=' + MUI.settings.ui.coach); process.exit(1);
+  }
   MUI.openSettings();
   await sleep(80);
   if (!w.document.body.textContent.includes('코칭')) { console.error('coach toggle missing in settings'); process.exit(1); }
-  console.log('coach toggle present, default off');
+  console.log('coach toggle present, default =', coachExpect ? 'on (beginner)' : 'off');
   w.document.querySelector('#next-btn').click();
   await sleep(200);
   const ranks = w.document.querySelectorAll('.rank-row').length;

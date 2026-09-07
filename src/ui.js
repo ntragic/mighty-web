@@ -71,6 +71,9 @@ const I18N_EN = {
   '대안 라인(가정)':'alt line (hypothetical)',
   '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
   '코칭 (추천과 근거)':'Coaching (suggestion & reason)',
+  '초보자 모드':'Beginner mode',
+  '추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다':
+    'Shows the suggested move and why on every turn, and slows the pace down',
   '내 차례마다 추천 수와 그 이유를 보여줍니다':'Shows the suggested move and why, on every turn of yours',
   '끔':'Off', '켬':'On', '기대상금':'EV', '평균':'avg',
   '매치 AI 요약':'Match AI summary', '이번 매치 결정적 순간':'Key moments of this match',
@@ -307,6 +310,11 @@ const TF = {
                                 : '내가 안 가진 카드 중 가장 센 것을 부릅니다',
   advFriendSolo:()=> LANG==='en' ? 'You hold both Mighty and Joker — strong enough alone'
                                  : '마이티와 조커를 모두 쥐었습니다 — 단독으로 충분',
+  ruleLead:()=> LANG==='en' ? 'You lead — any card is legal' : '내가 리드 — 아무 카드나 낼 수 있습니다',
+  ruleFollow:(g)=> LANG==='en' ? `${gLabel(g)} was led — you must follow suit`
+                               : `리드 무늬는 ${gLabel(g)} — 있으면 반드시 따라야 합니다`,
+  ruleFree:()=> LANG==='en' ? 'You are void in the led suit — any card is legal'
+                            : '리드 무늬가 없습니다 — 아무 카드나 낼 수 있습니다',
   advFriendFirstWhy:()=> LANG==='en'
     ? 'No strong card left to call — whoever wins the first trick becomes your friend'
     : '부를 만한 강한 카드가 없습니다 — 첫 트릭을 가져가는 사람이 프렌드가 됩니다',
@@ -427,8 +435,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.3';
-const APP_BUILD = '2026-09-07 빌드 — 네 국면 조언과 규칙기반 폴백';
+const APP_VERSION = 'v3.0.4';
+const APP_BUILD = '2026-09-07 빌드 — 초보자 모드';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -461,7 +469,7 @@ function defaultSettings(){
     preset:'league',
     match:{ mode:'rounds', rounds:10, targetPrize:20000, dealerRule:'friend' },
     ui:{ speed:'normal', difficulty:'intermediate', sound:true, lang:null, autoClaim:true, undo:true,
-         coach:false },
+         coach:false, beginner:null },
     _tierV:2,
     names:['나','서준','하린','도윤','유나'],
     engine:{
@@ -525,6 +533,21 @@ async function loadSettings(){
         engine:{...d.engine, ...(s.engine||{}), scoring:{...d.engine.scoring, ...((s.engine||{}).scoring||{})}} };
     }
   }catch(e){}
+}
+/* 초보자 모드 — 새 화면이 아니라 묶음이다. 켜면 안내가 켜지고 판이 느려진다.
+ * 좌석 성향은 여전히 감춘다(CLAUDE.md 규율). 끌 때 나머지를 되돌리지는 않는다 —
+ * 그 사이 사용자가 직접 만진 값일 수 있고, 되돌리면 그 조정이 사라진다. */
+function applyBeginner(on){
+  settings.ui.beginner = !!on;
+  if (!on) return;
+  settings.ui.coach = true;         // 추천과 근거
+  settings.ui.undo = true;          // 되돌리기 — 실수해도 배울 수 있게
+  settings.ui.speed = 'slow';       // 봇이 몰아치면 무슨 일이 일어났는지 못 본다
+  settings.ui.difficulty = 'intermediate';
+  // 치트시트 — 남은 카드를 세는 법을 눈으로 익히게 한다. 다만 좁은 화면에서는
+  // 열지 않는다: 390px에서 재보니 시트가 판 전체를 덮어 첫 판을 오히려 가린다.
+  // 720px는 모바일 규칙이 갈리는 기존 분기점이다.
+  cheatOpen = (typeof window!=='undefined' && window.innerWidth > 720);
 }
 function applyPreset(key){
   const d = defaultSettings();
@@ -600,7 +623,14 @@ function renderSetGeneral(b,S){
     [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
     ()=>S.ui.coach?'on':'off',
     // 끌 때 시트의 조언 상자까지 지우려면 시트를 다시 그려야 한다
-    v=>{ S.ui.coach=(v==='on'); if(S.ui.coach) ensureMaster(); renderHand(); renderSheet(); }));
+    v=>{ S.ui.coach=(v==='on');
+         if(S.ui.coach && !S.ui.beginner) ensureMaster();
+         renderHand(); renderSheet(); }));
+  // 초보자 모드 — 코칭 바로 위에 둔다. 켜면 코칭까지 같이 켜진다.
+  b.append(segRow(t('초보자 모드'), t('추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다'),
+    [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
+    ()=>S.ui.beginner?'on':'off',
+    v=>{ applyBeginner(v==='on'); renderCheat(); applyStatic(); renderHand(); renderSheet(); }));
   // 사운드·속도
   b.append(el('div','set-sec',t('사운드')));
   b.append(segRow(t('컴퓨터 속도'),'', [{v:'fast',l:t('빠름')},{v:'normal',l:t('보통')},{v:'slow',l:t('느림')}],
@@ -2396,8 +2426,9 @@ async function coachUpdate(){
   if (!masterSess){
     const adv=ruleAdvice();
     if (adv && adv.act.type==='play')
-      markCoach(E.cardId(adv.act.card), coachReasons(game, adv.act, false));
-    ensureMaster();
+      markCoach(E.cardId(adv.act.card),
+                beginnerPlayRule().concat(coachReasons(game, adv.act, false)));
+    if (!settings.ui.beginner) ensureMaster();   // 초보자에게 16MB를 강요하지 않는다
     return;
   }
   try{
@@ -2413,8 +2444,21 @@ async function coachUpdate(){
     const act=await MightyAI.applyGuards(masterSess, ortLib, game, HUMAN, raw);
     if (gen!==coachGen || !game || game.phase!=='play' || game.currentPlayer!==HUMAN) return;
     const guardFired=!E.sameCard(raw.card, kg.card);   // 키카드 가드만 별도 문구
-    markCoach(E.cardId(act.card), coachReasons(game, act, guardFired));
+    markCoach(E.cardId(act.card),
+              beginnerPlayRule().concat(coachReasons(game, act, guardFired)));
   }catch(e){ /* 코칭은 조용히 실패 */ }
+}
+
+/** 초보자 모드에서만 붙는 규칙 한 줄. coachReasons는 건드리지 않는다 —
+ *  그 함수의 출력 계약(1~3줄)에 기대는 곳이 있다(tests/smoke.test.js). */
+function beginnerPlayRule(){
+  if (!settings.ui.beginner || !game || game.phase!=='play') return [];
+  const pl=game.play;
+  if (!pl.table.length) return [TF.ruleLead()];
+  const led=pl.ledSuit;
+  if (!led) return [];
+  return [game.hands[HUMAN].some(c=>!E.isJoker(c) && c.suit===led)
+    ? TF.ruleFollow(led) : TF.ruleFree()];
 }
 
 /** 손패의 그 카드에 AI 표식을 찍고, 근거가 있으면 버블까지 띄운다. */
@@ -3311,6 +3355,10 @@ function renderLanding(){
     }
     row.append(seg); return row;
   };
+  // 초보자 모드를 맨 위에 둔다 — 처음 온 사람이 가장 먼저 만나야 할 선택이다
+  box.append(mk(t('초보자 모드'), [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
+    ()=>settings.ui.beginner?'on':'off', v=>applyBeginner(v==='on')));
+  box.append(el('div','land-note', t('추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다')));
   box.append(mk(t('언어'), [{v:'ko',l:'한국어'},{v:'en',l:'English'}], ()=>LANG, v=>setLang(v)));
   box.append(mk(t('난이도'), [{v:'intermediate',l:t('중급')},{v:'advanced',l:t('고급')},{v:'master',l:t('마스터')}],
     ()=>TIER_OF[settings.ui.difficulty]||'intermediate',
@@ -3328,6 +3376,8 @@ loadSettings().then(()=>{
   LANG = saved || ((navigator.language||'ko').toLowerCase().startsWith('ko') ? 'ko' : 'en');
   settings.ui.lang = LANG;
   document.documentElement.lang = LANG;
+  // 처음 온 사람에게는 초보자 모드를 기본으로 켠다. 한 번이라도 직접 정했으면 그 선택을 따른다.
+  if (settings.ui.beginner===null) applyBeginner(lifeStats.rounds===0);
   applyNames(); applyStatic(); renderLanding();
   buildAgents().then(()=>ensureNN());          // 전 티어가 신경망을 쓴다 — 티어에 맞는 모델만 로드
 });
