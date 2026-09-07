@@ -343,6 +343,25 @@ body.practicing #sheet{max-height:calc(var(--vvh,100dvh) - var(--card-h) - 96px
 #practice-end{flex:0 0 auto; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06);
   color:var(--txt); border-radius:9px; padding:5px 10px; font:inherit; font-size:.7rem;
   cursor:pointer; white-space:nowrap}
+/* 용어 — 본문 속에서 눌러 뜻을 볼 수 있는 낱말. 밑줄만 긋고 버튼처럼 굴지 않는다.
+   문장 흐름을 끊지 않으면서 '누를 수 있다'만 알리면 된다. */
+.term{background:none; border:none; padding:0; font:inherit; color:inherit; cursor:pointer;
+  text-decoration:underline dotted rgba(109,179,242,.85); text-underline-offset:3px;
+  text-decoration-thickness:1.5px}
+.term:hover{color:#9fccf5}
+#termpop{position:fixed; z-index:78; display:none; max-width:min(84vw,300px);
+  background:linear-gradient(165deg,#1B2C26,#0E1815); border:1px solid rgba(109,179,242,.5);
+  border-radius:12px; padding:10px 13px; box-shadow:0 10px 28px rgba(0,0,0,.55); word-break:keep-all}
+#termpop.show{display:block}
+#termpop .tk{font-size:.82rem; font-weight:700; color:#8cc4f7; margin-bottom:4px}
+#termpop .td{font-size:.76rem; line-height:1.65; color:var(--txt)}
+#termpop .tall{margin-top:8px; font-size:.7rem; color:var(--txt-dim); background:none; border:none;
+  padding:0; font-family:inherit; cursor:pointer; text-decoration:underline}
+/* 사전 목록 */
+.gl-row{padding:9px 0; border-bottom:1px solid rgba(255,255,255,.06)}
+.gl-row:last-child{border-bottom:none}
+.gl-k{font-size:.82rem; font-weight:600; color:var(--gold); margin-bottom:2px}
+.gl-d{font-size:.75rem; line-height:1.65; color:var(--txt-dim); word-break:keep-all}
 #tut{position:fixed; inset:0; z-index:76; background:rgba(4,8,7,.82); backdrop-filter:blur(4px);
   display:none; place-items:center; padding:16px}
 #tut.show{display:grid}
@@ -624,6 +643,7 @@ body.replaying #seat-0 .rhand{display:none}
     <div id="set-body"></div>
     <footer><button class="btn ghost" id="set-reset">리그 룰로 초기화</button><button class="btn primary" id="set-done">완료</button></footer>
   </div></div>
+  <div id="termpop"></div>
   <div id="practice"><span id="practice-txt"></span><button id="practice-end"></button></div>
   <div id="tut"><div class="panel">
     <header><h2 id="tut-title"></h2><button class="close" id="tut-close">✕</button></header>

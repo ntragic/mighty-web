@@ -171,8 +171,66 @@ const EN = [
   },
 ];
 
+/* ---------------- 용어 사전 ----------------
+ * 규칙을 한 번 읽었다고 용어가 붙지 않는다. 판이 도는 중에 '기루다가 뭐였지'가
+ * 나오면 그 자리에서 답이 나와야 한다.
+ *
+ * k  화면에 뜨는 표제어
+ * m  본문에서 이 뜻으로 읽어야 할 낱말들(표제어 자체는 자동 포함). 영어는 굴절형이
+ *    있어 별도로 적는다. 한 문단에 같은 용어를 여러 번 표시하지는 않는다.
+ * d  한 문장 뜻풀이. 다른 용어를 끌어들이지 않고 그 자리에서 닫히게 쓴다.
+ *
+ * 표제어는 docs/GLOSSARY.md가 확정본이다.
+ */
+const TERMS_KO = [
+  { k: '기루다', d: '판마다 정해지는 으뜸무늬. 다른 무늬의 어떤 카드보다 세다.' },
+  { k: '노기루다', d: '기루다 없이 두는 공약. 마이티와 조커만 특별하다.' },
+  { k: '마이티', d: '판 전체에서 가장 센 카드 한 장. 기루다가 스페이드면 다이아 A, 아니면 스페이드 A.' },
+  { k: '조커', d: '두 번째로 센 카드. 리드로 내면 따라올 무늬를 지정할 수 있다.' },
+  { k: '조커콜', d: '클럽 3으로 리드해 조커를 가진 사람에게 조커를 강제로 내게 하는 수.' },
+  { k: '공약', m: ['공약'], d: '점수카드를 몇 장 가져오겠다는 약속. 가장 높이 부른 사람이 주공이 된다.' },
+  { k: '주공', d: '공약을 따내 판을 이끄는 사람. 바닥패를 받고 프렌드를 부른다.' },
+  { k: '프렌드', d: '주공이 지목한 카드를 가진 사람. 그 카드가 나올 때까지 누구인지 모른다.' },
+  { k: '초구 프렌드', d: '첫 트릭을 가져가는 사람이 프렌드가 되는 지정 방식.' },
+  { k: '여당', d: '주공과 프렌드 편. 공약한 만큼 점수카드를 모으면 이긴다.' },
+  { k: '야당', d: '나머지 세 사람. 여당이 공약에 한 장이라도 못 미치게 막으면 이긴다.' },
+  { k: '트릭', d: '다섯 명이 한 장씩 내는 한 번의 겨룸. 한 판에 열 번 있다.' },
+  { k: '리드', d: '트릭에서 먼저 내는 자리. 아무 카드나 낼 수 있고, 나머지는 그 무늬를 따라야 한다.' },
+  { k: '점수카드', d: '각 무늬의 10 J Q K A. 모두 스무 장이고, 이것만 점수가 된다.' },
+  { k: '바닥패', d: '아무에게도 안 돌린 세 장. 주공이 받아 손에서 세 장을 다시 묻는다.' },
+  { k: '딜미스', d: '패가 너무 약할 때 판을 무르고 다시 돌리자고 선언하는 것.' },
+  { k: '런', d: '여당이 점수카드 스무 장을 전부 가져간 것.' },
+  { k: '백런', d: '야당이 여당을 한 장도 못 가져가게 막은 것.' },
+  { k: '세팅', d: '남은 트릭을 전부 이긴다고 선언해 판을 일찍 끝내는 것.' },
+];
+const TERMS_EN = [
+  { k: 'Trump', m: ['trump', 'trumps'], d: 'The suit chosen for this round. Any trump beats any card of another suit.' },
+  { k: 'No Trump', m: ['no trump'], d: 'A contract played without a trump suit. Only the Mighty and the Joker stay special.' },
+  { k: 'Mighty', d: 'The single strongest card. The ace of diamonds when spades are trump, the ace of spades otherwise.' },
+  { k: 'Joker', d: 'The second strongest card. Leading it lets you name the suit others must follow.' },
+  { k: 'Joker Call', d: 'Leading the three of clubs to force whoever holds the Joker to play it.' },
+  { k: 'Bid', m: ['bid', 'bids'], d: 'A promise of how many point cards your side will take. The highest bidder becomes declarer.' },
+  { k: 'Declarer', m: ['declarer'], d: 'The player who won the bidding. Takes the kitty and calls a friend.' },
+  { k: 'Friend', m: ['friend'], d: 'Whoever holds the card the declarer called. Nobody knows who until that card appears.' },
+  { k: 'Attackers', m: ['attackers'], d: 'The declarer and the friend. They win by meeting the bid.' },
+  { k: 'Defenders', m: ['defenders'], d: 'The other three players. They win by holding the attackers one card short.' },
+  { k: 'Trick', m: ['trick', 'tricks'], d: 'One round where each of the five plays a card. Ten per deal.' },
+  { k: 'Point card', m: ['point card', 'point cards'], d: 'The 10, J, Q, K and A of each suit — twenty in all, and the only cards that score.' },
+  { k: 'Kitty', m: ['kitty'], d: 'The three cards dealt to nobody. The declarer takes them and buries three.' },
+  { k: 'Misdeal', m: ['misdeal'], d: 'Declaring a hand too weak to play, which throws the deal out and redeals.' },
+  { k: 'Run', d: 'Taking all twenty point cards.' },
+  { k: 'Back Run', d: 'Holding the attackers to no point cards at all.' },
+  { k: 'Claim', d: 'Declaring you will win every remaining trick, ending the round early.' },
+];
+
 globalThis.MightyTutorial = {
   slides(lang) { return (lang === 'en' ? EN : KO).map(s => ({ ...s })); },
+  /** 표제어는 긴 것부터 — '노기루다'가 '기루다'에 먹히면 안 된다. */
+  terms(lang) {
+    return (lang === 'en' ? TERMS_EN : TERMS_KO)
+      .map(x => ({ ...x, m: [x.k, ...(x.m || [])] }))
+      .sort((a, b) => b.k.length - a.k.length);
+  },
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = globalThis.MightyTutorial;
 })();

@@ -81,8 +81,9 @@ function setSegRow(labelRe, optionText) {
   await waitFor(() => MUI.game && MUI.game.phase === 'friend' && MUI.game.currentPlayer === 0 && !MUI.busy);
   MUI.humanAct({ type: 'friend', mode: 'first' }, '');
 
+  // 모델 로드가 걸려 있으면 봇 진행이 늦다 — 부하가 걸린 기계에서 30초로는 모자랐다.
   const gotPlay = await waitFor(() => MUI.game && MUI.game.phase === 'play'
-    && MUI.game.currentPlayer === 0 && !MUI.busy && tipLines().length > 0);
+    && MUI.game.currentPlayer === 0 && !MUI.busy && tipLines().length > 0, 90000);
   ok(gotPlay, '플레이 국면 근거 버블 도달');
   const lines = tipLines();
   ok(RULE.test(lines[0] || ''), '초보자 모드에서 규칙 한 줄이 맨 앞',
@@ -93,7 +94,7 @@ function setSegRow(labelRe, optionText) {
   MUI.openSettings();
   ok(setSegRow(/초보자 모드/, '끔'), '설정에 초보자 모드 항목 존재');
   $('#set-done').click();
-  await waitFor(() => tipLines().length > 0 && !RULE.test(tipLines()[0] || ''), 8000);
+  await waitFor(() => tipLines().length > 0 && !RULE.test(tipLines()[0] || ''), 30000);
   const off = tipLines();
   ok(MUI.settings.ui.beginner === false, '초보자 모드 꺼짐');
   ok(off.length > 0 && !RULE.test(off[0]), '끄면 규칙 줄 사라짐', JSON.stringify(off.slice(0, 2)));

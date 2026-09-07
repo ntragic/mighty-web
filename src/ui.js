@@ -74,6 +74,7 @@ const I18N_EN = {
   '초보자 모드':'Beginner mode',
   '규칙 배우기':'Learn the rules', '규칙 튜토리얼':'Rules tutorial',
   '연습판':'Practice round', '연습 한 판 해보기':'Try a practice round',
+  '용어 사전':'Glossary', '전체 용어 보기':'See all terms', '닫기':'Close',
   '진짜 판 시작':'Start a real match', '연습 끝내기':'End practice',
   '연습이 끝났습니다. 이제 진짜 판을 시작해 보세요.':
     'Practice over. Time for a real match.',
@@ -458,8 +459,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.6';
-const APP_BUILD = '2026-09-07 빌드 — 고정 시드 연습판';
+const APP_VERSION = 'v3.0.7';
+const APP_BUILD = '2026-09-07 빌드 — 용어 툴팁과 사전';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -653,10 +654,14 @@ function renderSetGeneral(b,S){
   {
     const row=el('div','set-row');
     row.append(el('div','lbl', t('규칙 튜토리얼')));
+    const seg=el('div','seg');
     const btn=el('button','chip', t('튜토리얼 다시 보기'));
     btn.id='set-tut-btn';
     btn.onclick=()=>openTutorial();
-    row.append(btn); b.append(row);
+    const gl=el('button','chip', t('용어 사전'));
+    gl.id='set-gloss-btn';
+    gl.onclick=()=>openGlossary();
+    seg.append(btn, gl); row.append(seg); b.append(row);
   }
   // 초보자 모드 — 코칭 바로 위에 둔다. 켜면 코칭까지 같이 켜진다.
   b.append(segRow(t('초보자 모드'), t('추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다'),
@@ -1477,6 +1482,12 @@ function sheetFriend(sh){
     rec && rec.mode==='first'));
   quick.append(mk(t('노프렌드'), ()=>callFriend({type:'friend',mode:'none'},t('노프렌드')),
     rec && rec.mode==='none'));
+  // 추천이 빠른 선택에 없는 카드(기루다 K 등)면 그 카드를 칩으로 붙인다.
+  // 안 그러면 '추천 — ♠K 프렌드'를 읽고도 누를 곳이 없어 직접 선택까지 펼쳐야 한다.
+  if (recCard && !quick.querySelector('.rec'))
+    quick.append(mk(cardLabel(recCard),
+      ()=>callFriend({type:'friend',mode:'card',card:recCard}, tf('cardFriend', cardLabel(recCard))),
+      true));
   quick.append(mk(t('직접 선택')+(friendCustom?' ▲':' ▼'), ()=>{ friendCustom=!friendCustom; renderSheet(); }));
   sh.append(quick);
   if (friendCustom){
@@ -1985,9 +1996,15 @@ function instrument(g){
   Object.defineProperty(g, 'act', {
     enumerable: false, configurable: true, writable: true,
     value: function(action){
+      // 엔진이 받아들인 뒤에 기록한다. 먼저 기록하면 거부당한 수(엔진이 던진 수)까지
+      // 기록에 남고, 나중에 되돌리기가 그 기록을 재생하다 같은 자리에서 다시 던진다
+      // — 재생은 try로 감싸이지 않아 판이 통째로 멈춘다.
+      // p·ph는 실행 전 값이라야 하므로 미리 잡아 둔다.
+      const p = this.currentPlayer, ph = this.phase;
+      const ret = base.call(this, action);
       if (roundRec && this === g)
-        roundRec.actions.push({ p: this.currentPlayer, ph: this.phase, a: JSON.parse(JSON.stringify(action)) });
-      return base.call(this, action);
+        roundRec.actions.push({ p, ph, a: JSON.parse(JSON.stringify(action)) });
+      return ret;
     },
   });
 }
@@ -2306,8 +2323,8 @@ function sheetAdvice(sh){
   else if (game.phase==='friend' && act.type==='friend') lines=adviceFriend(act);
   if (!lines) return null;
   const box=el('div','coach-note');
-  box.append(el('div','ch', lines[0]));
-  for (const l of lines.slice(1)) box.append(el('div','cb', l));
+  box.append(el('div','ch', withTerms(lines[0])));
+  for (const l of lines.slice(1)) box.append(el('div','cb', withTerms(l)));
   sh.append(box);
   return act;
 }
@@ -3383,6 +3400,76 @@ function startRound(inc){
   pump();
 }
 
+/* ---------------- 용어 툴팁과 미니 사전 ----------------
+ * 규칙을 한 번 읽었다고 용어가 붙지는 않는다. 판이 도는 중에 '기루다가 뭐였지'가
+ * 나오면 그 자리에서 답이 나와야 한다. 치트시트는 이미 규칙을 아는 사람용이라
+ * 이 자리를 못 메운다.
+ *
+ * 표시는 초보자 모드에서만, 그리고 우리가 만든 안내 문구(조언 상자·연습 띠·튜토리얼
+ * 본문)에만 넣는다. 화면의 모든 문자열을 훑으면 사용자가 지은 이름까지 건드리게 되고,
+ * 한 문단이 밑줄투성이가 된다. 한 문단에 같은 용어는 한 번만 표시한다.
+ */
+function termList(){
+  try{ return globalThis.MightyTutorial ? MightyTutorial.terms(LANG) : []; }
+  catch(e){ return []; }
+}
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escHtml = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let termRe = null, termReLang = null;
+function termRegex(){
+  if (termRe && termReLang === LANG) return termRe;
+  const alts = [];
+  for (const x of termList()) for (const m of x.m) alts.push(escRe(m));
+  alts.sort((a,b)=>b.length-a.length);          // 긴 표제어 우선 — '노기루다'가 먼저다
+  termReLang = LANG;
+  termRe = alts.length ? new RegExp('(' + alts.join('|') + ')', LANG==='en' ? 'gi' : 'g') : null;
+  return termRe;
+}
+/** 평문을 받아 용어에 밑줄을 입힌 HTML을 돌려준다. 평문만 넣어야 한다. */
+function withTerms(text){
+  const plain = escHtml(text);
+  if (!settings.ui.beginner) return plain;
+  const re = termRegex();
+  if (!re) return plain;
+  const used = new Set();
+  let out = '', last = 0, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(text)) !== null){
+    const key = m[0].toLowerCase();
+    out += escHtml(text.slice(last, m.index));
+    if (used.has(key)) out += escHtml(m[0]);
+    else {
+      used.add(key);
+      out += '<button class="term" data-term="' + escHtml(m[0]) + '">' + escHtml(m[0]) + '</button>';
+    }
+    last = m.index + m[0].length;
+  }
+  return out + escHtml(text.slice(last));
+}
+function findTerm(word){
+  const w = String(word).toLowerCase();
+  for (const x of termList()) if (x.m.some(v => v.toLowerCase() === w)) return x;
+  return null;
+}
+function hideTermPop(){ const p=$('#termpop'); if(p) p.classList.remove('show'); }
+function showTermPop(anchor, word){
+  const x = findTerm(word), pop = $('#termpop');
+  if (!x || !pop) return;
+  pop.innerHTML = '<div class="tk">' + escHtml(x.k) + '</div><div class="td">' + escHtml(x.d) + '</div>' +
+                  '<button class="tall" id="term-all">' + t('전체 용어 보기') + '</button>';
+  pop.classList.add('show');
+  const r = anchor.getBoundingClientRect();
+  let left = r.left + r.width/2 - pop.offsetWidth/2;
+  left = Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, left));
+  // 위에 자리가 없으면 아래로 내린다 — 화면 밖으로 나가면 읽을 수가 없다
+  const above = r.top - pop.offsetHeight - 10;
+  pop.style.left = left + 'px';
+  pop.style.top = (above >= 8 ? above
+                 : Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 10)) + 'px';
+  const all = $('#term-all');
+  if (all) all.onclick = ev => { ev.stopPropagation(); hideTermPop(); openGlossary(); };
+}
+
 /* ---------------- 연습판 ----------------
  * 튜토리얼이 말로 설명한 것을 실제로 한 판 해 보는 자리다.
  *
@@ -3451,7 +3538,7 @@ function renderPractice(){
   const bar=$('#practice'); if (!bar) return;
   syncPracticeClass();
   if (!practiceOn || replay){ bar.classList.remove('show'); return; }
-  $('#practice-txt').textContent = practiceText();
+  $('#practice-txt').innerHTML = withTerms(practiceText());
   $('#practice-end').textContent = t('진짜 판 시작');
   bar.classList.add('show');
   // 띠 높이를 추측하지 않고 잰다 — 문구 길이와 언어에 따라 두 줄도 세 줄도 된다.
@@ -3470,16 +3557,25 @@ function syncPracticeClass(){
  * v1.2.2에서 그 둘을 섞어 게임이 멈춘 적이 있다. 게임 상태를 건드리지 않으므로
  * 진행 중에 열어도 판에 영향이 없다.
  */
-let tutStep=0;
+let tutStep=0, tutMode='slides';   // slides | terms — 패널 하나를 두 쓰임에 나눠 쓴다
 function tutSlides(){
   try{ return globalThis.MightyTutorial ? MightyTutorial.slides(LANG) : []; }
   catch(e){ return []; }
 }
 /** 서술형 표기를 엔진 카드로 옮긴다. 튜토리얼이 엔진 로드 순서에 얽히지 않게 한다. */
 function tutCard(d){ return d==='JK' ? E.JOKER : { suit:d.s, rank:d.r }; }
+function openGlossary(){
+  if (!termList().length) return;
+  tutMode='terms'; tutStep=0;
+  hideTermPop();                      // 뜻풀이 말풍선이 사전 위에 남으면 안 된다
+  $('#settings').classList.remove('show');
+  $('#tut').classList.add('show');
+  renderTutorial();
+}
 function openTutorial(){
   if (!tutSlides().length) return;
-  tutStep=0;
+  tutMode='slides'; tutStep=0;
+  hideTermPop();
   $('#settings').classList.remove('show');   // 설정에서 열었을 때 두 겹으로 쌓이지 않게
   $('#tut').classList.add('show');
   renderTutorial();
@@ -3487,16 +3583,34 @@ function openTutorial(){
 /** 완주든 중도 이탈이든 '봤다'로 친다 — 안 그러면 매번 다시 권하게 된다. */
 function closeTutorial(){
   $('#tut').classList.remove('show');
-  settings.ui.tutorialDone=true; saveSettings(); renderLanding();
+  hideTermPop();
+  // 사전을 닫은 것은 튜토리얼을 본 것이 아니다 — 같은 패널을 쓴다고 같은 뜻이 아니다.
+  if (tutMode==='slides'){ settings.ui.tutorialDone=true; saveSettings(); renderLanding(); }
+  tutMode='slides';
+}
+function renderGlossary(){
+  $('#tut-title').textContent = t('용어 사전');
+  const b=$('#tut-body'); b.innerHTML=''; b.scrollTop=0;
+  const coll = LANG==='en' ? 'en' : 'ko';
+  for (const x of termList().slice().sort((a,b)=>a.k.localeCompare(b.k, coll))){
+    const row=el('div','gl-row');
+    row.append(el('div','gl-k', escHtml(x.k)), el('div','gl-d', escHtml(x.d)));
+    b.append(row);
+  }
+  $('#tut-dots').innerHTML='';
+  const prev=$('#tut-prev'), next=$('#tut-next');
+  prev.style.display='none';
+  next.textContent=t('닫기');
 }
 function renderTutorial(){
+  if (tutMode==='terms'){ renderGlossary(); return; }
   const list=tutSlides();
   if (!list.length){ closeTutorial(); return; }
   tutStep=Math.max(0, Math.min(list.length-1, tutStep));
   const sl=list[tutStep];
   $('#tut-title').textContent=sl.title;
   const b=$('#tut-body'); b.innerHTML=''; b.scrollTop=0;
-  for (const line of sl.body) b.append(el('p','tut-p', line));
+  for (const line of sl.body) b.append(el('p','tut-p', withTerms(line)));
   if (sl.cards && sl.cards.length){
     const row=el('div','tut-cards');
     const hi=new Set(sl.hi||[]);
@@ -3515,12 +3629,13 @@ function renderTutorial(){
     dots.append(d);
   }
   const prev=$('#tut-prev'), next=$('#tut-next');
-  prev.textContent=t('이전'); prev.disabled = tutStep===0;
+  prev.style.display=''; prev.textContent=t('이전'); prev.disabled = tutStep===0;
   // 마지막 장에서 초보자는 바로 연습 한 판으로 넘어간다 — 읽은 것을 그 자리에서 해 본다
   next.textContent = tutStep!==list.length-1 ? t('다음')
                    : settings.ui.beginner ? t('연습 한 판 해보기') : t('시작하기');
 }
 function tutNext(){
+  if (tutMode==='terms'){ closeTutorial(); return; }
   const list=tutSlides();
   if (tutStep<list.length-1){ tutStep++; renderTutorial(); return; }
   if (settings.ui.beginner && !game){ closeTutorial(); startPractice(); return; }
@@ -3564,7 +3679,7 @@ function renderLanding(){
 /* ---------------- 초기화 ---------------- */
 globalThis.MUI = { get game(){return game}, get busy(){return busy},
   get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
-  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, openTutorial, closeTutorial, get tutStep(){return tutStep}, tutSlides, startPractice, endPractice, get practiceOn(){return practiceOn}, PRACTICE_SEED, PRACTICE_TRICKS, get lifeStats(){return {...lifeStats}} };
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, openTutorial, closeTutorial, openGlossary, get tutStep(){return tutStep}, get tutMode(){return tutMode}, tutSlides, termList, withTerms, startPractice, endPractice, get practiceOn(){return practiceOn}, PRACTICE_SEED, PRACTICE_TRICKS, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -3584,6 +3699,12 @@ $('#tut-close').onclick=()=>closeTutorial();
 $('#tut-prev').onclick=()=>{ if(tutStep>0){ tutStep--; renderTutorial(); } };
 $('#tut-next').onclick=()=>tutNext();
 $('#practice-end').onclick=()=>endPractice();
+document.addEventListener('click', ev=>{
+  const el_ = ev.target && ev.target.closest ? ev.target.closest('.term') : null;
+  if (el_){ ev.preventDefault(); ev.stopPropagation(); showTermPop(el_, el_.dataset.term); return; }
+  if (!(ev.target && ev.target.closest && ev.target.closest('#termpop'))) hideTermPop();
+}, true);
+window.addEventListener('resize', hideTermPop);
 $('#start-set-btn').onclick=()=>openSettings();
 $('#set-btn').onclick=()=>openSettings();
 $('#set-close').onclick=()=>closeSettings();
@@ -3600,7 +3721,9 @@ addEventListener('keydown', ev=>{
   else if (k==='r'){ ev.preventDefault(); if(replay) closeReplay(); else openReplayPicker(); }
   else if (k==='c'){ ev.preventDefault(); cheatOpen=!cheatOpen; renderCheat(); applyStatic(); }
   else if (k==='escape'){
-    if ($('#expmodal').classList.contains('show')){ $('#expmodal').classList.remove('show'); render(); pump(); }
+    if ($('#termpop').classList.contains('show')){ hideTermPop(); }
+    else if ($('#tut').classList.contains('show')){ closeTutorial(); }
+    else if ($('#expmodal').classList.contains('show')){ $('#expmodal').classList.remove('show'); render(); pump(); }
     else if (replay) closeReplay();
     // 자동 진행이 켜져 있으면 빠져나올 길을 준다 — 실수로 켜졌을 때 되돌리기 말고는
     // 방법이 없었다(제보 2026-08-23).

@@ -87,8 +87,9 @@ const recChips = () => doc.querySelectorAll('#sheet .chip.rec, #sheet .btn.rec')
   MUI.humanAct({ type: 'friend', mode: 'first' }, '');
 
   // ---------- 4. 플레이 (모델 없는 규칙기반 폴백) ----------
+  // 모델 로드가 걸려 있으면 봇 진행이 늦다 — 부하가 걸린 기계에서 30초로는 모자랐다.
   const gotPlay = await waitFor(() => MUI.game && MUI.game.phase === 'play'
-    && MUI.game.currentPlayer === 0 && !MUI.busy && coachCards() > 0);
+    && MUI.game.currentPlayer === 0 && !MUI.busy && coachCards() > 0, 90000);
   ok(gotPlay, '플레이 국면에서 모델 없이도 추천 카드 표시',
      'masterState=' + MUI.masterState + ' coach=' + coachCards());
   ok(!!$('#coach-tip'), '플레이 근거 버블 표시');

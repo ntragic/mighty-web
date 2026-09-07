@@ -3,7 +3,7 @@
 혼자 즐기는 5인 마이티(Mighty) 카드게임. 서버 없이 **단일 HTML 파일**로 동작하며
 itch.io에 정적 배포한다. AI는 규칙 기반 2티어 + 신경망 1티어.
 
-- 현재 개발 버전: **v3.0.6** · 이전 배포 기준선: **v2.16.9**
+- 현재 개발 버전: **v3.0.7** · 이전 배포 기준선: **v2.16.9**
   (`src/ui.js`의 `APP_VERSION`이 단일 소스)
 - 배포처: itch.io (비공개 테스트)
 - 스코어링은 「마이티리그 시즌6」 엑셀 수식을 그대로 이식했다. **임의로 바꾸지 마라.**
@@ -32,7 +32,7 @@ src/                     소스 (여기를 고친다)
   mighty-engine.js       게임 엔진 + 규칙 기반 AI(중급/고급). 룰의 기준 구현
   mighty-master.js       신경망 관측 인코더 + 추론 헬퍼
   mighty-ai.js           3티어 통합 진입점 (createAgent / createTable / loadMaster)
-  tutorial.js            규칙 튜토리얼 슬라이드 텍스트 (한/영, 그리기는 ui.js)
+  tutorial.js            규칙 튜토리얼 슬라이드 + 용어 사전 텍스트 (한/영, 그리기는 ui.js)
   ui.js                  게임 UI 드라이버 (i18n, 복기, 되돌리기, 내보내기 전부 여기)
 web/
   index.template.html    HTML/CSS 뼈대 + 주입 플레이스홀더
