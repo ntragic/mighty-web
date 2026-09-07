@@ -28,7 +28,9 @@ body{
   color:var(--txt); overflow:hidden; -webkit-user-select:none; user-select:none;
   background:radial-gradient(120% 90% at 50% 38%, var(--felt-hi) 0%, var(--felt-lo) 78%);
 }
-#table{position:fixed; inset:0}
+/* 모바일 브라우저 툴바가 덮는 영역까지 화면으로 치면 맨 아래 손패가 잘린다.
+   dvh는 실제로 보이는 높이라, 툴바가 나와도 바닥이 화면 안에 남는다. */
+#table{position:fixed; left:0; right:0; top:0; height:100%; height:100dvh; height:var(--vvh,100dvh)}
 /* 시그니처: 펠트 각인 링 */
 #rings{position:absolute; left:50%; top:44%; width:min(78vw,560px); aspect-ratio:1;
   transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
@@ -195,8 +197,16 @@ body{
   display:grid; place-items:center}
 .cardback::after{content:'M'; font-weight:700; color:rgba(223,175,79,.5); font-size:1.1rem; letter-spacing:.1em}
 /* ---------- 내 손패 ---------- */
-#hand{position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
-  display:flex; z-index:15; padding:0 10px}
+/* 하단 스택 — 손패를 바닥에 먼저 앉히고, 시트를 그 위에 쌓는다.
+   예전엔 시트를 bottom:calc(var(--card-h) + 44px)로 손패 높이를 '추측'해 띄웠다.
+   추측이 어긋나는 순간(카드 크기 변화·시트 줄바꿈·모바일 툴바) 시트가 손패를 덮는다.
+   흐름에 위아래로 나란히 놓으면 겹칠 방법 자체가 없다.
+   z-index는 각자 유지 — #bottom에 z-index를 주면 새 쌓임 맥락이 생겨
+   시트가 트릭(18) 아래로 내려간다. */
+#bottom{position:absolute; left:0; right:0; bottom:0; display:flex; flex-direction:column;
+  align-items:center; gap:30px; padding:0 10px 14px; pointer-events:none}
+#bottom>*{pointer-events:auto}
+#hand{position:relative; display:flex; z-index:15}
 #hand .hcard{margin-left:calc(var(--card-w)*-0.42); transition:transform .18s, filter .18s; cursor:default; position:relative}
 #hand .hcard:first-child{margin-left:0}
 #hand .hcard.legal{cursor:pointer}
@@ -207,8 +217,7 @@ body{
 #hand .hcard .from-floor{position:absolute; top:-7px; left:50%; transform:translateX(-50%);
   width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 2px 5px rgba(0,0,0,.65)}
 /* ---------- 액션 시트 ---------- */
-#sheet{position:absolute; left:50%; bottom:calc(var(--card-h) + 44px); transform:translateX(-50%);
-  z-index:25; background:var(--panel); backdrop-filter:blur(8px);
+#sheet{position:relative; z-index:25; background:var(--panel); backdrop-filter:blur(8px);
   border:1px solid var(--panel-line); border-radius:16px; padding:14px 16px;
   box-shadow:0 12px 34px rgba(0,0,0,.5); min-width:min(92vw, 380px); max-width:94vw;
   display:none; flex-direction:column; gap:10px}
@@ -306,6 +315,8 @@ body{
   opacity:0; pointer-events:none; transition:opacity .25s, transform .25s}
 #toast.show{opacity:1; transform:translate(-50%,0)}
 #fx{position:fixed; inset:0; z-index:60; pointer-events:none}
+/* inset:0만 주면 위와 같은 이유로 아래가 잘린다 — 높이를 명시해 bottom을 무시시킨다 */
+#modal,#expmodal,#fx,#settings,#start{height:100dvh; height:var(--vvh,100dvh)}
 .fly{position:fixed; transition:transform .3s cubic-bezier(.25,.9,.3,1), opacity .3s; will-change:transform}
 @media (prefers-reduced-motion:reduce){
   *{transition:none!important; animation:none!important}
@@ -366,7 +377,7 @@ body{
 .rank-row .amt{flex:none; font-variant-numeric:tabular-nums; font-weight:600}
 /* ---------- 치트시트 HUD ---------- */
 /* itch.io 임베드는 우측 하단에 전체화면 버튼을 얹는다. 그 위로 띄운다 */
-#tools{position:fixed; right:14px; bottom:62px; z-index:27; display:flex; gap:6px; align-items:center}
+#tools{position:absolute; right:14px; bottom:62px; z-index:27; display:flex; gap:6px; align-items:center}
 #tools button{background:var(--panel); border:1px solid var(--panel-line); color:var(--gold);
   border-radius:999px; padding:9px 14px; font:inherit; font-size:.76rem; font-weight:600;
   cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.45); backdrop-filter:blur(6px); white-space:nowrap}
@@ -374,7 +385,7 @@ body{
 #tools button.on{background:var(--gold); color:#241C05; border-color:var(--gold)}
 #tools .kb{font-size:.6rem; opacity:.65; margin-left:4px}
 @media (max-width:720px){ #tools button{padding:8px 11px; font-size:.7rem} #tools .kb{display:none} }
-#cheat{position:fixed; right:14px; bottom:108px; z-index:27; width:min(86vw,252px);
+#cheat{position:absolute; right:14px; bottom:108px; z-index:27; width:min(86vw,252px);
   max-height:56vh; overflow-y:auto; background:var(--panel); backdrop-filter:blur(10px);
   border:1px solid var(--panel-line); border-radius:14px; padding:13px 14px;
   box-shadow:0 12px 34px rgba(0,0,0,.5); display:none; font-size:.74rem; line-height:1.75; color:var(--txt-dim)}
@@ -398,7 +409,7 @@ body{
 .rcard.dim{opacity:.28; filter:grayscale(.6)}
 .rcard.su-C{color:var(--club)} .rcard.su-D{color:var(--dia)} .rcard.su-H{color:var(--crimson)} .rcard.su-S{color:var(--ink)}
 @media (max-width:720px){ .rhand{max-width:96px} .rcard{width:16px; height:22px; font-size:7.5px} }
-#replay-bar{position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:28;
+#replay-bar{position:absolute; left:50%; bottom:14px; transform:translateX(-50%); z-index:28;
   display:none; align-items:center; gap:8px; background:var(--panel); backdrop-filter:blur(8px);
   border:1px solid var(--panel-line); border-radius:14px; padding:8px 12px; box-shadow:0 10px 28px rgba(0,0,0,.5)}
 #replay-bar.show{display:flex}
@@ -406,7 +417,7 @@ body{
   border-radius:9px; padding:7px 11px; font:inherit; font-size:.78rem; cursor:pointer}
 #replay-bar button.primary{background:var(--gold); color:#241C05; border-color:var(--gold); font-weight:700}
 #replay-bar .info{font-size:.74rem; color:var(--txt-dim); font-variant-numeric:tabular-nums; min-width:96px; text-align:center}
-#replay-head{position:fixed; left:50%; top:44px; transform:translateX(-50%); z-index:28;
+#replay-head{position:absolute; left:50%; top:44px; transform:translateX(-50%); z-index:28;
   display:none; background:var(--panel); border:1px solid var(--panel-line); border-radius:12px;
   padding:7px 14px; font-size:.76rem; color:var(--txt-dim); box-shadow:0 8px 20px rgba(0,0,0,.45); text-align:center}
 #replay-head.show{display:block}
@@ -537,8 +548,10 @@ body.replaying #seat-0 .rhand{display:none}
   <div id="seats"></div>
   <div id="trick"></div>
   <div id="puck"></div>
-  <div id="hand"></div>
-  <div id="sheet"></div>
+  <div id="bottom">
+    <div id="sheet"></div>
+    <div id="hand"></div>
+  </div>
   <aside id="log"><header><span>진행 기록</span><button id="log-close">✕</button></header><ul id="log-list"></ul></aside>
   <div id="modal"><div class="box" id="modal-box"></div></div>
   <div id="expmodal"><div class="box" id="expmodal-box"></div></div>
@@ -4250,8 +4263,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.1';
-const APP_BUILD = '2026-08-31 빌드 — 매치 종료 2열 레이아웃';
+const APP_VERSION = 'v3.0.2';
+const APP_BUILD = '2026-09-07 빌드 — 모바일 하단 배치 견고화';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -5993,6 +6006,29 @@ window.addEventListener('resize', ()=>{
     coachTipShow(coachTipEl._anchor, [...coachTipEl.children].map(e=>e.innerHTML));
   else coachTipHide();
 });
+
+/* ---------- 실제로 보이는 화면 높이 ----------
+ * 모바일 브라우저의 주소창·하단 툴바는 화면을 갉아먹는데, CSS의 100vh는 그걸
+ * 모른다(툴바가 접힌 큰 화면 기준). 그래서 맨 아래에 놓인 손패가 툴바 뒤로
+ * 숨는다. 앱을 전환했다 돌아오면 브라우저가 다시 재보고 정상으로 보이던 것도
+ * 같은 이유 — 레이아웃이 아니라 '높이 측정'이 어긋난 상태였다.
+ * visualViewport는 지금 이 순간 실제로 보이는 높이를 준다. 그걸 정본으로 쓰고,
+ * 값이 바뀔 때마다 다시 심는다. 100dvh는 이 API가 없는 구형 브라우저용 폴백. */
+function syncViewportHeight(){
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  if (h > 0) document.documentElement.style.setProperty('--vvh', h + 'px');
+}
+syncViewportHeight();
+window.addEventListener('resize', syncViewportHeight);
+window.addEventListener('orientationchange', syncViewportHeight);
+window.addEventListener('pageshow', syncViewportHeight);
+// 탭 복귀 시점 — 사용자가 '전환 후 돌아오면 보인다'고 한 그 순간에도 다시 잰다
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) syncViewportHeight(); });
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', syncViewportHeight);
+  window.visualViewport.addEventListener('scroll', syncViewportHeight);
+}
 
 /** 추천 수의 근거 — HUMAN 시점 가시 정보만 사용(출현 카드·내 손·주공이면 묻은 패).
  *  상대 손패·비공개 프렌드 등 전지적 정보는 쓰지 않는다. */

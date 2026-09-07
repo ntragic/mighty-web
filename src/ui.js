@@ -390,8 +390,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.1';
-const APP_BUILD = '2026-08-31 빌드 — 매치 종료 2열 레이아웃';
+const APP_VERSION = 'v3.0.2';
+const APP_BUILD = '2026-09-07 빌드 — 모바일 하단 배치 견고화';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -2133,6 +2133,29 @@ window.addEventListener('resize', ()=>{
     coachTipShow(coachTipEl._anchor, [...coachTipEl.children].map(e=>e.innerHTML));
   else coachTipHide();
 });
+
+/* ---------- 실제로 보이는 화면 높이 ----------
+ * 모바일 브라우저의 주소창·하단 툴바는 화면을 갉아먹는데, CSS의 100vh는 그걸
+ * 모른다(툴바가 접힌 큰 화면 기준). 그래서 맨 아래에 놓인 손패가 툴바 뒤로
+ * 숨는다. 앱을 전환했다 돌아오면 브라우저가 다시 재보고 정상으로 보이던 것도
+ * 같은 이유 — 레이아웃이 아니라 '높이 측정'이 어긋난 상태였다.
+ * visualViewport는 지금 이 순간 실제로 보이는 높이를 준다. 그걸 정본으로 쓰고,
+ * 값이 바뀔 때마다 다시 심는다. 100dvh는 이 API가 없는 구형 브라우저용 폴백. */
+function syncViewportHeight(){
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  if (h > 0) document.documentElement.style.setProperty('--vvh', h + 'px');
+}
+syncViewportHeight();
+window.addEventListener('resize', syncViewportHeight);
+window.addEventListener('orientationchange', syncViewportHeight);
+window.addEventListener('pageshow', syncViewportHeight);
+// 탭 복귀 시점 — 사용자가 '전환 후 돌아오면 보인다'고 한 그 순간에도 다시 잰다
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) syncViewportHeight(); });
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', syncViewportHeight);
+  window.visualViewport.addEventListener('scroll', syncViewportHeight);
+}
 
 /** 추천 수의 근거 — HUMAN 시점 가시 정보만 사용(출현 카드·내 손·주공이면 묻은 패).
  *  상대 손패·비공개 프렌드 등 전지적 정보는 쓰지 않는다. */
