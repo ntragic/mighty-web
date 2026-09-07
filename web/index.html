@@ -324,6 +324,26 @@ body{
 }
 
 /* ---------- 설정 패널 ---------- */
+#tut{position:fixed; inset:0; z-index:76; background:rgba(4,8,7,.82); backdrop-filter:blur(4px);
+  display:none; place-items:center; padding:16px}
+#tut.show{display:grid}
+#tut .panel{background:linear-gradient(165deg,#172621,#0E1815); border:1px solid var(--panel-line);
+  border-radius:20px; width:min(94vw,460px); max-height:88vh; display:flex; flex-direction:column;
+  box-shadow:0 24px 60px rgba(0,0,0,.6)}
+#tut .panel>header{display:flex; align-items:center; justify-content:space-between; padding:18px 20px 10px}
+#tut h2{font-size:1rem; letter-spacing:.06em; color:var(--gold); word-break:keep-all; line-height:1.4}
+#tut .close{background:none;border:none;color:var(--txt-dim);font-size:1.1rem;cursor:pointer}
+#tut-body{overflow-y:auto; padding:2px 20px 14px; flex:1}
+.tut-p{font-size:.83rem; line-height:1.75; color:var(--txt); margin-bottom:9px; word-break:keep-all}
+.tut-cards{display:flex; gap:5px; justify-content:center; flex-wrap:wrap; margin:14px 0 6px}
+.tut-cards .cardface.win{outline:2px solid var(--gold); outline-offset:2px;
+  transform:translateY(-7px); box-shadow:0 8px 18px rgba(0,0,0,.45)}
+.tut-note{font-size:.72rem; color:var(--txt-dim); text-align:center; word-break:keep-all}
+#tut footer{padding:10px 20px 18px; display:flex; align-items:center; gap:12px}
+#tut footer .btnrow{flex:1; margin:0}
+#tut-dots{display:flex; gap:5px}
+.tut-dot{width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.18); cursor:pointer}
+.tut-dot.on{background:var(--gold)}
 #settings{position:fixed; inset:0; z-index:70; background:rgba(4,8,7,.78); backdrop-filter:blur(4px); display:none; place-items:center; padding:16px}
 #settings.show{display:grid}
 #settings .panel{background:linear-gradient(165deg,#172621,#0E1815); border:1px solid var(--panel-line); border-radius:20px; width:min(94vw,460px); max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.6)}
@@ -439,6 +459,7 @@ body.replaying #seat-0 .rhand{display:none}
 #start .en{letter-spacing:.5em; font-size:.7rem; color:var(--txt-dim); margin:6px 0 22px; text-indent:.5em}
 #start p{font-size:.8rem; color:var(--txt-dim); line-height:1.9; margin-bottom:26px}
 #start .btn{width:100%; padding:14px 0; font-size:1rem}
+#start .btn+.btn{margin-top:9px}
 
 /* ===== v2 AI 복기 ===== */
 .an-card{display:flex; align-items:center; gap:10px; padding:10px 12px;
@@ -582,13 +603,23 @@ body.replaying #seat-0 .rhand{display:none}
     <div id="set-body"></div>
     <footer><button class="btn ghost" id="set-reset">리그 룰로 초기화</button><button class="btn primary" id="set-done">완료</button></footer>
   </div></div>
+  <div id="tut"><div class="panel">
+    <header><h2 id="tut-title"></h2><button class="close" id="tut-close">✕</button></header>
+    <div id="tut-body"></div>
+    <footer>
+      <div id="tut-dots"></div>
+      <div class="btnrow"><button class="btn ghost" id="tut-prev"></button>
+                          <button class="btn primary" id="tut-next"></button></div>
+    </footer>
+  </div></div>
   <div id="start"><div class="inner">
     <h1>마이티</h1><div class="en">MIGHTY · SOLO TABLE</div>
     <div style="font-size:.62rem;color:var(--txt-dim);letter-spacing:.1em;margin-bottom:14px"><span class="app-ver"></span></div>
     <p>5인 트릭테이킹의 정석, 마이티.<br>당신과 네 명의 컴퓨터 플레이어가 한 테이블에 앉습니다.<br>공약을 선언하고, 프렌드를 찾고, 판을 지배하세요.</p>
     <div id="landing-opts"></div>
+    <button class="btn primary" id="tut-btn">규칙 배우기</button>
     <button class="btn primary" id="start-btn">매치 시작</button>
-    <button class="btn ghost" id="start-set-btn" style="width:100%;margin-top:9px">룰 설정</button>
+    <button class="btn ghost" id="start-set-btn">룰 설정</button>
   </div></div>
 </div>
 
@@ -3884,6 +3915,189 @@ else window.MightyAI = api;
 <script>
 
 /* ============================================================
+ *  tutorial.js — 규칙 튜토리얼 슬라이드 (텍스트 전용)
+ * ============================================================
+ *  마이티를 한 번도 안 해 본 사람이 첫 판을 두기 전에 읽는 여덟 장이다.
+ *  그리는 일은 ui.js가 한다 — 여기는 무엇을 말할지만 담는다. ui.js에 넣지 않은
+ *  이유는 분량이다. 한·영 두 벌이라 3200줄짜리 파일을 더 키우면 읽기 어려워진다.
+ *
+ *  카드 표기는 엔진에 의존하지 않는 서술형이다: {s:'S', r:14}는 스페이드 A,
+ *  'JK'는 조커. hi는 그 트릭을 가져가는 카드의 자리(0부터)로, 그림이 스스로
+ *  말하게 한다 — 다섯 장을 늘어놓기만 하면 어느 것이 이겼는지 읽히지 않는다.
+ *  ui.js가 그릴 때 엔진 카드로 옮긴다. 로드 순서에 얽히지 않게 하려는
+ *  것이다 — 이 파일은 엔진보다 먼저 읽혀도 안전해야 한다.
+ *
+ *  용어는 docs/GLOSSARY.md가 확정본이다(기루다=Trump, 바닥패=Kitty,
+ *  여당=Attackers, 야당=Defenders, 세팅=Claim).
+ * ============================================================ */
+(function () {
+'use strict';
+
+const KO = [
+  {
+    title: '마이티는 이런 게임입니다',
+    body: [
+      '다섯 명이 각자 열 장씩 받아 열 번을 겨룹니다. 한 번의 겨룸을 트릭이라고 합니다.',
+      '트릭마다 가장 센 카드를 낸 사람이 그 트릭에 나온 다섯 장을 모두 가져갑니다.',
+      '중요한 것은 가져간 카드의 수가 아니라, 그 안에 점수카드가 몇 장 들어 있느냐입니다.',
+    ],
+  },
+  {
+    title: '점수카드는 스무 장뿐입니다',
+    body: [
+      '각 무늬의 10, J, Q, K, A가 점수카드입니다. 네 무늬에 다섯 장씩, 모두 스무 장.',
+      '나머지 카드는 아무리 많이 모아도 점수가 되지 않습니다.',
+      '세기는 A가 가장 세고 2가 가장 약합니다.',
+    ],
+    cards: [{ s: 'S', r: 10 }, { s: 'S', r: 11 }, { s: 'S', r: 12 }, { s: 'S', r: 13 }, { s: 'S', r: 14 }],
+    note: '이 다섯 장이 스페이드의 점수카드입니다',
+  },
+  {
+    title: '트릭은 이렇게 굴러갑니다',
+    body: [
+      '먼저 내는 사람을 리드라고 합니다. 리드는 아무 카드나 낼 수 있습니다.',
+      '나머지 넷은 리드와 같은 무늬가 손에 있으면 반드시 그 무늬를 내야 합니다.',
+      '같은 무늬 중 가장 높은 카드를 낸 사람이 그 트릭을 가져갑니다.',
+    ],
+    cards: [{ s: 'H', r: 7 }, { s: 'H', r: 13 }, { s: 'H', r: 3 }, { s: 'H', r: 14 }, { s: 'H', r: 9 }],
+    hi: [3],
+    note: '하트로 리드한 트릭 — 하트 A를 낸 사람이 가져갑니다',
+  },
+  {
+    title: '기루다는 무늬 하나를 특별하게 만듭니다',
+    body: [
+      '판마다 무늬 하나가 기루다(으뜸무늬)가 됩니다. 공약을 부른 사람이 정합니다.',
+      '리드 무늬가 손에 없으면 기루다를 내서 그 트릭을 끊어 가져올 수 있습니다.',
+      '기루다는 다른 무늬의 어떤 카드보다 셉니다. 기루다 2가 하트 A를 이깁니다.',
+    ],
+    cards: [{ s: 'H', r: 14 }, { s: 'S', r: 2 }],
+    hi: [1],
+    note: '기루다가 스페이드일 때 — 오른쪽이 이깁니다',
+  },
+  {
+    title: '마이티와 조커',
+    body: [
+      '마이티는 판 전체에서 가장 센 카드 한 장입니다. 기루다가 스페이드면 다이아 A가, 그 밖에는 스페이드 A가 마이티입니다.',
+      '조커는 두 번째로 셉니다. 조커로 리드하면 따라올 무늬를 지정할 수 있습니다.',
+      '조커콜(클럽 3)로 리드하면 조커를 가진 사람은 조커를 내야 합니다. 조커를 억지로 끌어내는 수입니다.',
+    ],
+    cards: [{ s: 'S', r: 14 }, 'JK', { s: 'C', r: 3 }],
+    note: '마이티 · 조커 · 조커콜',
+  },
+  {
+    title: '공약 — 몇 점을 가져올지 약속합니다',
+    body: [
+      '패를 받으면 "기루다를 스페이드로 하고 점수카드 열네 장을 가져오겠다"처럼 부릅니다.',
+      '더 높이 부르는 사람이 없으면 그 사람이 주공이 됩니다. 자신이 없으면 패스합니다.',
+      '마이티리그 룰에서는 최소 열네 장부터 부를 수 있습니다.',
+    ],
+  },
+  {
+    title: '바닥패를 묻고, 프렌드를 부릅니다',
+    body: [
+      '주공이 되면 바닥에 깔린 세 장을 받고, 손에서 세 장을 골라 다시 묻습니다.',
+      '그다음 프렌드를 지정합니다. 보통 자기가 갖고 있지 않은 가장 센 카드를 부릅니다.',
+      '그 카드를 가진 사람이 프렌드입니다. 그 카드가 나오기 전까지는 아무도 누가 프렌드인지 모릅니다.',
+    ],
+  },
+  {
+    title: '이기는 조건',
+    body: [
+      '주공과 프렌드가 여당, 나머지 셋이 야당입니다.',
+      '여당이 공약한 만큼 점수카드를 모으면 여당이 이깁니다. 한 장이라도 모자라면 야당이 이깁니다.',
+      '스무 장을 전부 가져오면 런, 야당이 여당을 한 장도 못 가져가게 막으면 백런입니다.',
+    ],
+  },
+];
+
+const EN = [
+  {
+    title: 'What Mighty is',
+    body: [
+      'Five players each get ten cards and play ten rounds. One round is called a trick.',
+      'Whoever plays the strongest card takes all five cards of that trick.',
+      'What matters is not how many cards you take, but how many point cards are among them.',
+    ],
+  },
+  {
+    title: 'There are only twenty point cards',
+    body: [
+      'The 10, J, Q, K and A of each suit are point cards — five per suit, twenty in all.',
+      'Every other card is worthless no matter how many you collect.',
+      'A is the strongest rank and 2 the weakest.',
+    ],
+    cards: [{ s: 'S', r: 10 }, { s: 'S', r: 11 }, { s: 'S', r: 12 }, { s: 'S', r: 13 }, { s: 'S', r: 14 }],
+    note: 'These five are the point cards of spades',
+  },
+  {
+    title: 'How a trick works',
+    body: [
+      'The player who goes first leads, and may play any card.',
+      'The other four must follow the led suit if they hold it.',
+      'The highest card of the led suit takes the trick.',
+    ],
+    cards: [{ s: 'H', r: 7 }, { s: 'H', r: 13 }, { s: 'H', r: 3 }, { s: 'H', r: 14 }, { s: 'H', r: 9 }],
+    hi: [3],
+    note: 'Hearts were led — the ace of hearts takes it',
+  },
+  {
+    title: 'Trump makes one suit special',
+    body: [
+      'Each round one suit becomes trump, chosen by whoever wins the bidding.',
+      'If you are void in the led suit you may cut in with a trump and take the trick.',
+      'Any trump beats any card of another suit — the two of trumps beats the ace of hearts.',
+    ],
+    cards: [{ s: 'H', r: 14 }, { s: 'S', r: 2 }],
+    hi: [1],
+    note: 'With spades as trump, the card on the right wins',
+  },
+  {
+    title: 'The Mighty and the Joker',
+    body: [
+      'The Mighty is the single strongest card in the deck. It is the ace of diamonds when spades are trump, and the ace of spades otherwise.',
+      'The Joker is second strongest. Leading it lets you name the suit everyone must follow.',
+      'Leading the Joker Call (the three of clubs) forces whoever holds the Joker to play it.',
+    ],
+    cards: [{ s: 'S', r: 14 }, 'JK', { s: 'C', r: 3 }],
+    note: 'Mighty, Joker, Joker Call',
+  },
+  {
+    title: 'Bidding — promising a score',
+    body: [
+      'After looking at your hand you bid something like "spades as trump, and I will take fourteen point cards".',
+      'If nobody bids higher you become the declarer. Pass if your hand is not worth it.',
+      'Under Mighty League rules the lowest bid is fourteen.',
+    ],
+  },
+  {
+    title: 'Bury the kitty, call a friend',
+    body: [
+      'As declarer you pick up the three kitty cards, then bury any three from your hand.',
+      'Then you call a friend — usually the strongest card you do not hold yourself.',
+      'Whoever holds that card is your friend, and nobody knows who until the card appears.',
+    ],
+  },
+  {
+    title: 'How the round is won',
+    body: [
+      'The declarer and the friend are the attackers; the other three are the defenders.',
+      'Attackers win by collecting at least as many point cards as they bid. One short and the defenders win.',
+      'Taking all twenty is a Run; holding the attackers to none is a Back Run.',
+    ],
+  },
+];
+
+globalThis.MightyTutorial = {
+  slides(lang) { return (lang === 'en' ? EN : KO).map(s => ({ ...s })); },
+};
+if (typeof module !== 'undefined' && module.exports) module.exports = globalThis.MightyTutorial;
+})();
+
+
+</script>
+<script>
+
+/* ============================================================
  *  마이티 UI 드라이버 — 1단계
  * ============================================================ */
 'use strict';
@@ -3957,6 +4171,9 @@ const I18N_EN = {
   '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
   '코칭 (추천과 근거)':'Coaching (suggestion & reason)',
   '초보자 모드':'Beginner mode',
+  '규칙 배우기':'Learn the rules', '규칙 튜토리얼':'Rules tutorial',
+  '튜토리얼 다시 보기':'Replay the tutorial', '시작하기':'Start playing',
+  '이전':'Back', '다음':'Next',
   '추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다':
     'Shows the suggested move and why on every turn, and slows the pace down',
   '내 차례마다 추천 수와 그 이유를 보여줍니다':'Shows the suggested move and why, on every turn of yours',
@@ -4320,8 +4537,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.4';
-const APP_BUILD = '2026-09-07 빌드 — 초보자 모드';
+const APP_VERSION = 'v3.0.5';
+const APP_BUILD = '2026-09-07 빌드 — 규칙 튜토리얼';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -4354,7 +4571,7 @@ function defaultSettings(){
     preset:'league',
     match:{ mode:'rounds', rounds:10, targetPrize:20000, dealerRule:'friend' },
     ui:{ speed:'normal', difficulty:'intermediate', sound:true, lang:null, autoClaim:true, undo:true,
-         coach:false, beginner:null },
+         coach:false, beginner:null, tutorialDone:false },
     _tierV:2,
     names:['나','서준','하린','도윤','유나'],
     engine:{
@@ -4511,6 +4728,15 @@ function renderSetGeneral(b,S){
     v=>{ S.ui.coach=(v==='on');
          if(S.ui.coach && !S.ui.beginner) ensureMaster();
          renderHand(); renderSheet(); }));
+  // 규칙 튜토리얼 — 언제든 다시 볼 수 있게 둔다
+  {
+    const row=el('div','set-row');
+    row.append(el('div','lbl', t('규칙 튜토리얼')));
+    const btn=el('button','chip', t('튜토리얼 다시 보기'));
+    btn.id='set-tut-btn';
+    btn.onclick=()=>openTutorial();
+    row.append(btn); b.append(row);
+  }
   // 초보자 모드 — 코칭 바로 위에 둔다. 켜면 코칭까지 같이 켜진다.
   b.append(segRow(t('초보자 모드'), t('추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다'),
     [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
@@ -7224,6 +7450,66 @@ function startRound(inc){
   pump();
 }
 
+/* ---------------- 규칙 튜토리얼 ----------------
+ * 마이티를 모르는 사람이 첫 판 전에 읽는 여덟 장. 텍스트는 src/tutorial.js에 있다.
+ * 게임 모달(#modal)·내보내기 오버레이(#expmodal)와 섞지 않고 자체 오버레이를 쓴다 —
+ * v1.2.2에서 그 둘을 섞어 게임이 멈춘 적이 있다. 게임 상태를 건드리지 않으므로
+ * 진행 중에 열어도 판에 영향이 없다.
+ */
+let tutStep=0;
+function tutSlides(){
+  try{ return globalThis.MightyTutorial ? MightyTutorial.slides(LANG) : []; }
+  catch(e){ return []; }
+}
+/** 서술형 표기를 엔진 카드로 옮긴다. 튜토리얼이 엔진 로드 순서에 얽히지 않게 한다. */
+function tutCard(d){ return d==='JK' ? E.JOKER : { suit:d.s, rank:d.r }; }
+function openTutorial(){
+  if (!tutSlides().length) return;
+  tutStep=0;
+  $('#settings').classList.remove('show');   // 설정에서 열었을 때 두 겹으로 쌓이지 않게
+  $('#tut').classList.add('show');
+  renderTutorial();
+}
+/** 완주든 중도 이탈이든 '봤다'로 친다 — 안 그러면 매번 다시 권하게 된다. */
+function closeTutorial(){
+  $('#tut').classList.remove('show');
+  settings.ui.tutorialDone=true; saveSettings(); renderLanding();
+}
+function renderTutorial(){
+  const list=tutSlides();
+  if (!list.length){ closeTutorial(); return; }
+  tutStep=Math.max(0, Math.min(list.length-1, tutStep));
+  const sl=list[tutStep];
+  $('#tut-title').textContent=sl.title;
+  const b=$('#tut-body'); b.innerHTML=''; b.scrollTop=0;
+  for (const line of sl.body) b.append(el('p','tut-p', line));
+  if (sl.cards && sl.cards.length){
+    const row=el('div','tut-cards');
+    const hi=new Set(sl.hi||[]);
+    sl.cards.forEach((d,i)=>{
+      const c=cardEl(tutCard(d));
+      if (hi.has(i)) c.classList.add('win');   // 어느 카드가 이겼는지 그림이 말하게
+      row.append(c);
+    });
+    b.append(row);
+  }
+  if (sl.note) b.append(el('div','tut-note', sl.note));
+  const dots=$('#tut-dots'); dots.innerHTML='';
+  for (let i=0;i<list.length;i++){
+    const d=el('span','tut-dot'+(i===tutStep?' on':''));
+    d.onclick=()=>{ tutStep=i; renderTutorial(); };
+    dots.append(d);
+  }
+  const prev=$('#tut-prev'), next=$('#tut-next');
+  prev.textContent=t('이전'); prev.disabled = tutStep===0;
+  next.textContent = tutStep===list.length-1 ? t('시작하기') : t('다음');
+}
+function tutNext(){
+  const list=tutSlides();
+  if (tutStep>=list.length-1) closeTutorial();
+  else { tutStep++; renderTutorial(); }
+}
+
 /* ---------------- 랜딩 옵션 (언어·난이도) ---------------- */
 function renderLanding(){
   const box=$('#landing-opts'); if(!box) return;
@@ -7248,12 +7534,20 @@ function renderLanding(){
   box.append(mk(t('난이도'), [{v:'intermediate',l:t('중급')},{v:'advanced',l:t('고급')},{v:'master',l:t('마스터')}],
     ()=>TIER_OF[settings.ui.difficulty]||'intermediate',
     v=>{ settings.ui.difficulty=v; saveSettings(); ensureNN(); }));
+  // 규칙을 모르는 사람에게는 '규칙 배우기'가 주 버튼이어야 한다. 한 번 보고 나면
+  // 보조 버튼으로 내려간다 — 이미 아는 사람에게 계속 권하지 않는다.
+  const learn=$('#tut-btn'), start=$('#start-btn');
+  if (learn && start){
+    const lead = !!settings.ui.beginner && !settings.ui.tutorialDone;
+    learn.className = 'btn ' + (lead ? 'primary' : 'ghost');
+    start.className = 'btn ' + (lead ? 'ghost' : 'primary');
+  }
 }
 
 /* ---------------- 초기화 ---------------- */
 globalThis.MUI = { get game(){return game}, get busy(){return busy},
   get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
-  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, openTutorial, closeTutorial, get tutStep(){return tutStep}, tutSlides, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -7268,6 +7562,10 @@ loadSettings().then(()=>{
 });
 $('#start-btn').onclick=()=>{ SFX.unlock(); $('#start').style.display='none'; newMatch(); };
 renderLanding();
+$('#tut-btn').onclick=()=>openTutorial();
+$('#tut-close').onclick=()=>closeTutorial();
+$('#tut-prev').onclick=()=>{ if(tutStep>0){ tutStep--; renderTutorial(); } };
+$('#tut-next').onclick=()=>tutNext();
 $('#start-set-btn').onclick=()=>openSettings();
 $('#set-btn').onclick=()=>openSettings();
 $('#set-close').onclick=()=>closeSettings();

@@ -72,6 +72,9 @@ const I18N_EN = {
   '마스터 기준':'per Master', '회 시뮬':'sims', '승률':'win rate',
   '코칭 (추천과 근거)':'Coaching (suggestion & reason)',
   '초보자 모드':'Beginner mode',
+  '규칙 배우기':'Learn the rules', '규칙 튜토리얼':'Rules tutorial',
+  '튜토리얼 다시 보기':'Replay the tutorial', '시작하기':'Start playing',
+  '이전':'Back', '다음':'Next',
   '추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다':
     'Shows the suggested move and why on every turn, and slows the pace down',
   '내 차례마다 추천 수와 그 이유를 보여줍니다':'Shows the suggested move and why, on every turn of yours',
@@ -435,8 +438,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.4';
-const APP_BUILD = '2026-09-07 빌드 — 초보자 모드';
+const APP_VERSION = 'v3.0.5';
+const APP_BUILD = '2026-09-07 빌드 — 규칙 튜토리얼';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
@@ -469,7 +472,7 @@ function defaultSettings(){
     preset:'league',
     match:{ mode:'rounds', rounds:10, targetPrize:20000, dealerRule:'friend' },
     ui:{ speed:'normal', difficulty:'intermediate', sound:true, lang:null, autoClaim:true, undo:true,
-         coach:false, beginner:null },
+         coach:false, beginner:null, tutorialDone:false },
     _tierV:2,
     names:['나','서준','하린','도윤','유나'],
     engine:{
@@ -626,6 +629,15 @@ function renderSetGeneral(b,S){
     v=>{ S.ui.coach=(v==='on');
          if(S.ui.coach && !S.ui.beginner) ensureMaster();
          renderHand(); renderSheet(); }));
+  // 규칙 튜토리얼 — 언제든 다시 볼 수 있게 둔다
+  {
+    const row=el('div','set-row');
+    row.append(el('div','lbl', t('규칙 튜토리얼')));
+    const btn=el('button','chip', t('튜토리얼 다시 보기'));
+    btn.id='set-tut-btn';
+    btn.onclick=()=>openTutorial();
+    row.append(btn); b.append(row);
+  }
   // 초보자 모드 — 코칭 바로 위에 둔다. 켜면 코칭까지 같이 켜진다.
   b.append(segRow(t('초보자 모드'), t('추천 수와 그 이유를 매 차례 보여주고, 진행을 느리게 합니다'),
     [{v:'off',l:t('끔')},{v:'on',l:t('켬')}],
@@ -3339,6 +3351,66 @@ function startRound(inc){
   pump();
 }
 
+/* ---------------- 규칙 튜토리얼 ----------------
+ * 마이티를 모르는 사람이 첫 판 전에 읽는 여덟 장. 텍스트는 src/tutorial.js에 있다.
+ * 게임 모달(#modal)·내보내기 오버레이(#expmodal)와 섞지 않고 자체 오버레이를 쓴다 —
+ * v1.2.2에서 그 둘을 섞어 게임이 멈춘 적이 있다. 게임 상태를 건드리지 않으므로
+ * 진행 중에 열어도 판에 영향이 없다.
+ */
+let tutStep=0;
+function tutSlides(){
+  try{ return globalThis.MightyTutorial ? MightyTutorial.slides(LANG) : []; }
+  catch(e){ return []; }
+}
+/** 서술형 표기를 엔진 카드로 옮긴다. 튜토리얼이 엔진 로드 순서에 얽히지 않게 한다. */
+function tutCard(d){ return d==='JK' ? E.JOKER : { suit:d.s, rank:d.r }; }
+function openTutorial(){
+  if (!tutSlides().length) return;
+  tutStep=0;
+  $('#settings').classList.remove('show');   // 설정에서 열었을 때 두 겹으로 쌓이지 않게
+  $('#tut').classList.add('show');
+  renderTutorial();
+}
+/** 완주든 중도 이탈이든 '봤다'로 친다 — 안 그러면 매번 다시 권하게 된다. */
+function closeTutorial(){
+  $('#tut').classList.remove('show');
+  settings.ui.tutorialDone=true; saveSettings(); renderLanding();
+}
+function renderTutorial(){
+  const list=tutSlides();
+  if (!list.length){ closeTutorial(); return; }
+  tutStep=Math.max(0, Math.min(list.length-1, tutStep));
+  const sl=list[tutStep];
+  $('#tut-title').textContent=sl.title;
+  const b=$('#tut-body'); b.innerHTML=''; b.scrollTop=0;
+  for (const line of sl.body) b.append(el('p','tut-p', line));
+  if (sl.cards && sl.cards.length){
+    const row=el('div','tut-cards');
+    const hi=new Set(sl.hi||[]);
+    sl.cards.forEach((d,i)=>{
+      const c=cardEl(tutCard(d));
+      if (hi.has(i)) c.classList.add('win');   // 어느 카드가 이겼는지 그림이 말하게
+      row.append(c);
+    });
+    b.append(row);
+  }
+  if (sl.note) b.append(el('div','tut-note', sl.note));
+  const dots=$('#tut-dots'); dots.innerHTML='';
+  for (let i=0;i<list.length;i++){
+    const d=el('span','tut-dot'+(i===tutStep?' on':''));
+    d.onclick=()=>{ tutStep=i; renderTutorial(); };
+    dots.append(d);
+  }
+  const prev=$('#tut-prev'), next=$('#tut-next');
+  prev.textContent=t('이전'); prev.disabled = tutStep===0;
+  next.textContent = tutStep===list.length-1 ? t('시작하기') : t('다음');
+}
+function tutNext(){
+  const list=tutSlides();
+  if (tutStep>=list.length-1) closeTutorial();
+  else { tutStep++; renderTutorial(); }
+}
+
 /* ---------------- 랜딩 옵션 (언어·난이도) ---------------- */
 function renderLanding(){
   const box=$('#landing-opts'); if(!box) return;
@@ -3363,12 +3435,20 @@ function renderLanding(){
   box.append(mk(t('난이도'), [{v:'intermediate',l:t('중급')},{v:'advanced',l:t('고급')},{v:'master',l:t('마스터')}],
     ()=>TIER_OF[settings.ui.difficulty]||'intermediate',
     v=>{ settings.ui.difficulty=v; saveSettings(); ensureNN(); }));
+  // 규칙을 모르는 사람에게는 '규칙 배우기'가 주 버튼이어야 한다. 한 번 보고 나면
+  // 보조 버튼으로 내려간다 — 이미 아는 사람에게 계속 권하지 않는다.
+  const learn=$('#tut-btn'), start=$('#start-btn');
+  if (learn && start){
+    const lead = !!settings.ui.beginner && !settings.ui.tutorialDone;
+    learn.className = 'btn ' + (lead ? 'primary' : 'ghost');
+    start.className = 'btn ' + (lead ? 'ghost' : 'primary');
+  }
 }
 
 /* ---------------- 초기화 ---------------- */
 globalThis.MUI = { get game(){return game}, get busy(){return busy},
   get botChainsMax(){return botChainsMax}, get staleActs(){return staleActs},
-  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, get lifeStats(){return {...lifeStats}} };
+  resetBotChains(){ botChainsMax = botChains; staleActs = 0; }, get roundRec(){return roundRec}, get masterState(){return masterState}, ensureMaster, ensureNN, get seatModels(){return seatModels.slice()}, get settings(){return settings}, get matchOver(){return matchOver}, get replay(){return replay}, get totals(){return totals.slice()}, get matchLog(){return matchLog}, get roundNo(){return roundNo}, get abArm(){return abArm}, get matchFeedback(){return matchFeedback}, get abFeedbacks(){return loadAbFeedbacks()}, humanAct, playWithAnimation, startRound, newMatch, openSettings, openAnalysis, openHighlight, toggleAltLine, openMatchSummary, openAbSurvey, saveAbFeedback, startReplay, coachReasons, openTutorial, closeTutorial, get tutStep(){return tutStep}, tutSlides, get lifeStats(){return {...lifeStats}} };
 document.querySelectorAll('.app-ver').forEach(e=>{ e.textContent = APP_VERSION + ' · ' + APP_BUILD; });
 buildSeats();
 loadSettings().then(()=>{
@@ -3383,6 +3463,10 @@ loadSettings().then(()=>{
 });
 $('#start-btn').onclick=()=>{ SFX.unlock(); $('#start').style.display='none'; newMatch(); };
 renderLanding();
+$('#tut-btn').onclick=()=>openTutorial();
+$('#tut-close').onclick=()=>closeTutorial();
+$('#tut-prev').onclick=()=>{ if(tutStep>0){ tutStep--; renderTutorial(); } };
+$('#tut-next').onclick=()=>tutNext();
 $('#start-set-btn').onclick=()=>openSettings();
 $('#set-btn').onclick=()=>openSettings();
 $('#set-close').onclick=()=>closeSettings();
