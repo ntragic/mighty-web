@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <style>
+      .bg{fill:url(#g)}
+      .card{fill:#fff;stroke:#222;stroke-width:4;rx:12;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.25))}
+      .title{font-family:Inter, Arial, sans-serif; font-size:48px; fill:#fff; font-weight:700}
+      .subtitle{font-family:Inter, Arial, sans-serif; font-size:22px; fill:#e6f7fb}
+      .logo{font-family:Georgia, serif; font-size:32px; fill:#111}
+    </style>
+  </defs>
+  <rect class="bg" width="1000" height="700" rx="18"/>
+  <g transform="translate(80,90)">
+    <rect class="card" width="320" height="460" rx="12"/>
+    <rect x="200" y="20" width="100" height="140" rx="8" fill="#f8fafc"/>
+    <text x="40" y="60" class="logo">MIGHTY</text>
+  </g>
+  <g transform="translate(460,120)">
+    <text x="0" y="40" class="title">Mighty</text>
+    <text x="0" y="80" class="subtitle">5-player single-file card game · Play in browser</text>
+    <rect x="0" y="110" width="420" height="260" rx="10" fill="#ffffff11" />
+    <text x="20" y="160" font-family="Inter, Arial, sans-serif" font-size="18" fill="#fff">
+      ▶ Single HTML build for quick play
+    </text>
+    <text x="20" y="190" font-family="Inter, Arial, sans-serif" font-size="18" fill="#fff">
+      ▶ AI tiers: Mid / High / Master (NN)
+    </text>
+    <text x="20" y="220" font-family="Inter, Arial, sans-serif" font-size="18" fill="#fff">
+      ▶ Replay (R) · Undo (Z) · Export logs
+    </text>
+  </g>
+</svg>
