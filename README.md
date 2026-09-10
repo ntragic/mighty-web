@@ -1,6 +1,6 @@
 # 마이티 (Mighty)
 
-![Mighty preview](스크린샷%202026-09-10%20오후%209.44.09.png)
+![Mighty preview](docs/preview.png)
 
 혼자 즐기는 5인 마이티 카드게임. 서버 없이 **단일 HTML 파일**로 돌아가고, AI는
 규칙 기반 2티어 + 자가대전으로 학습한 신경망 1티어다.
