@@ -1,6 +1,6 @@
 # 마이티 (Mighty)
 
-![Mighty preview](image-1.png)
+![Mighty preview](스크린샷%202026-09-10%20오후%209.44.09.png)
 
 혼자 즐기는 5인 마이티 카드게임. 서버 없이 **단일 HTML 파일**로 돌아가고, AI는
 규칙 기반 2티어 + 자가대전으로 학습한 신경망 1티어다.
@@ -47,14 +47,14 @@ browser" 체크, Viewport 1000×700, Mobile friendly 체크, Visibility는 Restr
   - Upload: ZIP 파일 (위의 dist zip)
   - "This file will be played in the browser" 체크
   - Display size: 1000×700 권장
-  - Mobile friendly: 체크(모바일 대응 여부에 따라)
+  - Mobile friendly: 체크(모바일 대응 여부에 따��)
   - Visibility: 테스트 단계에서는 Restricted(비공개)로 둡니다. 공개 전에는 Public으로 변경하세요.
   - 기존 빌드 교체 시 동일한 upload 삭제 후 새 zip 업로드하면 URL이 유지됩니다.
 - 로컬에서 플레이/테스트:
   - 빠른 확인: `npm run build` → `web/index.html`을 브라우저로 열기(마스터 AI는 동작 안 함)
   - 전체 검증(권장): `npm install` → `npm run serve` → http://localhost:8080 열기 (마스터 모델 로드 가능)
   - 브라우저 콘솔에서 에러(특히 fetch/onnx/ort 에러)를 확인하세요.
-- 모델 파일 포함 여부: `web/model/`의 ONNX 모델과 `web/ort/`(onnxruntime-web 로컬 번들)이 zip에 포함되어 있어야 합니다. CDN 의존을 없애려면 `ort/` 번들을 포[...]
+- 모델 파일 포함 여부: `web/model/`의 ONNX 모델과 `web/ort/`(onnxruntime-web 로컬 번들)이 zip에 포함되어 있어야 합니다. CDN 의존을 없애려면 `ort/` 번들을 포[[...]
 - 접근성/언어: 시작 화면에서 한국어/English 전환을 확인하고, 복기·내보내기·설정 화면이 한글·영문 모두 정상 노출되는지 확인하세요.
 
 ## 플레이 가이드 (핵심)
@@ -77,7 +77,7 @@ browser" 체크, Viewport 1000×700, Mobile friendly 체크, Visibility는 Restr
 
 ## 초보자 모드용 튜토리얼 안내
 
-이 섹션은 처음 마이티를 접하는 사용자를 위한 단계별 안내입니다. 게임 내 별도 "초보자 전용 모드"가 없더라도 아래 절차를 따라 연습하면 빠르게[...]
+이 섹션은 처음 마이티를 접하는 사용자를 위한 단계별 안내입니다. 게임 내 별도 "초보자 전용 모드"가 없더라도 아래 절차를 따라 연습하면 빠르[[...]
 
 1) 환경 설정(처음 5분)
    - 시작 화면에서 룰을 `표준` 또는 `마이티리그` 프리셋으로 선택하세요.
