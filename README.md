@@ -1,6 +1,6 @@
 # 마이티 (Mighty)
 
-![Mighty preview](web/preview.svg)
+![Mighty preview](image-1.png)
 
 혼자 즐기는 5인 마이티 카드게임. 서버 없이 **단일 HTML 파일**로 돌아가고, AI는
 규칙 기반 2티어 + 자가대전으로 학습한 신경망 1티어다.
@@ -15,7 +15,7 @@
 
 ## 한눈에 보기 (Short summary)
 
-Mighty는 혼자서도 플레이 가능한 5인 마이티 카드 게임입니다. 브라우저에서 단일 HTML 파일로 실행되며, 난이도별(중급·고급·마스터) AI와 다양한 룰 프리셋을 제공합니다. 복기와 로그 내보내기 기능으로 학습·분석 용도로도 손쉽게 사용할 수 있습니다.
+Mighty는 혼자서도 플레이 가능한 5인 마이티 카드 게임입니다. 브라우저에서 단일 HTML 파일로 실행되며, 난이도별(중급·고급·마스터) AI와 다양한 룰[...]
 
 ## 시작하기
 
@@ -41,7 +41,7 @@ browser" 체크, Viewport 1000×700, Mobile friendly 체크, Visibility는 Restr
 
 ## itch.io 접속 및 게임 시작 (업로드·테스트 안내)
 
-- 배포 파일 생성: 항상 `npm run release`를 사용해 검사→빌드→테스트→패키징된 zip(dist/)을 생성하세요. `dist/mighty-itch-vX.Y.Z.zip` 파일을 itch.io에 업로드합니다.
+- 배포 파일 생성: 항상 `npm run release`를 사용해 검사→빌드→테스트→패키징된 zip(dist/)을 생성하세요. `dist/mighty-itch-vX.Y.Z.zip` 파일을 itch.io에 업로드[...]
 - itch.io 업로드 설정 권장:
   - Kind of project: HTML
   - Upload: ZIP 파일 (위의 dist zip)
@@ -54,7 +54,7 @@ browser" 체크, Viewport 1000×700, Mobile friendly 체크, Visibility는 Restr
   - 빠른 확인: `npm run build` → `web/index.html`을 브라우저로 열기(마스터 AI는 동작 안 함)
   - 전체 검증(권장): `npm install` → `npm run serve` → http://localhost:8080 열기 (마스터 모델 로드 가능)
   - 브라우저 콘솔에서 에러(특히 fetch/onnx/ort 에러)를 확인하세요.
-- 모델 파일 포함 여부: `web/model/`의 ONNX 모델과 `web/ort/`(onnxruntime-web 로컬 번들)이 zip에 포함되어 있어야 합니다. CDN 의존을 없애려면 `ort/` 번들을 포함하십시오.
+- 모델 파일 포함 여부: `web/model/`의 ONNX 모델과 `web/ort/`(onnxruntime-web 로컬 번들)이 zip에 포함되어 있어야 합니다. CDN 의존을 없애려면 `ort/` 번들을 포[...]
 - 접근성/언어: 시작 화면에서 한국어/English 전환을 확인하고, 복기·내보내기·설정 화면이 한글·영문 모두 정상 노출되는지 확인하세요.
 
 ## 플레이 가이드 (핵심)
@@ -77,7 +77,7 @@ browser" 체크, Viewport 1000×700, Mobile friendly 체크, Visibility는 Restr
 
 ## 초보자 모드용 튜토리얼 안내
 
-이 섹션은 처음 마이티를 접하는 사용자를 위한 단계별 안내입니다. 게임 내 별도 "초보자 전용 모드"가 없더라도 아래 절차를 따라 연습하면 빠르게 적응할 수 있습니다.
+이 섹션은 처음 마이티를 접하는 사용자를 위한 단계별 안내입니다. 게임 내 별도 "초보자 전용 모드"가 없더라도 아래 절차를 따라 연습하면 빠르게[...]
 
 1) 환경 설정(처음 5분)
    - 시작 화면에서 룰을 `표준` 또는 `마이티리그` 프리셋으로 선택하세요.
