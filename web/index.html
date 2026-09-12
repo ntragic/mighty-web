@@ -3102,13 +3102,31 @@ function keyCardGuard(game, seat, action, trace) {
     }
     if (!wasteful(c)) { T('not-wasteful-by-guard'); return action; }
 
+    const cost = m => (m.card.rank || 0) + (E.isPointCard(m.card) ? 30 : 0);
     const alts = game._legalPlays(seat).filter(m =>
       !m.jokerCall && !wasteful(m.card) && !beats(m.card, m.jokerSuit));
-    if (!alts.length) { T('no-cheap-alt'); return action; }
-    const cost = m => (m.card.rank || 0) + (E.isPointCard(m.card) ? 30 : 0);
-    alts.sort((a, b) => cost(a) - cost(b));
-    T('intervened');
-    return { type: 'play', card: alts[0].card };
+    if (alts.length) {
+      alts.sort((a, b) => cost(a) - cost(b));
+      T('intervened');
+      return { type: 'play', card: alts[0].card };
+    }
+    // 기루다가 리드되면 합법수가 전부 기루다라 위 필터가 모두 걸러진다. 예전에는
+    // 여기서 정책 수를 그대로 통과시켰고, 그래서 야당 ♠A로 이미 잠긴 트릭에 주공이
+    // ♠5를 두고 ♠K를 버리는 장면이 남았다(제보 seed 2135136798 6트릭 — 그 1점으로
+    // 공약 15가 깨졌다). 못 이기는 트릭에 한해 '덜 비싼 카드'로 내려 준다.
+    // 이기는 수(iWin)는 건드리지 않는다 — 인증도 그 조건으로 쟀다.
+    // 야당 방향의 같은 함정은 tfeedGuard가 먼저 고쳤다(dfeed→tfeed 재정의) — 이건 그 여당판이다.
+    // 인증(tools/research/kfollow_cert.js, v16e 전좌석 마스터):
+    //   여당 발화 판 주공 상금 +96.3±78.2 (n=216, 8,943딜) · 여당 승수 +4 · 발화 0.025회/판
+    //   야당 −10.9±36.6 중립 (n=658, 5,576딜) · 발화 0.135회/판
+    if (iWin) { T('no-cheap-alt'); return action; }
+    const cheap = game._legalPlays(seat).filter(m =>
+      !m.jokerCall && !isKey(m.card) && !beats(m.card, m.jokerSuit));
+    if (!cheap.length) { T('no-cheap-alt'); return action; }
+    cheap.sort((a, b) => cost(a) - cost(b));
+    if (cost(cheap[0]) >= cost({ card: c })) { T('no-cheap-alt'); return action; }
+    T('downgraded');
+    return { type: 'play', card: cheap[0].card };
   } catch (e) { T('error'); return action; }
 }
 
@@ -4658,8 +4676,8 @@ const tf = (k,...a) => TF[k](...a);
 //   weaklead 1.3 · oppwin 1.8 · 주공 0.46 · 프렌드 리드는 문턱 없음(전 구간 이득)
 const CLASS_SEARCH = { K: 32, gate: 1.3, gateOppwin: 1.8, gateDeclarer: 0.46,
                        topM: 5, budgetMs: 2000 };
-const APP_VERSION = 'v3.0.7';
-const APP_BUILD = '2026-09-07 빌드 — 용어 툴팁과 사전';
+const APP_VERSION = 'v3.0.8';
+const APP_BUILD = '2026-09-12 빌드 — 기루다 팔로우 낭비 차단';
 const AB_TEST_ID = 'master-round-robin-v300';
 const AB_NEXT_KEY = 'mighty_ab_next_v300';
 const AB_FEEDBACK_KEY = 'mighty_ab_feedback_v300';
