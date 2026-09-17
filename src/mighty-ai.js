@@ -629,6 +629,41 @@ function mightySuitLeadBanned(game, seat, mv) {
   return !!ms && mv.card.suit === ms;
 }
 
+/** 이번 트릭에서 조커가 최약으로 떨어지는가 (첫 트릭·마지막 트릭 약화 룰). */
+function jokerWeakThisTrick(game) {
+  const pl = game.play, cfg = game.config || {};
+  if (!pl) return false;
+  if (pl.trickNo === 1 && cfg.firstTrickJokerWeak !== false) return true;
+  if (pl.trickNo >= E.HAND_SIZE && cfg.lastTrickJokerWeak !== false) return true;
+  return false;
+}
+
+/**
+ * 마이티 무늬 리드 금지 목록(action index 집합). 걸리지 않으면 null.
+ *
+ * 예외(기본 켬, 끄려면 opts.mightyLeadJokerException:false): 금지하고 남는 리드가 이번 트릭에서 약해진
+ * 조커뿐이면 금지를 푼다. 정석 위반 하나(마이티 무늬 리드)를 피하려다 사람 눈에 더
+ * 이상한 수(첫 트릭 조커 리드)를 만들지 않기 위해서다.
+ * 제보(2026-09-17, 1판 seed 1438626284 1트릭): 기루다 ♣라 클럽 리드가 룰로 막히고
+ * 마이티 ♠A라 스페이드 리드가 이 가드로 막혀 조커(♥)만 남았고, 첫 트릭이라 약해진
+ * 조커가 유나 ♥A에 졌다. 정책은 ♠Q 58.6%·♠4 35.7%였고 롤아웃에서 ♠Q가 +1,467 나았다.
+ * 인증(tools/research/mlead_cert.js, v16e 전좌석 마스터 11,165딜): 발화 0.0117회/판(전부 1트릭),
+ * 발화 판 주공 상금 +1,506.9±418.5(n=131) · 여당 승수 +31 · 전체 +17.7±5.7/판.
+ */
+function mightyLeadBans(game, seat, opts = {}) {
+  if (opts.mightyLeadGuard === false || game.phase !== 'play' || !game.play ||
+      game.play.table.length !== 0 || !attackerSeat(game, seat)) return null;
+  const legal = game._legalPlays(seat);
+  if (legal.length < 2) return null;
+  const bad = legal.filter(mv => mightySuitLeadBanned(game, seat, mv));
+  if (!bad.length || bad.length >= legal.length) return null;
+  if (opts.mightyLeadJokerException !== false) {
+    const rest = legal.filter(mv => !mightySuitLeadBanned(game, seat, mv));
+    if (rest.every(mv => E.isJoker(mv.card)) && jokerWeakThisTrick(game)) return null;
+  }
+  return new Set(bad.map(mv => M.actionIndex(mv)));
+}
+
 /** 야당이 이기고 있는 트릭에서 프렌드가 따라가는 국면 — weaklead의 반대쪽이다.
  *  700국면 실측: 정책 대형 실수 6.3% → 탐색 2.6%(페어드 +22.3 ± 8.9). 다만 정책이
  *  확신하는 구간(로짓차 1.8 이상)에서는 2.3% → 4.0%로 탐색이 나빠 문턱을 둔다. */
@@ -891,16 +926,7 @@ async function createAgent(opts = {}) {
         if (seat === undefined) seat = game.currentPlayer;
         // 마이티 무늬 리드 금지 목록 — 탐색 후보에서 빼고, 정책 수도 여기 걸리면
         // 다음 후보로 바꾼다(리드 국면에서만 만들어지므로 비용은 무시할 만하다).
-        let banned = null;
-        if (opts.mightyLeadGuard !== false && game.phase === 'play' &&
-            game.play && game.play.table.length === 0 && attackerSeat(game, seat)) {
-          const legal = game._legalPlays(seat);
-          if (legal.length >= 2) {
-            const bad = legal.filter(mv => mightySuitLeadBanned(game, seat, mv));
-            if (bad.length && bad.length < legal.length)
-              banned = new Set(bad.map(mv => M.actionIndex(mv)));
-          }
-        }
+        const banned = mightyLeadBans(game, seat, opts);
         const cls = scfg && (weakleadState(game, seat) ? 'weaklead'
                     : oppwinState(game, seat) ? 'oppwin'
                     : friendLeadState(game, seat) ? 'friendlead'
@@ -1001,7 +1027,7 @@ async function createTable(opts = {}) {
 const api = { createAgent, createTable, loadMaster, applyGuards,
               weakleadState, searchWeaklead,
               keyCardGuard, topLeadGuard, tfeedGuard, dleadGuard, c1Guard, cutGuard,
-              jokerCallGuard, trumpSaveGuard,
+              jokerCallGuard, trumpSaveGuard, mightyLeadBans, jokerWeakThisTrick,
               TIERS, TIER_LABEL, PERSONA_KEYS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.MightyAI = api;
