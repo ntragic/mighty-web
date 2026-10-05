@@ -17,7 +17,10 @@ grep -q "현재 버전\*\*: $VER" docs/CHANGELOG.md \
 echo "CHANGELOG 동기화 확인"
 
 node tools/build.mjs
-npm test && echo "전체 테스트 통과"
+# set -e 는 `cmd && echo` 의 앞 명령 실패를 무시한다(AND 리스트 예외).
+# 그래서 && 로 묶으면 테스트가 깨져도 zip 이 만들어진다 — 반드시 따로 실행한다.
+npm test
+echo "전체 테스트 통과"
 
 # 배포에 넣을 모델은 빌드 결과가 실제로 참조하는 것만 고른다.
 # web/model에는 연구·비교용 세대가 함께 있어(v4·v7·v9·v11b·v12·v14…) 통째로
